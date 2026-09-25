@@ -14,13 +14,14 @@ const vB = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
 const cols = (...c) => c.map((x) => new THREE.Color(x));
 const COIN_COLORS = cols('#fff2a8', '#ffd84a', '#e0a526');
-const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120 };
+const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120, shard: 1e8 };
 const CRATE_DROP = 18;
 const TYPE_INDEX = new Map(TYPE_LIST.map((t, i) => [t, i]));
 const DUST = cols('#8a7a5a', '#6b5a45', '#a89a7a');
 const FROST = cols('#ffffff', '#c9ecff', '#9fe8ff');
 const TOXIC = cols('#9be070', '#c8f25a');
 const SHADOW_PUFF = cols('#1a1620', '#2a2236', '#5a4a78', '#b46cff');
+const SHARD_SPARKS = cols('#d8c4ff', '#b89cff', '#ffffff');
 
 // Everything mobs throw or shoot. Bosses add their own kinds.
 // boom: explodes in this radius on impact. breaks: the blast digs blocks.
@@ -194,6 +195,25 @@ export class Mobs {
     );
     g.add(beam);
     g.userData = { chute, beam };
+    return g;
+  }
+
+  // A Heartstone spark for story mode: a spinning crystal under a beam.
+  makeShard() {
+    const g = new THREE.Group();
+    const glow = new THREE.MeshBasicMaterial({ color: 0xb89cff });
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.34), glow);
+    core.rotation.set(0.5, 0, 0.5);
+    const shell = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.7, 0.5),
+      new THREE.MeshBasicMaterial({ color: 0xd8c4ff, transparent: true, opacity: 0.35, depthWrite: false }),
+    );
+    shell.rotation.set(0.5, 0, 0.5);
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 40, 0.3).translate(0, 20, 0),
+      new THREE.MeshBasicMaterial({ color: 0xb46cff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    g.add(core, shell, beam);
     return g;
   }
 
@@ -490,6 +510,8 @@ export class Mobs {
   applyBlast(at, r, dmg, { source = 'fuse', fx = null } = {}) {
     const g = this.game;
     g.combat.explode(at, r, 0, { small: r < 2 });
+    const bc = g.story && g.story.beacon;
+    if (bc && !bc.dead && vB.set(bc.pos.x, bc.pos.y + 1, bc.pos.z).distanceTo(at) < r + 0.5) bc.hurt(dmg);
     const p = g.player;
     if (p.dead || !g.inGame) return;
     const d = vA.set(p.pos.x, p.pos.y + 0.9, p.pos.z).distanceTo(at);
@@ -501,6 +523,7 @@ export class Mobs {
     if (id === undefined || id === null) id = this.nextPickup++;
     let mesh;
     if (kind === 'crate') mesh = this.makeCrate();
+    else if (kind === 'shard') mesh = this.makeShard();
     else {
       const proto = { heart: this.heartProto, coin: this.coinProto, nade: this.nadeProto }[kind] || this.bundleProto;
       mesh = proto.clone();
@@ -696,7 +719,11 @@ export class Mobs {
         b.pos.y > p.pos.y - pad &&
         b.pos.y < p.pos.y + p.h + 0.1;
       let direct = false;
-      if (inPlayer) {
+      const bc = g.story && g.story.beacon;
+      if (bc && !bc.dead && g.authority && Math.abs(b.pos.x - bc.pos.x) < 0.6 && Math.abs(b.pos.z - bc.pos.z) < 0.6 && b.pos.y > bc.pos.y && b.pos.y < bc.pos.y + 2.4) {
+        bc.hurt(cfg.dmg);
+        b.life = 0;
+      } else if (inPlayer) {
         p.hurt(cfg.dmg, vA.copy(b.pos).addScaledVector(b.vel, -0.1), b.src, cfg.fx || null);
         b.life = 0;
         direct = true;
@@ -759,11 +786,12 @@ export class Mobs {
           }
         }
         m.rotation.y += dt * (pk.kind === 'coin' ? 5 : 2.2);
-        m.position.set(pk.x, pk.y + Math.sin(pk.t * 3) * (pk.kind === 'coin' ? 0.06 : 0.1), pk.z);
+        m.position.set(pk.x, pk.y + Math.sin(pk.t * 3) * (pk.kind === 'coin' ? 0.06 : 0.1) + (pk.kind === 'shard' ? 0.4 : 0), pk.z);
+        if (pk.kind === 'shard' && Math.random() < dt * 8) g.fx.burst(pk.x, pk.y + 0.5, pk.z, SHARD_SPARKS, 1, { speed: 1, size: 0.06, up: 1.5, life: 0.6, spread: 0.3, grav: -1 });
       }
       m.visible = pk.t < pk.life - 5 || Math.floor(pk.t * 8) % 2 === 0;
       const d = Math.hypot(p.pos.x - pk.x, p.pos.y + 0.9 - pk.y, p.pos.z - pk.z);
-      const reach = pk.kind === 'crate' ? 1.9 : pk.kind === 'coin' ? 1.1 : 1.5;
+      const reach = pk.kind === 'crate' || pk.kind === 'shard' ? 1.9 : pk.kind === 'coin' ? 1.1 : 1.5;
       if (!p.dead && g.inGame && d < reach && pk.t < pk.life && pk.fall === 0 && this.collect(pk)) {
         pk.t = 1e9;
         if (g.mp) g.mp.pickupTaken(pk.id);
@@ -796,6 +824,8 @@ export class Mobs {
       g.fx.burst(pk.x, pk.y, pk.z, COIN_COLORS, 3, { speed: 1.5, size: 0.06, up: 1.5, life: 0.35, spread: 0.1 });
     } else if (pk.kind === 'crate') {
       g.openCrate();
+    } else if (pk.kind === 'shard') {
+      if (g.story) g.story.onShard();
     }
     return true;
   }

@@ -26,6 +26,13 @@ export class Profile {
     // The bestiary: mobs you have met, and how many of each you beat.
     this.seen = new Set((data && data.seen) || []);
     this.kills = (data && data.kills) || {};
+    // Levels, achievements, daily challenges and story progress.
+    this.xp = (data && data.xp) || 0;
+    this.level = (data && data.level) || 1;
+    this.ach = (data && data.ach) || {};
+    this.totals = { kills: 0, heads: 0, bestWave: 0, crates: 0, placed: 0, ...((data && data.totals) || {}) };
+    this.daily = (data && data.daily) || null;
+    this.story = { done: 0, stars: {}, ...((data && data.story) || {}) };
     this.listeners = new Set();
     this.saveTimer = 0;
   }
@@ -136,6 +143,12 @@ export class Profile {
         loadout: this.loadout,
         seen: [...this.seen],
         kills: this.kills,
+        xp: this.xp,
+        level: this.level,
+        ach: this.ach,
+        totals: this.totals,
+        daily: this.daily,
+        story: this.story,
       }),
     );
   }

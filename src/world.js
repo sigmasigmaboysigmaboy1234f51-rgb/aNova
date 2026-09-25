@@ -24,6 +24,15 @@ export const B = {
   BRICK: 10,
   MOSSY: 11,
   GRAVEL: 12,
+  SNOW: 13,
+  ICE: 14,
+  BASALT: 15,
+  MAGMA: 16,
+  GOLD: 17,
+  CRYSTAL: 18,
+  DARKGRASS: 19,
+  SLIME: 20,
+  MARBLE: 21,
 };
 
 const def = (name, hp, sound, top, side = top, bottom = top) => ({ name, hp, sound, top, side, bottom });
@@ -41,6 +50,15 @@ export const BLOCKS = [
   def('Bricks', 5, 'hard', T.BRICK),
   def('Mossy stone', 4, 'hard', T.MOSSY),
   def('Gravel', 2, 'soft', T.GRAVEL),
+  def('Snow', 2, 'soft', T.SNOW_TOP, T.SNOW_SIDE, T.DIRT),
+  def('Ice', 2, 'hard', T.ICE),
+  def('Basalt', 4, 'hard', T.BASALT),
+  def('Magma', 4, 'hard', T.MAGMA),
+  def('Gold block', 6, 'hard', T.GOLD),
+  def('Crystal', 5, 'hard', T.CRYSTAL),
+  def('Dark grass', 2, 'soft', T.DARK_TOP, T.DARK_SIDE, T.DIRT),
+  def('Slime', 1, 'soft', T.SLIME),
+  def('Marble', 5, 'hard', T.MARBLE),
 ];
 
 // Faces list corners in bottom-left, bottom-right, top-right, top-left order
@@ -182,8 +200,11 @@ export class World {
     return { id, info, broken: false };
   }
 
-  generate(seed) {
+  // theme (see themes.js) picks the ground blocks, trees and landmarks.
+  generate(seed, theme = null) {
+    const th = theme || { top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 24, ruins: 5, pillars: 3 };
     this.seed = seed;
+    this.theme = th;
     this.data.fill(0);
     for (const k of [...this.cracks.keys()]) this.clearDamage(k);
     this.damage.clear();
@@ -201,7 +222,7 @@ export class World {
         const island = 1 - smoothstep(0.55, 0.92, d);
         const hills = fbm2(x * 0.05, z * 0.05, seed, 4);
         const peak = Math.pow(Math.max(0, hills - 0.45) / 0.55, 1.6) * 10;
-        let h = Math.floor(SEA - 3 + island * (4.5 + hills * 4 + peak));
+        let h = Math.floor(SEA - 3 - (th.low || 0) * (1 - hills) + island * (4.5 + hills * 4 + peak));
         h = Math.max(2, Math.min(SY - 10, h));
         heights[z * SX + x] = h;
         const beach = h <= SEA + 1;
@@ -210,29 +231,31 @@ export class World {
         for (let y = 0; y < h; y++) {
           let id = B.STONE;
           if (y === 0) id = B.BEDROCK;
-          else if (y === h - 1) id = gravel ? B.GRAVEL : beach ? B.SAND : rocky ? B.STONE : B.GRASS;
-          else if (y >= h - 4) id = beach ? B.SAND : rocky ? B.STONE : B.DIRT;
+          else if (y === h - 1) id = gravel ? B.GRAVEL : beach ? th.beach : rocky ? B.STONE : th.top;
+          else if (y >= h - 4) id = beach ? (th.beach === B.ICE ? B.DIRT : th.beach) : rocky ? B.STONE : th.under;
           this.data[this.idx(x, y, z)] = id;
         }
       }
     }
 
     // Trees, kept away from the middle so the player starts in the open.
+    // Landmarks first, so trees and ruins fit around them.
+    if (th.extra) th.extra(this, heights, rng);
     const trees = [];
-    for (let i = 0; i < 160 && trees.length < 24; i++) {
+    for (let i = 0; i < 200 && trees.length < th.trees; i++) {
       const x = 3 + Math.floor(rng() * (SX - 6));
       const z = 3 + Math.floor(rng() * (SZ - 6));
       if (Math.hypot(x - cx, z - cz) < 6) continue;
       const h = heights[z * SX + x];
-      if (this.get(x, h - 1, z) !== B.GRASS) continue;
+      if (this.get(x, h - 1, z) !== th.top || this.get(x, h, z) !== B.AIR) continue;
       if (trees.some(([tx, tz]) => Math.abs(tx - x) < 4 && Math.abs(tz - z) < 4)) continue;
-      this.placeTree(x, h, z, rng);
+      this.placeTree(x, h, z, rng, th);
       trees.push([x, z]);
     }
 
     // Broken old walls to hide behind.
     let ruins = 0;
-    for (let i = 0; i < 80 && ruins < 5; i++) {
+    for (let i = 0; i < 120 && ruins < th.ruins; i++) {
       const x = 4 + Math.floor(rng() * (SX - 8));
       const z = 4 + Math.floor(rng() * (SZ - 8));
       const dist = Math.hypot(x - cx, z - cz);
@@ -243,7 +266,7 @@ export class World {
 
     // A few brick pillars as landmarks.
     let pillars = 0;
-    for (let i = 0; i < 60 && pillars < 3; i++) {
+    for (let i = 0; i < 80 && pillars < th.pillars; i++) {
       const x = 4 + Math.floor(rng() * (SX - 8));
       const z = 4 + Math.floor(rng() * (SZ - 8));
       const dist = Math.hypot(x - cx, z - cz);
@@ -258,9 +281,15 @@ export class World {
     this.version++;
   }
 
-  placeTree(x, y0, z, rng) {
+  placeTree(x, y0, z, rng, th = {}) {
     const top = y0 + 3 + (rng() < 0.5 ? 1 : 0);
     for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;
+    // Dead trees in the bog: bare trunks with a couple of stubby branches.
+    if (th.deadTrees && rng() < 0.6) {
+      if (this.inBounds(x + 1, top - 1, z)) this.data[this.idx(x + 1, top - 1, z)] = B.LOG;
+      if (this.inBounds(x, top - 2, z - 1)) this.data[this.idx(x, top - 2, z - 1)] = B.LOG;
+      return;
+    }
     for (let dy = -2; dy <= 1; dy++) {
       const y = top + dy;
       const r = dy <= -1 ? 2 : 1;
@@ -271,6 +300,19 @@ export class World {
           if (corner && (dy === 0 || rng() < 0.5)) continue;
           if (this.inBounds(x + dx, y, z + dz) && this.get(x + dx, y, z + dz) === B.AIR) {
             this.data[this.idx(x + dx, y, z + dz)] = B.LEAVES;
+          }
+        }
+      }
+    }
+    // Snow settles on top of the Frostpeak trees.
+    if (th.snowTrees) {
+      for (let dz = -2; dz <= 2; dz++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let y = top + 1; y >= top - 2; y--) {
+            if (this.get(x + dx, y, z + dz) === B.LEAVES) {
+              if (this.inBounds(x + dx, y + 1, z + dz) && this.get(x + dx, y + 1, z + dz) === B.AIR) this.data[this.idx(x + dx, y + 1, z + dz)] = B.SNOW;
+              break;
+            }
           }
         }
       }

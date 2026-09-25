@@ -5,7 +5,7 @@ import { mulberry32 } from './rng.js';
 
 export const TILE = 16;
 const COLS = 8;
-const ROWS = 2;
+const ROWS = 4;
 
 export const T = {
   GRASS_TOP: 0,
@@ -22,6 +22,17 @@ export const T = {
   BRICK: 11,
   MOSSY: 12,
   GRAVEL: 13,
+  SNOW_TOP: 14,
+  SNOW_SIDE: 15,
+  ICE: 16,
+  BASALT: 17,
+  MAGMA: 18,
+  GOLD: 19,
+  CRYSTAL: 20,
+  DARK_TOP: 21,
+  DARK_SIDE: 22,
+  SLIME: 23,
+  MARBLE: 24,
 };
 
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -110,6 +121,83 @@ const PAINTERS = {
   [T.SAND](set, rng) {
     fillAll(set, rng, ['#d9cd96', '#d1c48a', '#e0d5a2', '#d5c990']);
     for (let i = 0; i < 12; i++) set((rng() * 16) | 0, (rng() * 16) | 0, rng() < 0.5 ? '#c2b176' : '#ebe2b8');
+  },
+  [T.SNOW_TOP](set, rng) {
+    fillAll(set, rng, ['#f4f8fb', '#eef3f7', '#ffffff', '#e6eef4']);
+    for (let i = 0; i < 10; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#d7e3ec');
+  },
+  [T.SNOW_SIDE](set, rng) {
+    dirt(set, rng);
+    for (let x = 0; x < 16; x++) {
+      const depth = 3 + (rng() < 0.5 ? 1 : 0) + (rng() < 0.3 ? 1 : 0);
+      for (let y = 0; y < depth; y++) set(x, y, pick(rng, ['#f4f8fb', '#eef3f7', '#e6eef4']));
+    }
+  },
+  [T.ICE](set, rng) {
+    fillAll(set, rng, ['#9fd3f2', '#a8d8f4', '#94cbee', '#b0dcf5']);
+    for (let i = 0; i < 4; i++) {
+      const x0 = (rng() * 16) | 0;
+      const y0 = (rng() * 16) | 0;
+      for (let k = 0; k < 5; k++) set((x0 + k) % 16, (y0 + k) % 16, '#e2f4ff');
+    }
+  },
+  [T.BASALT](set, rng) {
+    fillAll(set, rng, ['#35302d', '#3d3733', '#2e2a27', '#433c37']);
+    for (let i = 0; i < 6; i++) {
+      const x0 = (rng() * 16) | 0;
+      for (let y = 0; y < 16; y++) if (rng() < 0.5) set(x0, y, '#262220');
+    }
+  },
+  [T.MAGMA](set, rng) {
+    fillAll(set, rng, ['#3a1a10', '#4a2010', '#34160c']);
+    for (let i = 0; i < 26; i++) {
+      const x = (rng() * 16) | 0;
+      const y = (rng() * 16) | 0;
+      set(x, y, pick(rng, ['#ff7a2f', '#ff9a3c', '#ffd36b', '#e0501a']));
+      set((x + 1) % 16, y, '#e0501a');
+    }
+  },
+  [T.GOLD](set, rng) {
+    fillAll(set, rng, ['#f2c230', '#e8b830', '#f7d04a', '#dcaa22']);
+    for (let i = 0; i < 16; i++) {
+      set(i, 0, '#fff2a8');
+      set(0, i, '#fff2a8');
+      set(i, 15, '#a8781a');
+      set(15, i, '#a8781a');
+    }
+    for (let i = 0; i < 6; i++) set(2 + ((rng() * 12) | 0), 2 + ((rng() * 12) | 0), '#fff6c8');
+  },
+  [T.CRYSTAL](set, rng) {
+    fillAll(set, rng, ['#7a4ad8', '#8a5ae8', '#6a3ac8']);
+    for (let i = 0; i < 16; i++) {
+      set(i, i, '#d8c4ff');
+      set((i + 8) % 16, i, '#b89cff');
+    }
+  },
+  [T.DARK_TOP](set, rng) {
+    fillAll(set, rng, ['#2e4a3a', '#34523f', '#2a4234', '#3a5a44']);
+    for (let i = 0; i < 10; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#4a6a52');
+  },
+  [T.DARK_SIDE](set, rng) {
+    fillAll(set, rng, ['#3a2e28', '#342822', '#40332c']);
+    for (let x = 0; x < 16; x++) {
+      const depth = 2 + (rng() < 0.6 ? 1 : 0);
+      for (let y = 0; y < depth; y++) set(x, y, pick(rng, ['#2e4a3a', '#34523f', '#2a4234']));
+    }
+  },
+  [T.SLIME](set, rng) {
+    fillAll(set, rng, ['#6fb028', '#7bc62a', '#62a020', '#88d034']);
+    for (let i = 0; i < 12; i++) set((rng() * 16) | 0, (rng() * 16) | 0, pick(rng, ['#c8f25a', '#3f6b12']));
+  },
+  [T.MARBLE](set, rng) {
+    fillAll(set, rng, ['#ece8e0', '#e4e0d6', '#f2eee8', '#dcd8ce']);
+    for (let i = 0; i < 3; i++) {
+      let x = (rng() * 16) | 0;
+      for (let y = 0; y < 16; y++) {
+        set(x, y, '#b8b0a4');
+        x = (x + (rng() < 0.5 ? 1 : 15)) % 16;
+      }
+    }
   },
   [T.GRAVEL](set, rng) {
     fillAll(set, rng, ['#7f7a74', '#8f8a83', '#6c6862', '#9a948c', '#76706a', '#7a6a58']);

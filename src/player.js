@@ -718,6 +718,7 @@ export class Player {
     w.set(x, y, z, id);
     this.blocks--;
     g.stats.placed++;
+    g.progress.event('place');
     g.sound.place();
     this.swing = 1;
     g.fx.burst(x + 0.5, y + 0.5, z + 0.5, g.atlas.colors[BLOCKS[id].side], 6, {
@@ -741,7 +742,18 @@ export class Player {
     const burning = this.burnT > 0;
     this.burnT = Math.max(0, this.burnT - dt);
     this.poisonT = Math.max(0, this.poisonT - dt);
-    if (this.inWater) this.burnT = 0;
+    const lava = this.inWater && this.game.world.theme && this.game.world.theme.lava;
+    if (this.inWater && !lava) this.burnT = 0;
+    // Mount Ember's sea is lava.
+    if (lava && !this.dead) {
+      this.lavaT = (this.lavaT || 0) - dt;
+      this.burnT = Math.max(this.burnT, 2);
+      if (this.lavaT <= 0) {
+        this.lavaT = 0.4;
+        this.dot(2, 'lava');
+        this.vel.y = Math.max(this.vel.y, 5);
+      }
+    }
     if (burning || this.poisonT > 0) {
       this.dotT -= dt;
       if (this.dotT <= 0) {

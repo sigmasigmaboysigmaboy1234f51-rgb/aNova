@@ -10,6 +10,11 @@ import { Profile } from './profile.js';
 import { Combat } from './combat.js';
 import { Armory } from './armory.js';
 import { Bestiary } from './bestiary.js';
+import { StoryRun, StoryMenu, Dialogue } from './story.js';
+import { CHAPTERS } from './storydata.js';
+import { THEMES } from './themes.js';
+import { Progress, xpForLevel } from './progress.js';
+import { Challenges } from './challenges.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
 import { BOSSES } from './boss.js';
@@ -77,6 +82,7 @@ const DEATH_LINES = {
   ghost: 'Spooked to death by a Specter.',
   boss: 'Crushed by a boss.',
   self: 'Caught in your own explosion.',
+  lava: 'Went for a swim in lava.',
 };
 
 function randomSeed() {
@@ -95,14 +101,17 @@ class Game {
     this.scene.fog = new THREE.Fog(SKY, 42, 118);
     this.camera = new THREE.PerspectiveCamera(75, 1, 0.05, 400);
     this.camera.rotation.order = 'YXZ';
-    this.scene.add(new THREE.HemisphereLight(0xdcecff, 0x6b5a45, 2.4));
+    this.hemi = new THREE.HemisphereLight(0xdcecff, 0x6b5a45, 2.4);
+    this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.0);
     sun.position.set(30, 60, 20);
     this.scene.add(sun);
+    this.sun = sun;
 
     this.viewScene = new THREE.Scene();
     this.viewCam = new THREE.PerspectiveCamera(65, 1, 0.01, 10);
-    this.viewScene.add(new THREE.HemisphereLight(0xdcecff, 0x6b5a45, 2.4));
+    this.viewHemi = new THREE.HemisphereLight(0xdcecff, 0x6b5a45, 2.4);
+    this.viewScene.add(this.viewHemi);
     const vsun = new THREE.DirectionalLight(0xfff1d6, 1.6);
     vsun.position.set(-1, 2, 1.5);
     this.viewScene.add(vsun);
@@ -132,6 +141,11 @@ class Game {
     this.player = new Player(this);
     this.armory = new Armory(this);
     this.bestiary = new Bestiary(this);
+    this.progress = new Progress(this);
+    this.dialogue = new Dialogue(this);
+    this.storyMenu = new StoryMenu(this);
+    this.challenges = new Challenges(this);
+    this.story = null;
     this.profile.listeners.add(() => this.player.refreshLoadout());
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
@@ -181,6 +195,7 @@ class Game {
     const out = [];
     if (this.inGame && !this.player.dead) out.push(this.player);
     if (this.mp) for (const r of this.mp.remotes.list()) if (r.hasState && !r.dead) out.push(r);
+    if (this.story && this.inGame) out.push(...this.story.extraTargets());
     return out;
   }
 
@@ -193,6 +208,7 @@ class Game {
       new THREE.MeshBasicMaterial({ map: wt, transparent: true, opacity: 0.78, depthWrite: false }),
     );
     water.rotation.x = -Math.PI / 2;
+    this.water = water;
     water.position.set(SX / 2, SEA - 0.12, SZ / 2);
     water.renderOrder = 1;
     this.scene.add(water);
@@ -255,6 +271,21 @@ class Game {
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
     $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
+    $('#btn-story').addEventListener('click', () => this.setState('story'));
+    $('#btn-challenges').addEventListener('click', () => this.setState('challenges'));
+    $('#sw-next').addEventListener('click', () => {
+      const next = this.story ? this.story.index + 1 : 0;
+      if (next < CHAPTERS.length) this.startStory(next);
+      else this.endStory('story');
+    });
+    $('#sw-list').addEventListener('click', () => this.endStory('story'));
+    $('#sf-retry').addEventListener('click', () => {
+      if (!this.story) return;
+      this.story.retry();
+      this.setState('playing');
+      this.lockMouse();
+    });
+    $('#sf-quit').addEventListener('click', () => this.endStory('story'));
     $('#btn-pause-armory').addEventListener('click', () => this.openArmory('paused'));
     $('#btn-sound').addEventListener('click', () => this.toggleSound());
     $('#btn-resume').addEventListener('click', () => this.resume());
@@ -363,15 +394,22 @@ class Game {
     else if (this.armory.open) this.armory.hide();
     if (s === 'bestiary') this.bestiary.show();
     else if (this.bestiary.open) this.bestiary.hide();
+    if (s === 'story') this.storyMenu.show();
+    else this.storyMenu.hide();
+    if (s === 'challenges') this.challenges.show();
+    else this.challenges.hide();
+    $('#storywin').hidden = s !== 'storywin';
+    $('#storyfail').hidden = s !== 'storyfail';
     $('#pause').hidden = s !== 'paused';
     $('#gameover').hidden = !(s === 'dead' && this.gameOverShown);
-    this.hud.show(s === 'playing' || s === 'paused' || s === 'dead');
+    this.hud.show(s === 'playing' || s === 'paused' || s === 'dead' || s === 'talk');
     this.input.active = s === 'playing';
     if (s !== 'playing') {
       this.input.releaseAll();
       if (this.mp) this.mp.closeChat();
     }
     if (s === 'menu') {
+      this.renderLevel();
       $('#splash').textContent = SPLASHES[Math.floor(Math.random() * SPLASHES.length)];
       this.renderBest();
       this.preview.mount($('#menu-preview'), false);
@@ -383,6 +421,111 @@ class Game {
     } else {
       this.preview.hide();
     }
+  }
+
+  renderLevel() {
+    const p = this.profile;
+    const need = xpForLevel(p.level);
+    $('#lvl-num').textContent = `Level ${p.level}`;
+    $('#lvl-fill').style.width = `${Math.round((p.xp / need) * 100)}%`;
+    $('#lvl-xp').textContent = `${p.xp} / ${need} XP`;
+  }
+
+  // Sky, fog and light for the place you are in.
+  applyTheme(th) {
+    const t = th || THEMES.meadow;
+    const sky = new THREE.Color(t.sky);
+    this.renderer.setClearColor(sky);
+    this.scene.fog.color.set(t.fogColor || t.sky);
+    this.scene.fog.near = t.fog[0];
+    this.scene.fog.far = t.fog[1];
+    this.hemi.intensity = 2.4 * t.light;
+    this.sun.intensity = 2 * t.light;
+    this.sun.color.set(t.sun || '#fff1d6');
+    this.viewHemi.intensity = 2.4 * Math.max(0.6, t.light);
+    this.water.material.color.set(t.water || '#ffffff');
+    this.clouds.visible = t.light > 0.5 && !t.moon;
+    this.sunMesh.material.color.set(t.moon ? '#e8eeff' : t.sun || '#fff6cf');
+    this.sunMesh.scale.setScalar(t.moon ? 0.6 : 1);
+  }
+
+  // --- Story -----------------------------------------------------------
+
+  startStory(index) {
+    this.sound.unlock();
+    if (this.mp) this.leaveMp();
+    if (this.story) this.story.dispose();
+    const ch = CHAPTERS[index];
+    this.world.generate(1000 + index * 77, THEMES[ch.theme]);
+    this.world.flush();
+    this.worldUsed = true;
+    this.applyTheme(THEMES[ch.theme]);
+    this.story = null;
+    this.resetRun();
+    this.story = new StoryRun(this, index);
+    this.mobs.refreshFlow(true);
+    this.hud.showBanner(`Chapter ${index + 1}`, ch.title, 3);
+    this.setState('playing');
+    this.story.begin();
+  }
+
+  endStory(toState = 'menu') {
+    if (this.story) this.story.dispose();
+    this.story = null;
+    this.inGame = false;
+    this.mobs.clear();
+    this.combat.clear();
+    this.input.exitLock();
+    this.setState(toState);
+  }
+
+  // Show a conversation, then carry on.
+  talk(lines, done) {
+    if (!lines || !lines.length) {
+      done();
+      return;
+    }
+    this.input.exitLock();
+    this.setState('talk');
+    this.dialogue.play(lines, () => {
+      this.setState('playing');
+      this.lockMouse();
+      done();
+    });
+  }
+
+  storyFail(why) {
+    this.input.exitLock();
+    $('#sf-title').textContent = why;
+    this.setState('storyfail');
+  }
+
+  storyWin(index, stars, rewards, time) {
+    this.input.exitLock();
+    $('#sw-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+    const why = $('#sw-why');
+    why.textContent = '';
+    const ch = CHAPTERS[index];
+    const mins = Math.floor(time / 60);
+    const secs = String(Math.floor(time % 60)).padStart(2, '0');
+    for (const [ok, text] of [
+      [true, 'Finished the chapter'],
+      [this.story && this.story.deaths === 0, 'Never got cubed'],
+      [time <= ch.par, `Finished in ${mins}:${secs} (goal: ${Math.floor(ch.par / 60)}:00)`],
+    ]) {
+      const li = document.createElement('li');
+      li.textContent = `${ok ? '★' : '☆'} ${text}`;
+      why.appendChild(li);
+    }
+    const ul = $('#sw-rewards');
+    ul.textContent = '';
+    for (const r of rewards) {
+      const li = document.createElement('li');
+      li.textContent = r;
+      ul.appendChild(li);
+    }
+    $('#sw-next').textContent = index + 1 < CHAPTERS.length ? 'Next chapter' : 'Back to chapters';
+    this.setState('storywin');
   }
 
   renderBest() {
@@ -397,6 +540,8 @@ class Game {
   play() {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
+    if (this.story) this.story.dispose();
+    this.story = null;
     this.startGame();
     this.setState('playing');
     this.lockMouse();
@@ -429,10 +574,11 @@ class Game {
   }
 
   startGame() {
-    if (this.worldUsed) {
-      this.world.generate(randomSeed());
+    if (this.worldUsed || (this.world.theme && this.world.theme !== THEMES.meadow)) {
+      this.world.generate(randomSeed(), THEMES.meadow);
       this.world.flush();
     }
+    this.applyTheme(THEMES.meadow);
     this.worldUsed = true;
     this.resetRun();
     this.mobs.refreshFlow(true);
@@ -458,6 +604,8 @@ class Game {
   toMenu() {
     this.input.exitLock();
     if (this.mp) this.leaveMp();
+    if (this.story) this.story.dispose();
+    this.story = null;
     this.inGame = false;
     this.mobs.clear();
     this.gameOverShown = false;
@@ -550,7 +698,10 @@ class Game {
   }
 
   startMultiplayer(seed, edits, asHost) {
-    this.world.generate(seed);
+    if (this.story) this.story.dispose();
+    this.story = null;
+    this.world.generate(seed, THEMES.meadow);
+    this.applyTheme(THEMES.meadow);
     for (const [x, y, z, b] of edits) this.world.set(x, y, z, b, true);
     this.world.flush();
     this.worldUsed = true;
@@ -680,6 +831,7 @@ class Game {
 
   onWaveCleared(n, bonus) {
     this.stats.score += bonus;
+    this.progress.event('wave', { n });
     const coins = 20 + n * 5;
     this.gainCoins(coins);
     const p = this.player;
@@ -704,10 +856,12 @@ class Game {
     this.profile.addCoins(n);
     this.stats.coins += n;
     this.sound.coin();
+    this.progress.event('coins', { n });
   }
 
   // Open a supply crate: a random part, or coins if you already have it.
   openCrate() {
+    this.progress.event('crate');
     const part = rollPart();
     const r = RARITY[part.rarity];
     this.sound.crate();
@@ -757,6 +911,7 @@ class Game {
 
   creditKill(pts, head, type) {
     if (type) this.profile.addKill(type);
+    this.progress.event('kill', { type, head });
     this.stats.kills++;
     if (head) this.stats.heads++;
     this.stats.score += pts;
@@ -765,6 +920,10 @@ class Game {
 
   onPlayerDeath() {
     this.hud.banner.hidden = true;
+    if (this.story) {
+      this.deadT = 0;
+      return;
+    }
     if (this.mp) {
       this.mp.sendDied(this.player.killer);
       this.respawnT = 5;
@@ -826,7 +985,7 @@ class Game {
 
     if (s === 'armory') this.armory.frame(dt);
     if (s === 'bestiary') this.bestiary.frame(dt);
-    if (s !== 'editor' && s !== 'armory' && s !== 'bestiary') {
+    if (!['editor', 'armory', 'bestiary', 'story', 'challenges'].includes(s)) {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
@@ -835,6 +994,7 @@ class Game {
     }
     this.preview.frame(dt);
     this.hud.tick(dt);
+    this.dialogue.tick(dt);
     this.input.endFrame();
   }
 
@@ -847,7 +1007,9 @@ class Game {
     }
     if (this.state === 'playing' && this.input.pressed.has('KeyB')) this.openArmory('playing');
     if (this.authority) {
-      if (!p.dead || this.mp) this.updateWaves(dt);
+      if (this.story) {
+        if (!p.dead) this.story.update(dt);
+      } else if (!p.dead || this.mp) this.updateWaves(dt);
       this.mobs.update(dt);
     } else {
       this.mobs.updateRemote(dt);
@@ -860,10 +1022,16 @@ class Game {
     this.hud.setPlayer(p);
     this.hud.setCoins(this.profile.coins);
     const boss = this.mobs.boss();
+    const beacon = this.story && this.story.beacon;
     if (boss) this.hud.setBoss(boss.def.name, boss.remote ? boss.net.hp : boss.hp / boss.maxHp);
+    else if (beacon) this.hud.setBoss("Grandma's beacon", beacon.hp / beacon.maxHp);
     else this.hud.setBoss(null, null);
-    const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;
-    this.hud.setWave(this.wave, left);
+    if (this.story) {
+      this.hud.setObjective(`Chapter ${this.story.index + 1}`, this.story.objective());
+    } else {
+      const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;
+      this.hud.setWave(this.wave, left);
+    }
     this.hud.setScore(this.stats.score);
     if (p.dead) {
       if (this.mp) {
@@ -871,6 +1039,9 @@ class Game {
         this.respawnT -= dt;
         if (Math.ceil(this.respawnT) !== before && this.respawnT > 0) this.hud.showBanner('You died', `Back in ${Math.ceil(this.respawnT)}`, 1.5);
         if (this.respawnT <= 0) this.respawn();
+      } else if (this.story) {
+        this.deadT += dt;
+        if (this.deadT > 1.6 && !this.story.failed) this.story.fail('You got cubed!');
       } else {
         this.deadT += dt;
         if (this.deadT > 1.6 && !this.gameOverShown) this.showGameOver();
@@ -903,7 +1074,7 @@ class Game {
     const r = this.renderer;
     r.clear();
     r.render(this.scene, this.camera);
-    if ((this.state === 'playing' || this.state === 'paused') && this.inGame && !this.player.thirdPerson && !this.player.dead) {
+    if (['playing', 'paused', 'talk'].includes(this.state) && this.inGame && !this.player.thirdPerson && !this.player.dead) {
       r.clearDepth();
       r.render(this.viewScene, this.viewCam);
     }

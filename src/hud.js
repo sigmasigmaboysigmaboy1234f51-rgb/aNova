@@ -257,7 +257,7 @@ export class Hud {
   }
 
   setWave(wave, left) {
-    if (this.changed('wave', wave)) this.waveEl.textContent = `Wave ${Math.max(1, wave)}`;
+    if (this.changed('wave', `Wave ${Math.max(1, wave)}`)) this.waveEl.textContent = `Wave ${Math.max(1, wave)}`;
     const text = left === null ? (wave === 0 ? 'Starting soon' : 'Next wave soon') : left === 1 ? '1 mob left' : `${left} mobs left`;
     if (this.changed('left', text)) this.leftEl.textContent = text;
   }
@@ -291,8 +291,18 @@ export class Hud {
     this.bannerT = time;
   }
 
-  // A card on the right for crate rewards and purchases.
+  // A card on the right for crate rewards, level ups and achievements.
+  // Several at once wait their turn.
   toast(label, title, sub, color) {
+    this.toasts = this.toasts || [];
+    this.toasts.push([label, title, sub, color]);
+    if (this.toastT <= 0) this.nextToast();
+  }
+
+  nextToast() {
+    const t = this.toasts.shift();
+    if (!t) return;
+    const [label, title, sub, color] = t;
     const el = this.toastEl;
     el.querySelector('.toast-label').textContent = label;
     el.querySelector('.toast-title').textContent = title;
@@ -302,7 +312,13 @@ export class Hud {
     el.classList.remove('in');
     void el.offsetWidth;
     el.classList.add('in');
-    this.toastT = 4;
+    this.toastT = 3.2;
+  }
+
+  // Story mode's top-left: chapter name and what to do right now.
+  setObjective(title, line) {
+    if (this.changed('wave', title)) this.waveEl.textContent = title;
+    if (this.changed('left', line)) this.leftEl.textContent = line;
   }
 
   damage() {
@@ -315,7 +331,6 @@ export class Hud {
     this.cache = { coinsShown: keep };
     for (const s of this.slots) s.code = null;
     this.banner.hidden = true;
-    this.toastEl.hidden = true;
     this.bossEl.hidden = true;
     this.scopeEl.hidden = true;
     this.root.classList.remove('scoped');
@@ -338,7 +353,10 @@ export class Hud {
     }
     if (this.toastT > 0) {
       this.toastT -= dt;
-      if (this.toastT <= 0) this.toastEl.hidden = true;
+      if (this.toastT <= 0) {
+        this.toastEl.hidden = true;
+        this.nextToast();
+      }
     }
   }
 }

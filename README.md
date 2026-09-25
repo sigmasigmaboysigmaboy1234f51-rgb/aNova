@@ -38,6 +38,20 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | F11 | Full screen (app) |
 | Esc | Pause |
 
+## Story mode
+
+**Blockfire: The Shattered Heartstone.** Cubara is a floating island kept alive by the glowing Heartstone. The Golden Overlord, who wants to be the buffest thing in the sky, smashed it, ate one shard and threw the other nine to his gym buddies. Every shard turns whoever holds it into a huge, muscly boss. With Grandma Brick and her lantern-bot Pip, you go and get them back.
+
+There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloop Bog, Mount Ember (where the sea is lava), Frostpeak, the Storm Arena, Nightfall Hollow, Rumble Quarry, the Stinkwater Sewers and the Golden Palace. Every chapter has story scenes and three or four goals: survive waves, find Heartstone sparks, protect Grandma's beacon, and beat the chapter's boss. Finishing a chapter unlocks a new gun, and you earn up to 3 stars: one for finishing, one for never getting cubed, one for beating the par time. If you get cubed, you retry only the part you were on.
+
+## Levels, challenges and achievements
+
+- Everything you do earns **XP**. Each level pays out coins.
+- **3 daily challenges** that change every day, like "Beat 15 Skitters" or "Reach wave 10 in Endless".
+- **24 achievements**, from First Blood to beating all 10 bosses and finding every mob.
+
+Click **Challenges** on the title screen to see them all.
+
 ## How it works
 
 Waves of mobs rise out of the ground and come for you. Survive as long as you can. Every fifth wave is a **boss wave**.
@@ -193,6 +207,9 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/mobmodels.js`, `src/mobskins.js` | Mob bodies, armor and pixel-art skins |
 | `src/boss.js`, `src/brute.js` | The 10 bosses: moves, muscles and flexing |
 | `src/bestiary.js` | The Mobs screen |
+| `src/storydata.js`, `src/story.js` | Story chapters, lore, dialogue, goals and the chapter screens |
+| `src/themes.js`, `src/portraits.js` | Each chapter's world, and the talking-head portraits |
+| `src/progress.js`, `src/challenges.js` | Levels, daily challenges and achievements |
 | `src/flow.js` | Pathfinding, so mobs find their way around walls |
 | `src/multiplayer.js`, `src/net.js`, `src/remote.js` | Multiplayer: networking, other players, chat |
 | `server/server.cjs` | The multiplayer server (Node.js) |

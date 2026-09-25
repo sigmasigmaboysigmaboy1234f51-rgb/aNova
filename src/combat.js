@@ -439,6 +439,7 @@ export class Combat {
       if (pr.local && w.inBounds(x, y, z) && y < SY - 1 && w.get(x, y, z) === B.AIR && !this.occupied(x, y, z)) {
         w.set(x, y, z, pr.block);
         g.stats.placed++;
+        g.progress.event('place');
         g.sound.place();
       }
       g.fx.burst(at.x, at.y, at.z, g.atlas.colors[BLOCKS[pr.block].side], 6, { speed: 1.5, size: 0.08, up: 1, life: 0.4, spread: 0.2 });

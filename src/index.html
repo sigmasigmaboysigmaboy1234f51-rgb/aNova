@@ -34,11 +34,6 @@
     <div id="banner-title" class="banner-title"></div>
     <div id="banner-sub" class="banner-sub"></div>
   </div>
-  <div id="toast" class="toast panel" hidden role="status">
-    <div class="toast-label"></div>
-    <div class="toast-title"></div>
-    <div class="toast-sub"></div>
-  </div>
   <div class="hud-bottom">
     <div class="hud-stack">
       <div id="hearts" class="hearts"></div>
@@ -69,6 +64,23 @@
   <div id="lowhp" class="lowhp"></div>
 </div>
 
+<div id="toast" class="toast panel" hidden role="status">
+  <div class="toast-label"></div>
+  <div class="toast-title"></div>
+  <div class="toast-sub"></div>
+</div>
+
+<div id="dialogue" class="dialogue" hidden>
+  <div class="dlg-box panel">
+    <canvas id="dlg-pic" class="dlg-pic" width="16" height="16" aria-hidden="true"></canvas>
+    <div class="dlg-body">
+      <div id="dlg-name" class="dlg-name"></div>
+      <p id="dlg-text" class="dlg-text" aria-live="polite"></p>
+      <div class="dlg-hint">Click or press Space to continue <button id="dlg-skip" class="link" type="button">Skip</button></div>
+    </div>
+  </div>
+</div>
+
 <section id="menu" class="screen menu" hidden aria-label="Title screen">
   <div class="menu-col">
     <header class="logo-wrap">
@@ -77,13 +89,24 @@
     </header>
     <div class="panel menu-panel">
       <div class="menu-buttons">
-        <button id="btn-play" class="btn btn-go" type="button">Single player</button>
-        <button id="btn-mp" class="btn" type="button">Multiplayer</button>
+        <div id="level-badge" class="level-badge" aria-live="polite">
+          <span id="lvl-num" class="lvl-num">Level 1</span>
+          <span class="lvl-bar"><i id="lvl-fill"></i></span>
+          <span id="lvl-xp" class="lvl-xp">0 / 150 XP</span>
+        </div>
+        <button id="btn-story" class="btn btn-go" type="button">Story</button>
+        <div class="btn-row">
+          <button id="btn-play" class="btn" type="button">Endless waves</button>
+          <button id="btn-mp" class="btn" type="button">Multiplayer</button>
+        </div>
         <div class="btn-row">
           <button id="btn-armory" class="btn btn-gold" type="button">Armory</button>
           <button id="btn-bestiary" class="btn" type="button">Mobs</button>
         </div>
-        <button id="btn-skin" class="btn" type="button">Edit skin</button>
+        <div class="btn-row">
+          <button id="btn-challenges" class="btn" type="button">Challenges</button>
+          <button id="btn-skin" class="btn" type="button">Edit skin</button>
+        </div>
         <div class="btn-row">
           <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
           <button id="btn-quit-app" class="btn btn-quiet" type="button" hidden>Quit</button>
@@ -263,6 +286,65 @@
       <p id="best-blurb" class="arm-desc"></p>
       <dl id="best-stats" class="best-stats"></dl>
     </aside>
+  </div>
+</section>
+
+<section id="story" class="screen armory story" hidden aria-label="Story">
+  <header class="arm-head">
+    <h2 class="arm-title">Story</h2>
+    <p id="story-stars" class="arm-msg"></p>
+    <button id="story-back" class="btn btn-go" type="button">Back</button>
+  </header>
+  <div class="story-body">
+    <div class="panel story-intro">
+      <h3 class="story-sub">The Shattered Heartstone</h3>
+      <p>Cubara is a floating island, kept alive by the glowing Heartstone. One night the Golden Overlord, who wants to be the buffest thing in the sky, smashed it. He ate one shard and threw the other nine to his gym buddies.</p>
+      <p>Every shard turns whoever holds it into a huge, muscly boss, and its glow is waking up the mobs. You are the last Blockfire: a builder who can shape blocks and fire Ember. With Grandma Brick and her lantern-bot Pip, go and get the shards back.</p>
+    </div>
+    <div id="story-list" class="story-list"></div>
+  </div>
+</section>
+
+<section id="storywin" class="screen overlay" hidden aria-label="Chapter complete">
+  <div class="panel overlay-panel">
+    <h2 class="overlay-title">Chapter complete!</h2>
+    <p id="sw-stars" class="big-stars"></p>
+    <ul id="sw-why" class="sw-why"></ul>
+    <ul id="sw-rewards" class="sw-rewards"></ul>
+    <div class="menu-buttons">
+      <button id="sw-next" class="btn btn-go" type="button">Next chapter</button>
+      <button id="sw-list" class="btn" type="button">Chapter select</button>
+    </div>
+  </div>
+</section>
+
+<section id="storyfail" class="screen overlay dead" hidden aria-label="Try again">
+  <div class="panel overlay-panel">
+    <h2 id="sf-title" class="overlay-title">You got cubed!</h2>
+    <p class="go-line">Try this part again. You keep your guns, and the chapter carries on from here.</p>
+    <div class="menu-buttons">
+      <button id="sf-retry" class="btn btn-go" type="button">Try again</button>
+      <button id="sf-quit" class="btn" type="button">Chapter select</button>
+    </div>
+  </div>
+</section>
+
+<section id="challenges" class="screen armory challenges" hidden aria-label="Challenges">
+  <header class="arm-head">
+    <h2 class="arm-title">Challenges</h2>
+    <p id="ch-level" class="arm-msg"></p>
+    <button id="ch-back" class="btn btn-go" type="button">Back</button>
+  </header>
+  <div class="ch-body">
+    <div class="panel">
+      <h3 class="best-family">Today's challenges</h3>
+      <p class="note-dim">New ones every day.</p>
+      <div id="ch-daily" class="ch-daily"></div>
+    </div>
+    <div class="panel">
+      <h3 class="best-family">Achievements <span id="ch-count"></span></h3>
+      <div id="ch-ach" class="ch-ach"></div>
+    </div>
   </div>
 </section>
 
