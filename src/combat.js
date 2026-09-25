@@ -93,10 +93,11 @@ export class Combat {
     if (g.adventure) {
       const ch = g.adventure.traceCars(origin, dir, blockT);
       if (ch) {
-        hits.push({ car: ch.car, t: ch.t, head: false });
+        hits.push({ adv: ch, t: ch.t, head: !!ch.head });
         hits.sort((a, b) => a.t - b.t);
-        const i = hits.findIndex((h) => h.car);
-        hits.length = i + 1;
+        // A car or the helicopter stops the bullet.
+        const i = hits.findIndex((h) => h.adv && !h.adv.officer);
+        if (i >= 0) hits.length = i + 1;
       }
     }
     hits.length = Math.min(hits.length, maxMobs);
@@ -140,7 +141,7 @@ export class Combat {
           const fall = s.pellets > 1 ? Math.max(0.35, Math.min(1, 1.25 - h.t / s.range)) : 1;
           const dmg = s.dmg * (h.head ? s.head : 1) * fall;
           if (h.remote) this.hitRemote(p, h.remote, dmg, h.head, dir, h.at, s);
-          else if (h.car) this.hitCar(p, h.car, dmg, h.at, s);
+          else if (h.adv) this.hitAdv(p, h.adv, dmg, h.at, s);
           else this.hitMob(p, h.mob, dmg, dir, h.head, h.at, s, color);
           hitAny = true;
           head = head || h.head;
@@ -163,15 +164,28 @@ export class Combat {
     if (g.adventure && !s.quiet) g.adventure.gunshot(p.pos);
   }
 
-  // Adventure mode: shooting a car dents it, sparks fly.
-  hitCar(p, car, dmg, at, s) {
+  // Adventure mode: shooting a car dents it and sparks fly. Officers and
+  // the police helicopter can be hit too.
+  hitAdv(p, h, dmg, at, s) {
     const g = this.game;
     if (p.buff && p.buff('dmg')) dmg *= 2;
     if (g.cheats.has('onehit')) dmg *= 1000;
-    car.damage(dmg, p.pos);
-    if (at) g.fx.burst(at.x, at.y, at.z, SPARKS, 4, { speed: 3, size: 0.06, up: 1.5, life: 0.35, spread: 0.05 });
-    g.sound.clank(0.25);
-    if (s && s.splash) this.explode(at, s.splash, dmg * 0.45, { local: true, breaks: false, small: true });
+    if (h.car) {
+      h.car.damage(dmg, p.pos, 'player');
+      if (h.car.type === 'police' && !h.car.dead) g.adventure.police.crime('shootCop');
+      if (at) g.fx.burst(at.x, at.y, at.z, SPARKS, 4, { speed: 3, size: 0.06, up: 1.5, life: 0.35, spread: 0.05 });
+      g.sound.clank(0.25);
+    } else if (h.officer) {
+      h.officer.damage(dmg, true);
+      if (at) g.fx.burst(at.x, at.y, at.z, BLOOD, 4, { speed: 2.5, size: 0.07, up: 1.5, life: 0.45, spread: 0.1 });
+      g.hud.hitmarker(!!h.head);
+    } else if (h.heli) {
+      h.heli.damage(dmg);
+      if (at) g.fx.burst(at.x, at.y, at.z, SPARKS, 5, { speed: 3, size: 0.06, up: 1.5, life: 0.35, spread: 0.05 });
+      g.sound.clank(0.3);
+      g.hud.hitmarker(false);
+    }
+    if (s && s.splash && at) this.explode(at, s.splash, dmg * 0.45, { local: true, breaks: false, small: true });
   }
 
   hitMob(p, mob, dmg, dir, head, at, s, color) {
@@ -310,8 +324,8 @@ export class Combat {
       if (h && h.remote) {
         this.hitRemote(p, h.remote, s.dmg * (h.head ? s.head : 1), h.head, aim, h.at, s);
         if (Math.random() < 0.3) g.hud.hitmarker(h.head);
-      } else if (h && h.car) {
-        this.hitCar(p, h.car, s.dmg, h.at, s);
+      } else if (h && h.adv) {
+        this.hitAdv(p, h.adv, s.dmg, h.at, s);
       } else if (h) {
         this.hitMob(p, h.mob, s.dmg * (h.head ? s.head : 1), aim, h.head, h.at, s, color);
         if (Math.random() < 0.3) g.hud.hitmarker(h.head);
@@ -427,7 +441,7 @@ export class Combat {
         }
         if (g.adventure) {
           const ch = g.adventure.traceCars(prev, seg, len + 0.1);
-          if (ch && (!hit || ch.t < hit.t)) hit = { car: ch.car, t: ch.t, head: false };
+          if (ch && (!hit || ch.t < hit.t)) hit = { adv: ch, t: ch.t, head: !!ch.head };
         }
         if (hit) {
           const at = prev.clone().addScaledVector(seg, hit.t);
@@ -482,8 +496,8 @@ export class Combat {
       this.explode(at, s.splash || 3, s.dmg || 14, { local: true, breaks: !!s.breaks });
       return;
     }
-    if (hit.car) {
-      this.hitCar(g.player, hit.car, s.dmg || 3, at, s);
+    if (hit.adv) {
+      this.hitAdv(g.player, hit.adv, s.dmg || 3, at, s);
       g.hud.hitmarker(false);
       return;
     }

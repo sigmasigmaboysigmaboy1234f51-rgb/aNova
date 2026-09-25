@@ -1,16 +1,21 @@
 import * as THREE from 'three';
-import { buildHumanoid } from './model.js';
-import { Rig, posePlayer } from './anim.js';
+import { buildHumanoid, PX } from './model.js';
+import { Rig, poseCivilian } from './anim.js';
 import { makeSkinTexture, paintOutfit, randomOutfit } from './skin.js';
 import { nameplate } from './remote.js';
 import { mulberry32 } from './rng.js';
+import { rayBox } from './mob.js';
 import { GY } from './city.js';
 
 // People of Blockton. They stroll round the sidewalks, run away from mobs
-// and gunfire, and dive out of the way of cars. Some of them have a job
-// for you: they stand still with a "!" over their heads.
+// and gunfire, and dive out of the way of cars. Point a gun at someone and
+// they put their hands up, then run off and phone the police. Some people
+// have a job for you: they stand still with a "!" over their heads.
 
 const FIRST = ['Sam', 'Alex', 'Jo', 'Max', 'Riley', 'Kim', 'Lee', 'Pat', 'Charlie', 'Robin', 'Jamie', 'Taylor', 'Casey', 'Drew', 'Morgan', 'Quinn'];
+
+// How long a call to the police takes to go through.
+export const CALL_TIME = 3.5;
 
 function markTexture(text, color) {
   const c = document.createElement('canvas');
@@ -29,6 +34,29 @@ function markTexture(text, color) {
   return t;
 }
 let markTex = null;
+let phoneGeo = null;
+let phoneMat = null;
+let screenMat = null;
+
+// A phone in someone's right hand.
+export function addPhone(model) {
+  if (!phoneGeo) {
+    phoneGeo = new THREE.BoxGeometry(0.07, 0.15, 0.03);
+    phoneMat = new THREE.MeshLambertMaterial({ color: '#1d1d22' });
+    screenMat = new THREE.MeshBasicMaterial({ color: '#8fd8ff' });
+  }
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(phoneGeo, phoneMat);
+  const screen = new THREE.Mesh(phoneGeo, screenMat);
+  screen.scale.set(0.8, 0.8, 0.4);
+  screen.position.z = 0.012;
+  g.add(body, screen);
+  g.position.set(0, -10.6 * PX, 1.4 * PX);
+  g.rotation.x = -Math.PI / 2;
+  g.visible = false;
+  model.parts.armR.add(g);
+  return g;
+}
 
 export class Person {
   constructor(adv, opts = {}) {
@@ -43,6 +71,7 @@ export class Person {
     this.texture = makeSkinTexture(this.canvas);
     this.model = buildHumanoid(this.texture, { slim: rng() < 0.4 });
     this.rig = new Rig(this.model);
+    this.phone = addPhone(this.model);
     this.game.scene.add(this.model.root);
     this.pos = new THREE.Vector3(opts.x || 0, GY + 1, opts.z || 0);
     this.vel = new THREE.Vector3();
@@ -56,6 +85,10 @@ export class Person {
     this.fleeFrom = new THREE.Vector3();
     this.knockT = 0;
     this.chatT = 0;
+    this.threatT = 0;
+    this.handsT = 0;
+    this.callT = -1;
+    this.callCd = 0;
     this.giver = opts.giver || null;
     this.visible = true;
     if (this.giver) {
@@ -90,6 +123,14 @@ export class Person {
     }
   }
 
+  // Did a shot (or your aim) along this ray reach this person?
+  hitTest(o, d, maxT) {
+    if (!this.visible) return null;
+    const p = this.pos;
+    const t = rayBox(o, d, p.x - 0.38, p.y, p.z - 0.38, p.x + 0.38, p.y + 1.9, p.z + 0.38);
+    return t >= 0 && t < maxT ? t : null;
+  }
+
   // Something scary happened near here.
   scare(from, t = 5) {
     if (this.giver) return;
@@ -107,9 +148,39 @@ export class Person {
     this.scare(car.pos, 3);
   }
 
+  // You're pointing a gun at them (on = true while you aim).
+  aimedAt(on, dt, from) {
+    if (this.giver) return;
+    if (on) {
+      this.threatT += dt;
+      this.handsT = 0.6;
+      this.fleeFrom.copy(from);
+      // Long enough: they'll call the police as soon as they can.
+      if (this.threatT > 0.45 && this.callT < 0 && this.callCd <= 0) this.startCall();
+    } else this.threatT = Math.max(0, this.threatT - dt);
+  }
+
+  // Get the phone out and dial the police.
+  startCall() {
+    if (this.giver || this.callT >= 0) return;
+    this.callT = 0;
+    this.callCd = 30;
+    this.fleeT = Math.max(this.fleeT, CALL_TIME + 3);
+    this.adv.police.onCallStart(this);
+  }
+
   update(dt) {
     const g = this.game;
     this.knockT -= dt;
+    this.handsT -= dt;
+    this.callCd -= dt;
+    if (this.callT >= 0) {
+      this.callT += dt;
+      if (this.callT >= CALL_TIME) {
+        this.callT = -1;
+        this.adv.police.onCallDone(this);
+      }
+    }
     let moveX = 0;
     let moveZ = 0;
     let speed = 0;
@@ -121,6 +192,9 @@ export class Person {
         this.pos.y = GY + 1;
         this.vel.set(0, 0, 0);
       }
+    } else if (this.handsT > 0) {
+      // Hands up! Frozen to the spot, facing you.
+      this.yaw = Math.atan2(this.fleeFrom.x - this.pos.x, this.fleeFrom.z - this.pos.z);
     } else if (this.fleeT > 0) {
       this.fleeT -= dt;
       moveX = this.pos.x - this.fleeFrom.x;
@@ -161,36 +235,21 @@ export class Person {
     this.sync(dt);
   }
 
+  gesture() {
+    if (this.handsT > 0) return 'hands';
+    if (this.callT >= 0) return 'phone';
+    if (this.fleeT > 0) return 'flee';
+    if (this.chatT > 0) return 'wave';
+    return null;
+  }
+
   sync(dt) {
     const m = this.model;
     m.root.visible = this.visible;
     m.root.position.copy(this.pos);
     m.root.rotation.y = this.yaw;
-    posePlayer(
-      this.rig,
-      {
-        speed: this.speed,
-        sprint: this.fleeT > 0,
-        crouch: false,
-        onGround: this.knockT <= 0,
-        water: false,
-        vy: this.vel.y,
-        pitch: 0,
-        aim: 0,
-        recoil: 0,
-        reload: -1,
-        hurt: 0,
-        landed: 0,
-        dead: false,
-        deadT: 0,
-      },
-      dt,
-    );
-    // Waving while chatting, arms up when running scared.
-    if (this.fleeT > 0) {
-      m.parts.armR.rotation.x = -2.8;
-      m.parts.armL.rotation.x = -2.8;
-    } else if (this.chatT > 0) m.parts.armR.rotation.z = -0.6 - Math.abs(Math.sin(performance.now() / 180)) * 0.5;
+    poseCivilian(this.rig, { speed: this.speed, gesture: this.gesture(), gT: performance.now() / 1000 }, dt);
+    this.phone.visible = this.callT >= 0;
     if (this.mark) {
       const on = this.visible && this.adv.showMark(this);
       this.mark.visible = on;

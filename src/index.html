@@ -23,6 +23,11 @@
   <div id="feed" class="feed" aria-live="polite"></div>
   <canvas id="minimap" class="minimap" width="160" height="160" hidden aria-label="Map of Blockton"></canvas>
   <div id="prompt" class="prompt" hidden></div>
+  <div id="phone" class="phone" hidden aria-live="polite">
+    <div class="ph-top"><b class="ph-icon" aria-hidden="true"></b><span id="ph-name" class="ph-name">Sam</span></div>
+    <div id="ph-status" class="ph-status">Calling…</div>
+    <div class="ph-bar"><div id="ph-fill"></div></div>
+  </div>
   <div id="drive-hud" class="drive-hud" hidden>
     <div id="dh-name" class="dh-name">Sedan</div>
     <div class="dh-speed"><span id="dh-speed">0</span><small>km/h</small></div>
@@ -42,6 +47,8 @@
       <div class="hud-label">Score</div>
       <div id="hud-score" class="hud-score">0</div>
       <div id="coin-box" class="coin-box"><img id="coin-icon" alt="Coins"><span id="hud-coins">0</span></div>
+      <div id="wanted" class="wanted" hidden aria-label="Wanted level"><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="bust" class="bust" hidden><span>BUSTED</span><div class="bust-bar"><div id="bust-fill"></div></div></div>
     </div>
   </div>
   <div id="banner" class="banner" hidden>

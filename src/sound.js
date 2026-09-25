@@ -1052,4 +1052,100 @@ export class Sound {
       this.sirenNode = null;
     }
   }
+
+  // --- Police ---------------------------------------------------------------
+
+  // A siren "whoop": you just got a wanted star.
+  chirp() {
+    if (!this.ready('chirp', 200)) return;
+    const out = this.voice(0.2);
+    this.oscL({ out, type: 'square', f0: 700, f1: 1500, dur: 0.18, vol: 0.05, attack: 0.01 });
+    this.oscL({ out, t: 0.2, type: 'square', f0: 1500, f1: 700, dur: 0.22, vol: 0.05, attack: 0.01 });
+  }
+
+  // Phone buttons being pressed: 5, 0, 5, 0.
+  dial() {
+    if (!this.ready('dial', 300)) return;
+    const out = this.voice(0.05, 0.3);
+    const keys = [[770, 1336], [941, 1336], [770, 1336], [941, 1336]];
+    keys.forEach(([a, b], i) => {
+      this.oscL({ out, t: i * 0.16, type: 'sine', f0: a, dur: 0.09, vol: 0.035, attack: 0.004 });
+      this.oscL({ out, t: i * 0.16, type: 'sine', f0: b, dur: 0.09, vol: 0.035, attack: 0.004 });
+    });
+  }
+
+  // A continuous tone whose loudness follows `level` (0 turns it off).
+  loop(name, level, build) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    let n = this[name];
+    if (level > 0.01 && !n && !this.muted) {
+      n = this[name] = build(c);
+      n.level = 0;
+    }
+    if (!n) return;
+    if (level <= 0.01) {
+      const t = c.currentTime;
+      n.g.gain.cancelScheduledValues(t);
+      n.g.gain.setValueAtTime(n.g.gain.value, t);
+      n.g.gain.linearRampToValueAtTime(0.0001, t + 0.25);
+      for (const o of n.srcs) o.stop(t + 0.3);
+      this[name] = null;
+      return;
+    }
+    if (Math.abs(level - n.level) > 0.02) {
+      n.level = level;
+      n.g.gain.setTargetAtTime(n.peak * level, c.currentTime, 0.1);
+    }
+  }
+
+  // The police cars chasing you: a fast "yelp" siren.
+  copSiren(level) {
+    this.loop('copNode', level, (c) => {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = 1000;
+      const lfo = c.createOscillator();
+      lfo.type = 'triangle';
+      lfo.frequency.value = 2.6;
+      const depth = c.createGain();
+      depth.gain.value = 420;
+      lfo.connect(depth).connect(o.frequency);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1900;
+      const g = c.createGain();
+      g.gain.value = 0;
+      o.connect(lp).connect(g).connect(this.voice(0.3, 0.2));
+      o.start();
+      lfo.start();
+      return { g, srcs: [o, lfo], peak: 0.04 };
+    });
+  }
+
+  // Helicopter blades: thumping low noise.
+  heli(level) {
+    this.loop('heliNode', level, (c) => {
+      const n = c.createBufferSource();
+      n.buffer = this.brown;
+      n.loop = true;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 420;
+      const chop = c.createGain();
+      chop.gain.value = 0.5;
+      const lfo = c.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = 11;
+      const lg = c.createGain();
+      lg.gain.value = 0.5;
+      lfo.connect(lg).connect(chop.gain);
+      const g = c.createGain();
+      g.gain.value = 0;
+      n.connect(lp).connect(chop).connect(g).connect(this.voice(0.2));
+      n.start();
+      lfo.start();
+      return { g, srcs: [n, lfo], peak: 0.5 };
+    });
+  }
 }

@@ -5,6 +5,7 @@ import { THEMES } from './themes.js';
 import { generateCity, roadNodes, sidewalkLoops, GY, LANE, CITY_SIZE } from './city.js';
 import { Car, CAR_TYPES } from './cars.js';
 import { Person } from './townsfolk.js';
+import { Police, POLICE_NUMBER } from './police.js';
 import { MOB_TYPES } from './mobtypes.js';
 import { BOSSES, Boss } from './boss.js';
 
@@ -318,6 +319,8 @@ export class Adventure {
     this.info = generateCity(g.world, 7);
     g.world.flush();
     this.traffic = new Traffic(this);
+    this.police = new Police(this);
+    this.buildSigns();
     // Parked cars.
     for (const s of this.info.parking) {
       const type = s.type === 'player' ? 'sedan' : s.type === 'parked' ? (Math.random() < 0.5 ? 'sedan' : 'pickup') : s.type;
@@ -393,6 +396,14 @@ export class Adventure {
     }
     this.clearBeacon();
     if (this.traffic) this.traffic.dispose();
+    if (this.police) this.police.dispose();
+    for (const m of this.signs || []) {
+      g.scene.remove(m);
+      m.geometry.dispose();
+      m.material.map.dispose();
+      m.material.dispose();
+    }
+    this.signs = [];
     this.cars = [];
     this.people = [];
     this.cubes = [];
@@ -403,8 +414,11 @@ export class Adventure {
 
   // The engine and siren go quiet while the game is paused.
   quiet() {
-    this.game.sound.engine(false);
-    this.game.sound.siren(false);
+    const snd = this.game.sound;
+    snd.engine(false);
+    snd.siren(false);
+    snd.copSiren(0);
+    snd.heli(0);
   }
 
   showUI(on) {
@@ -417,6 +431,44 @@ export class Adventure {
   get spawn() {
     const s = this.info.spawn;
     return new THREE.Vector3(s.x, this.groundAt(s.x, s.z, GY + 2), s.z);
+  }
+
+  get policeDoor() {
+    const s = this.info.police;
+    return new THREE.Vector3(s.x, this.groundAt(s.x, s.z, GY + 2), s.z);
+  }
+
+  // Signs on the buildings, painted on canvases.
+  buildSigns() {
+    const g = this.game;
+    this.signs = [];
+    const sign = (lines, bg, fg, w, h, x, y, z, ry = 0) => {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = Math.round((256 * h) / w);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.strokeStyle = fg;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(5, 5, c.width - 10, c.height - 10);
+      ctx.fillStyle = fg;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      lines.forEach(([text, size], i) => {
+        ctx.font = `700 ${size}px 'Pixelify Sans', ui-monospace, monospace`;
+        ctx.fillText(text, c.width / 2, (c.height * (i + 0.5)) / lines.length + 2);
+      });
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+      m.position.set(x, y, z);
+      m.rotation.y = ry;
+      g.scene.add(m);
+      this.signs.push(m);
+    };
+    const pd = this.info.police;
+    if (pd) sign([['BLOCKTON POLICE', 34], [`Emergency? Dial ${POLICE_NUMBER}`, 24]], '#1e3160', '#ffffff', 6, 1.5, pd.signX, GY + 6.2, pd.signZ + 1.02);
   }
 
   get hospital() {
@@ -607,6 +659,8 @@ export class Adventure {
     let bd = r;
     for (const c of this.cars) {
       if (c.dead || c.mission || (c.driver === 'ai' && Math.abs(c.speed) > 4)) continue;
+      // A police car the officers got out of is up for grabs...
+      if (c.driver === 'cop' && !(c.unit && c.unit.mode === 'deployed')) continue;
       const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z) - c.def.wid / 2;
       if (d < bd) {
         bd = d;
@@ -630,12 +684,20 @@ export class Adventure {
       const s = Math.sin(c.yaw);
       const co = Math.cos(c.yaw);
       const side = c.def.wid / 2 + 0.8;
-      const out = this.addPerson({ x: c.pos.x - co * side, z: c.pos.z + s * side });
-      out.scare(p.pos, 6);
-      this.removePersonLater(out, 12);
+      const out = this.addPerson({ x: c.pos.x + co * side, z: c.pos.z - s * side });
+      out.fleeFrom.copy(p.pos);
+      // ...and phones the police about it.
+      out.startCall();
+      this.removePersonLater(out, 16);
       c.ai = null;
       c.sirenOn = false;
       g.hud.popup('Hey! That was my car!', 'heal');
+    } else if (c.driver === 'cop') {
+      // Stealing a police car. Bold.
+      if (c.unit) c.unit.car = null;
+      c.unit = null;
+      c.sirenOn = false;
+      this.police.crime('stealCop');
     }
     p.driving = c;
     c.driver = 'player';
@@ -669,12 +731,12 @@ export class Adventure {
     const co = Math.cos(c.yaw);
     const side = c.def.wid / 2 + 0.7;
     const w = g.world;
-    let x = c.pos.x - co * side;
-    let z = c.pos.z + s * side;
+    let x = c.pos.x + co * side;
+    let z = c.pos.z - s * side;
     let y = this.groundAt(x, z, c.pos.y + 2);
     if (w.solid(Math.floor(x), Math.floor(y), Math.floor(z)) || y > c.pos.y + 1.5) {
-      x = c.pos.x + co * side;
-      z = c.pos.z - s * side;
+      x = c.pos.x - co * side;
+      z = c.pos.z + s * side;
       y = this.groundAt(x, z, c.pos.y + 2);
     }
     p.pos.set(x, y, z);
@@ -724,7 +786,7 @@ export class Adventure {
   }
 
   // What's in front of a car, and how far: other cars, people, you, mobs.
-  obstacleAhead(car, f) {
+  obstacleAhead(car, f, ignorePlayer = false) {
     let best = 99;
     const rx = f.z;
     const rz = -f.x;
@@ -737,13 +799,14 @@ export class Adventure {
     };
     for (const c of this.cars) if (c !== car) check(c.pos.x, c.pos.z, c.def.len / 2, c.def.wid / 2);
     const p = this.game.player;
-    if (!p.driving && !p.dead) check(p.pos.x, p.pos.z, 0.3, 0.3);
+    if (!p.driving && !p.dead && !ignorePlayer) check(p.pos.x, p.pos.z, 0.3, 0.3);
     for (const person of this.people) if (person.visible) check(person.pos.x, person.pos.z, 0.3, 0.3);
+    for (const o of this.police.officers()) check(o.pos.x, o.pos.z, 0.3, 0.3);
     for (const m of this.game.mobs.list) if (m.state === 'live') check(m.pos.x, m.pos.z, m.hw, m.hw);
     return best;
   }
 
-  // Bullets that hit cars.
+  // Bullets that hit cars, police officers or the helicopter.
   traceCars(o, d, maxT) {
     let best = null;
     for (const c of this.cars) {
@@ -751,15 +814,29 @@ export class Adventure {
       const t = c.hitTest(o, d, maxT);
       if (t !== null && (!best || t < best.t)) best = { car: c, t };
     }
+    for (const off of this.police.officers()) {
+      const h = off.hitTest(o, d, best ? best.t : maxT);
+      if (h) best = { officer: off, t: h.t, head: h.head };
+    }
+    const heli = this.police.heli;
+    if (heli) {
+      const t = heli.hitTest(o, d, best ? best.t : maxT);
+      if (t !== null) best = { heli, t };
+    }
     return best;
   }
 
   // An explosion hurts cars and scares people.
   blast(at, r, dmg) {
+    // Explosions you set off (or a car you wrecked going up) count as yours.
+    const by = this.blastBy !== undefined ? this.blastBy : 'player';
     for (const c of this.cars) {
       const d = c.pos.distanceTo(at);
-      if (d < r + c.def.len / 2) c.damage(dmg * 1.5 * Math.max(0.3, 1 - d / (r + 2)), null);
+      if (d < r + c.def.len / 2) c.damage(dmg * 1.5 * Math.max(0.3, 1 - d / (r + 2)), null, by);
     }
+    for (const o of this.police.officers()) if (o.pos.distanceTo(at) < r + 0.5) o.damage(dmg, by === 'player');
+    const heli = this.police.heli;
+    if (heli && heli.pos.distanceTo(at) < r + 2 && by === 'player') heli.damage(dmg * 2);
     for (const p of this.people) if (p.pos.distanceTo(at) < 18) p.scare(at, 6);
   }
 
@@ -816,6 +893,8 @@ export class Adventure {
     for (const c of this.cars) c.update(dt);
     this.collide(dt);
     if (p.driving) p.pos.set(p.driving.pos.x, p.driving.pos.y + 0.3, p.driving.pos.z);
+    this.updateThreats(dt);
+    this.police.update(dt);
     this.upkeep(dt);
     for (const person of this.people) person.update(dt);
     // Things removed after a delay.
@@ -847,6 +926,30 @@ export class Adventure {
       this.mapT = 0.1;
       this.drawMap();
     }
+  }
+
+  // Point a gun at someone and they put their hands up, then call the
+  // police as soon as you look away.
+  updateThreats(dt) {
+    const g = this.game;
+    const p = g.player;
+    const armed = g.state === 'playing' && !p.driving && !p.dead && p.held < 3 && !!p.weapon;
+    let target = null;
+    if (armed) {
+      const o = g.camera.position;
+      const d = p.aimDir(V());
+      const block = g.world.raycast(o.x, o.y, o.z, d.x, d.y, d.z, 30);
+      let best = block ? block.t : 30;
+      for (const person of this.people) {
+        if (person.giver || !person.visible || person.pos.distanceTo(p.pos) > 30) continue;
+        const t = person.hitTest(o, d, best);
+        if (t !== null) {
+          best = t;
+          target = person;
+        }
+      }
+    }
+    for (const person of this.people) person.aimedAt(person === target, dt, p.pos);
   }
 
   // Clear away old wrecks and keep the roads busy.
@@ -926,8 +1029,10 @@ export class Adventure {
         const closing = (va[0] - vb[0]) * ux + (va[1] - vb[1]) * uz;
         if (closing <= 0.5) continue;
         if (closing > 6) {
-          a.damage(closing * 1.4, null);
-          b.damage(closing * 1.4, null);
+          const byA = a.driver === 'player' ? 'player' : null;
+          const byB = b.driver === 'player' ? 'player' : null;
+          a.damage(closing * 1.4, null, byB || byA);
+          b.damage(closing * 1.4, null, byA || byB);
           g.sound.clank(Math.min(1, closing / 15));
           if (a.driver === 'player' || b.driver === 'player') g.player.shake = Math.max(g.player.shake, Math.min(0.4, closing / 40));
         }
@@ -959,9 +1064,18 @@ export class Adventure {
         const side = Math.abs(dx * f.z - dz * f.x);
         if (along > 0 && along < a.def.len / 2 + 3 && side < a.def.wid / 2 + 0.6) person.dodge(a);
       }
+      // Running into police officers knocks them flat.
+      for (const o of this.police.officers()) {
+        if (o.state === 'down') continue;
+        const dx = o.pos.x - a.pos.x;
+        const dz = o.pos.z - a.pos.z;
+        const along = dx * f.x + dz * f.z;
+        const side = Math.abs(dx * f.z - dz * f.x);
+        if (Math.abs(along) < a.def.len / 2 + 0.3 && side < a.def.wid / 2 + 0.3 && Math.abs(o.pos.y - a.pos.y) < 1.5 && Math.abs(a.speed) > 4) o.runOver(a);
+      }
       // A car driving into you on foot knocks you over.
       const p = g.player;
-      if (!p.driving && !p.dead && a.driver === 'ai') {
+      if (!p.driving && !p.dead && (a.driver === 'ai' || a.driver === 'cop')) {
         const dx = p.pos.x - a.pos.x;
         const dz = p.pos.z - a.pos.z;
         const along = dx * f.x + dz * f.z;
@@ -1084,7 +1198,22 @@ export class Adventure {
       ctx.fillStyle = color;
       ctx.fillRect(x * k - r, z * k - r, r * 2, r * 2);
     };
-    for (const c of this.cars) if (!c.dead) dot(c.pos.x, c.pos.z, 1.5, c.mine ? '#f2c230' : '#cfd4da');
+    const blink = Math.floor(performance.now() / 250) % 2;
+    // Where the police think you are.
+    const pol = this.police;
+    if (pol.stars > 0 && !pol.seen) {
+      ctx.fillStyle = 'rgba(255, 60, 60, 0.25)';
+      ctx.beginPath();
+      ctx.arc(pol.lastKnown.x * k, pol.lastKnown.z * k, 14 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const c of this.cars) {
+      if (c.dead) continue;
+      const cop = c.driver === 'cop';
+      dot(c.pos.x, c.pos.z, cop ? 2.4 : 1.5, cop ? (blink ? '#ff3a3a' : '#3a7aff') : c.mine ? '#f2c230' : '#cfd4da');
+    }
+    for (const o of pol.officers()) dot(o.pos.x, o.pos.z, 1.5, '#3a7aff');
+    if (pol.heli && !pol.heli.dead) dot(pol.heli.pos.x, pol.heli.pos.z, 3, blink ? '#3a7aff' : '#ffffff');
     if (!this.active) for (const [id, person] of Object.entries(this.givers)) if (this.showMark(person)) dot(person.pos.x, person.pos.z, 3, id === 'cubes' ? '#ffd84a' : '#ffd23f');
     if (this.beaconAt) {
       const pulse = 3 + Math.sin(performance.now() / 150) * 1.2;

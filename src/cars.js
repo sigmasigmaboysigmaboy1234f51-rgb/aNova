@@ -240,7 +240,7 @@ export class Car {
       // Crash: bounce back, and a hard hit hurts.
       const hit = Math.abs(this.speed);
       if (hit > 7) {
-        this.damage(hit * 2.2, null);
+        this.damage(hit * 2.2, null, this.driver === 'player' ? 'player' : null);
         g.sound.landThud(Math.min(1, hit / 20));
         g.sound.clank(Math.min(1, hit / 15));
         if (this.driver === 'player') g.player.shake = Math.max(g.player.shake, Math.min(0.5, hit / 40));
@@ -294,6 +294,8 @@ export class Car {
     let target = this.type === 'bus' ? 7 : this.type === 'icecream' ? 6 : 9;
     if (total - along < 12) target = Math.min(target, 6);
     if (this.aiTarget) target = this.aiTarget;
+    // Pull over for police cars with their sirens on.
+    if (!this.aiTarget && adv.police.yieldTo(this)) target = Math.min(target, 2.5);
     // Stop at red lights (and at yellow, unless it's too late to stop).
     const toNode = total - along;
     const light = adv.traffic.lightFor(b, dx, dz);
@@ -321,8 +323,10 @@ export class Car {
     this.drive(dt, throttle, steer, false);
   }
 
-  damage(amount, from) {
+  // by: 'player' when it was you (shots, crashes, your explosions).
+  damage(amount, from, by = null) {
     if (this.dead) return;
+    if (by) this.lastHitBy = by;
     this.hp -= amount;
     this.hurtT = 0.15;
     if (this.hp <= 0) this.explode();
@@ -336,7 +340,12 @@ export class Car {
     this.hp = 0;
     this.speed *= 0.3;
     const at = new THREE.Vector3(this.pos.x, this.pos.y + 1, this.pos.z);
+    // Wrecking someone else's car is a crime. The gold van is fair game.
+    const mine = this.lastHitBy === 'player';
+    if (mine && !this.mission && !this.mine) this.adv.police.crime(this.type === 'police' ? 'wreckCop' : 'wreck');
+    this.adv.blastBy = mine ? 'player' : null;
     g.combat.explode(at, 3.2, 30, { local: true });
+    this.adv.blastBy = undefined;
     g.fx.burst(at.x, at.y, at.z, FIRE, 40, { speed: 6, size: 0.18, up: 4, life: 1.2, spread: 0.8 });
     // Burnt out: everything goes dark.
     this.model.root.traverse((o) => {
@@ -371,6 +380,7 @@ export class Car {
       this.speed *= 1 - 2 * dt;
       if (Math.random() < dt * 6) this.game.fx.burst(this.pos.x, this.pos.y + 1.4, this.pos.z, FIRE, 1, { speed: 0.6, size: 0.25, up: 2, life: 1.2, spread: 0.6, grav: -3 });
     } else if (this.driver === 'ai') this.aiDrive(dt);
+    else if (this.driver === 'cop' && this.unit) this.adv.police.driveCop(this, dt);
     else if (this.driver !== 'player') this.drive(dt, 0, 0, true);
     this.sync(dt);
   }
@@ -387,7 +397,7 @@ export class Car {
       w.g.rotation.y = w.front ? this.steer * 0.45 : 0;
     }
     if (m.siren) {
-      const on = this.sirenOn || (this.driver === 'player' && this.adv.siren);
+      const on = this.sirenOn || this.driver === 'cop' || (this.driver === 'player' && this.adv.siren);
       const f = Math.floor(performance.now() / 180) % 2;
       m.siren.red.visible = !on || f === 0;
       m.siren.blue.visible = !on || f === 1;

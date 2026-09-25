@@ -34,7 +34,7 @@ export function generateCity(world, seed = 7) {
   const fill = (x0, y0, z0, x1, y1, z1, id) => {
     for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) set(x, y, z, id);
   };
-  const info = { lots: {}, parking: [], doors: [], givers: {}, cubes: [], lamps: [], spawn: null, hospital: null, taxi: null };
+  const info = { lots: {}, parking: [], doors: [], givers: {}, cubes: [], lamps: [], spawn: null, hospital: null, taxi: null, police: null };
 
   // --- Ground: an island with beaches, then grass everywhere ---
   for (let z = 0; z < N; z++) {
@@ -282,8 +282,9 @@ export function generateCity(world, seed = 7) {
       info.cubes.push([x0 + 4, GY + 18, z0 + 4]);
     },
     police(x0, z0, x1, z1) {
-      building(x0 + 1, z0 + 1, x1 - 1, z0 + 9, 2, B.CONCRETE, B.GLASS, 's', B.METAL);
+      const st = building(x0 + 1, z0 + 1, x1 - 1, z0 + 9, 2, B.CONCRETE, B.GLASS, 's', B.METAL);
       stairs(x1 - 2, z0 + 3, [GY, GY + 4, GY + 9]);
+      info.police = { x: st.door[0], z: st.door[1] + 1, signX: Math.floor((x0 + x1) / 2) + 1, signZ: z0 + 9 };
       // A blue stripe along the front.
       for (let x = x0 + 1; x <= x1 - 1; x++) if (get(x, GY + 4, z0 + 9)) set(x, GY + 4, z0 + 9, B.GLASS);
       fill(x0, GY, z0 + 11, x1, GY, z1, B.ASPHALT);

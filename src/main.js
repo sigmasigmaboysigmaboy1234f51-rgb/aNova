@@ -1230,6 +1230,8 @@ class Game {
     if (this.adventure) {
       // Wake up at the hospital. Any job you were on is a bust.
       if (this.player.driving) this.adventure.exitCar(true);
+      // Wasted: the police forget about you.
+      this.adventure.police.reset();
       if (this.adventure.active) this.adventure.endMission('fail');
       else this.hud.showBanner('You got cubed', 'Back in 4, at the hospital', 4.5);
       this.respawnT = 4;
