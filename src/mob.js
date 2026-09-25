@@ -851,7 +851,8 @@ export class Mob {
     this.fuseT = 0;
     if (this.shard) this.shard.visible = false;
     this.game.sound.mobDie(this.family, loud ? 1 : this.vol());
-    if (this.family === 'bone') this.breakApart();
+    // Plain Boneheads rattle apart (the Bone Colossus boss has its own fall).
+    if (this.family === 'bone' && this.def.body === 'humanoid') this.breakApart();
   }
 
   // Boneheads rattle apart: every limb flies off and tumbles.
