@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { moveEntity, boxHitsWorld } from './physics.js';
 import { B, BLOCKS, SEA, SY } from './world.js';
-import { buildHumanoid, buildBlaster, setBoxUV, PX } from './model.js';
+import { buildHumanoid, buildBlaster, holdBlaster, setBoxUV } from './model.js';
 import { Rig, posePlayer, ease } from './anim.js';
 import { clamp } from './util.js';
 
@@ -56,28 +56,15 @@ function buildViewModel(skin) {
   };
   const arm = new THREE.Group();
   arm.add(part(40, 16, 0, base), part(40, 32, 0.5, outer));
-  arm.position.set(0.02, -0.09, 0.15);
+  arm.position.set(0.01, -0.1, 0.12);
   arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.85, -0.3, 0.45).normalize());
   group.add(arm);
-  group.position.set(0.25, -0.2, -0.52);
-  group.scale.setScalar(0.72);
-  const flash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.22, 0.22),
-    new THREE.MeshBasicMaterial({
-      color: 0xffd36b,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  flash.position.set(0, 0.01, -0.55);
-  flash.visible = false;
-  gun.add(flash);
+  group.position.set(0.22, -0.2, -0.45);
+  group.scale.setScalar(0.6);
   const cell = gun.userData.cell;
   return {
     group,
-    flash,
+    gun,
     cell,
     cellY: cell.position.y,
     rest: group.position.clone(),
@@ -85,6 +72,7 @@ function buildViewModel(skin) {
       for (const g of geos) g.dispose();
       base.dispose();
       outer.dispose();
+      gun.userData.dispose();
     },
   };
 }
@@ -117,14 +105,10 @@ export class Player {
     if (this.model) {
       scene.remove(this.model.root);
       this.model.dispose();
+      this.gun3p.userData.dispose();
     }
     this.model = buildHumanoid(skin.texture, { slim: skin.slim });
-    const gun = buildBlaster();
-    gun.scale.setScalar(0.6);
-    gun.rotation.set(-Math.PI / 2, 0, Math.PI);
-    gun.position.set(0, -11 * PX, 2 * PX);
-    this.model.parts.armR.add(gun);
-    this.gun3p = gun;
+    this.gun3p = holdBlaster(this.model);
     this.model.root.visible = wasVisible;
     this.rig = new Rig(this.model);
     scene.add(this.model.root);
@@ -184,6 +168,7 @@ export class Player {
     this.swayY = 0;
     this.sprintW = 0;
     this.crouchW = 0;
+    this.heat = 0;
   }
 
   aimDir(out) {
@@ -227,6 +212,7 @@ export class Player {
     this.sinceShot += dt;
     this.equip = Math.min(1, this.equip + dt * 2.2);
     this.flashT -= dt;
+    this.heat = Math.max(0, this.heat - dt * 0.45);
 
     if (this.dead) {
       this.deadT += dt;
@@ -378,8 +364,14 @@ export class Player {
 
   muzzleWorld(out) {
     if (this.thirdPerson) return this.gun3p.userData.muzzle.getWorldPosition(out);
-    const cam = this.game.camera;
-    return out.set(0.26, -0.22, -0.95).applyQuaternion(cam.quaternion).add(cam.position);
+    // The gun is drawn by its own camera; find where its muzzle appears on
+    // screen and start the tracer at that spot in the world.
+    const g = this.game;
+    this.view.gun.userData.muzzle.getWorldPosition(out);
+    out.project(g.viewCam);
+    out.z = 0.5;
+    out.unproject(g.camera).sub(g.camera.position).normalize();
+    return out.multiplyScalar(0.9).add(g.camera.position);
   }
 
   shoot() {
@@ -445,6 +437,7 @@ export class Player {
     this.recoil = 1;
     this.recoilRoll = (Math.random() - 0.5) * 0.08;
     this.flashT = 0.05;
+    this.heat = Math.min(1, this.heat + 0.09);
     this.shake = Math.max(this.shake, 0.04);
     g.sound.shoot();
     g.stats.shots++;
@@ -650,7 +643,11 @@ export class Player {
     else if (r >= 0.55 && r < 0.8) off = 1 - ease((r - 0.55) / 0.25);
     v.cell.position.y = v.cellY - off * 0.18;
     v.cell.visible = off < 0.97;
-    v.flash.visible = this.flashT > 0;
-    if (v.flash.visible) v.flash.rotation.z = Math.random() * Math.PI;
+    // Barrel shroud kicks back, vents glow as the gun heats up.
+    for (const gun of [v.gun, this.gun3p]) {
+      gun.userData.shroud.position.z = this.recoil * 0.03;
+      gun.userData.setHeat(this.heat);
+      gun.userData.showFlash(this.flashT > 0);
+    }
   }
 }

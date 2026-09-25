@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildHumanoid, buildBlaster, PX } from './model.js';
+import { buildHumanoid, holdBlaster } from './model.js';
 import { Rig, posePlayer } from './anim.js';
 import { makeSkinTexture, paintOutfit, DEFAULT_OUTFIT } from './skin.js';
 import { loadImage, clamp, wrapAngle } from './util.js';
@@ -47,6 +47,8 @@ class RemotePlayer {
     this.buf = [];
     this.invuln = 0;
     this.recoil = 0;
+    this.flashT = 0;
+    this.heat = 0;
     this.hasState = false;
     this.wasGround = true;
     this.lastVy = 0;
@@ -68,14 +70,10 @@ class RemotePlayer {
     if (this.model) {
       scene.remove(this.model.root);
       this.model.dispose();
+      this.gun.userData.dispose();
     }
     this.model = buildHumanoid(this.texture, { slim: this.slim });
-    const gun = buildBlaster();
-    gun.scale.setScalar(0.6);
-    gun.rotation.set(-Math.PI / 2, 0, Math.PI);
-    gun.position.set(0, -11 * PX, 2 * PX);
-    this.model.parts.armR.add(gun);
-    this.gun = gun;
+    this.gun = holdBlaster(this.model);
     this.rig = new Rig(this.model);
     this.model.root.visible = this.hasState;
     scene.add(this.model.root);
@@ -120,6 +118,8 @@ class RemotePlayer {
 
   onShot(from, to) {
     this.recoil = 1;
+    this.flashT = 0.05;
+    this.heat = Math.min(1, this.heat + 0.09);
     this.game.tracers.fire(from, to);
   }
 
@@ -127,6 +127,11 @@ class RemotePlayer {
     if (!this.hasState) return;
     this.invuln -= dt;
     this.recoil *= Math.exp(-14 * dt);
+    this.flashT -= dt;
+    this.heat = Math.max(0, this.heat - dt * 0.45);
+    this.gun.userData.shroud.position.z = this.recoil * 0.03;
+    this.gun.userData.setHeat(this.heat);
+    this.gun.userData.showFlash(this.flashT > 0);
     // Draw where they were ~110 ms ago, blending between the two updates
     // around that moment, so movement stays smooth on a bumpy connection.
     const rt = performance.now() - 110;

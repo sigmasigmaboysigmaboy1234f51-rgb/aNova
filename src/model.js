@@ -118,36 +118,16 @@ export function buildGloop(texture) {
   };
 }
 
-// A chunky little energy blaster. Barrel points down -z.
-export function buildBlaster() {
-  const g = new THREE.Group();
-  const mats = new Map();
-  const mat = (c, glow) => {
-    const key = c + (glow || '');
-    if (!mats.has(key)) {
-      mats.set(key, new THREE.MeshLambertMaterial({ color: c, emissive: glow || 0x000000 }));
-    }
-    return mats.get(key);
-  };
-  const box = (w, h, d, x, y, z, c, rx = 0, glow) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c, glow));
-    m.position.set(x, y, z);
-    m.rotation.x = rx;
-    g.add(m);
-    return m;
-  };
-  box(0.1, 0.12, 0.42, 0, 0, -0.05, '#3b3f46');
-  box(0.05, 0.03, 0.3, 0, 0.075, -0.02, '#23262b');
-  box(0.03, 0.04, 0.03, 0, 0.105, -0.17, '#ffb13b', 0, '#7a4a00');
-  box(0.065, 0.065, 0.2, 0, 0.01, -0.35, '#5b6068');
-  box(0.08, 0.08, 0.04, 0, 0.01, -0.46, '#2b2e33');
-  const cell = box(0.108, 0.05, 0.16, 0, -0.005, 0.02, '#ff8a2a', 0, '#8a3200');
-  box(0.07, 0.16, 0.08, 0, -0.12, 0.09, '#2a2c31', 0.3);
-  box(0.06, 0.1, 0.07, 0, -0.09, -0.13, '#4a4f57');
-  const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.01, -0.5);
-  g.add(muzzle);
-  g.userData.muzzle = muzzle;
-  g.userData.cell = cell;
-  return g;
+import { buildBlaster } from './gun.js';
+
+export { buildBlaster };
+
+// Puts a blaster in a humanoid's right hand, grip in the palm.
+export function holdBlaster(model) {
+  const gun = buildBlaster();
+  gun.scale.setScalar(0.85);
+  gun.rotation.set(-Math.PI / 2, 0, Math.PI);
+  gun.position.set(0, -11.7 * PX, 1.7 * PX);
+  model.parts.armR.add(gun);
+  return gun;
 }
