@@ -13,6 +13,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const FIRE = ['#fff2b0', '#ffd36b', '#ff9a3c', '#ff6a20', '#e0402f'].map((c) => new THREE.Color(c));
 const SMOKE = ['#4a4640', '#5e5a52', '#35322d'].map((c) => new THREE.Color(c));
 const BLOOD = ['#d8392b', '#a8281c', '#ff6a5a'].map((c) => new THREE.Color(c));
+const SPARKS = ['#fff6c8', '#ffd84a', '#b8bcc4'].map((c) => new THREE.Color(c));
 
 function jitter(dir, spread, out) {
   out.copy(dir);
@@ -88,6 +89,16 @@ export class Combat {
       }
       hits.sort((a, b) => a.t - b.t);
     }
+    // Adventure mode: cars stop bullets.
+    if (g.adventure) {
+      const ch = g.adventure.traceCars(origin, dir, blockT);
+      if (ch) {
+        hits.push({ car: ch.car, t: ch.t, head: false });
+        hits.sort((a, b) => a.t - b.t);
+        const i = hits.findIndex((h) => h.car);
+        hits.length = i + 1;
+      }
+    }
     hits.length = Math.min(hits.length, maxMobs);
     const stopped = hits.length >= maxMobs;
     const endT = stopped ? hits[hits.length - 1].t : blockT;
@@ -129,6 +140,7 @@ export class Combat {
           const fall = s.pellets > 1 ? Math.max(0.35, Math.min(1, 1.25 - h.t / s.range)) : 1;
           const dmg = s.dmg * (h.head ? s.head : 1) * fall;
           if (h.remote) this.hitRemote(p, h.remote, dmg, h.head, dir, h.at, s);
+          else if (h.car) this.hitCar(p, h.car, dmg, h.at, s);
           else this.hitMob(p, h.mob, dmg, dir, h.head, h.at, s, color);
           hitAny = true;
           head = head || h.head;
@@ -148,6 +160,18 @@ export class Combat {
       else g.sound.hit();
     }
     g.sound.gunshot(w.def.frame, !!s.quiet);
+    if (g.adventure && !s.quiet) g.adventure.gunshot(p.pos);
+  }
+
+  // Adventure mode: shooting a car dents it, sparks fly.
+  hitCar(p, car, dmg, at, s) {
+    const g = this.game;
+    if (p.buff && p.buff('dmg')) dmg *= 2;
+    if (g.cheats.has('onehit')) dmg *= 1000;
+    car.damage(dmg, p.pos);
+    if (at) g.fx.burst(at.x, at.y, at.z, SPARKS, 4, { speed: 3, size: 0.06, up: 1.5, life: 0.35, spread: 0.05 });
+    g.sound.clank(0.25);
+    if (s && s.splash) this.explode(at, s.splash, dmg * 0.45, { local: true, breaks: false, small: true });
   }
 
   hitMob(p, mob, dmg, dir, head, at, s, color) {
@@ -286,6 +310,8 @@ export class Combat {
       if (h && h.remote) {
         this.hitRemote(p, h.remote, s.dmg * (h.head ? s.head : 1), h.head, aim, h.at, s);
         if (Math.random() < 0.3) g.hud.hitmarker(h.head);
+      } else if (h && h.car) {
+        this.hitCar(p, h.car, s.dmg, h.at, s);
       } else if (h) {
         this.hitMob(p, h.mob, s.dmg * (h.head ? s.head : 1), aim, h.head, h.at, s, color);
         if (Math.random() < 0.3) g.hud.hitmarker(h.head);
@@ -399,6 +425,10 @@ export class Combat {
             if (h && (!hit || h.t < hit.t)) hit = { remote: r, t: h.t, head: h.head };
           }
         }
+        if (g.adventure) {
+          const ch = g.adventure.traceCars(prev, seg, len + 0.1);
+          if (ch && (!hit || ch.t < hit.t)) hit = { car: ch.car, t: ch.t, head: false };
+        }
         if (hit) {
           const at = prev.clone().addScaledVector(seg, hit.t);
           this.impactMob(pr, hit, at, seg);
@@ -450,6 +480,11 @@ export class Combat {
     const s = pr.stats || {};
     if (pr.kind === 'grenade') {
       this.explode(at, s.splash || 3, s.dmg || 14, { local: true, breaks: !!s.breaks });
+      return;
+    }
+    if (hit.car) {
+      this.hitCar(g.player, hit.car, s.dmg || 3, at, s);
+      g.hud.hitmarker(false);
       return;
     }
     if (hit.remote) {
@@ -594,6 +629,7 @@ export class Combat {
       else p.hurt(Math.max(1, Math.round(dmg * 0.3 * (1 - pd / r))), at, 'self');
     }
 
+    if (g.adventure && dmg > 0) g.adventure.blast(at, r, dmg);
     if (breaks) this.breakBlocks(at, r);
     if (g.mp) g.mp.sendBoom(at, r, small);
   }

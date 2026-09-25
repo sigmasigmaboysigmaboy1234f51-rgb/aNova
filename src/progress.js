@@ -53,6 +53,10 @@ export const ACHIEVEMENTS = [
   { id: 'spree', name: 'On Fire', desc: 'Get a 10 kill streak', coins: 250, goal: 10, get: (p) => p.totals.bestStreak || 0 },
   { id: 'godlike', name: 'Godlike', desc: 'Get a 20 kill streak', coins: 600, goal: 20, get: (p) => p.totals.bestStreak || 0 },
   { id: 'master', name: 'Weapon Master', desc: 'Get a gun to Diamond mastery', coins: 800, goal: 250, get: (p) => Math.max(0, ...Object.values(p.gunKills)) },
+  { id: 'job1', name: 'Hired!', desc: 'Finish a job in Adventure', coins: 100, goal: 1, get: (p) => Object.keys(p.adv.done).length },
+  { id: 'jobs', name: 'Hero of Blockton', desc: 'Finish all 7 Adventure jobs', coins: 800, goal: 7, get: (p) => Object.keys(p.adv.done).length },
+  { id: 'cubes', name: 'Cube Hunter', desc: 'Find all 10 golden cubes in Blockton', coins: 500, goal: 10, get: (p) => p.adv.cubes.length },
+  { id: 'driver', name: 'Road Trip', desc: 'Drive 5 km in Adventure', coins: 300, goal: 5000, get: (p) => p.totals.driven || 0 },
 ];
 
 // Weapon mastery: beat mobs with one gun to rank it up. Some ranks unlock a
@@ -170,6 +174,8 @@ export class Progress {
     } else if (kind === 'streak') {
       T.bestStreak = Math.max(T.bestStreak || 0, data.n);
       xp = data.n * 10;
+    } else if (kind === 'drive') {
+      T.driven = (T.driven || 0) + data.m;
     } else if (kind === 'chapter') {
       xp = data.first ? 400 : 150;
       this.daily('chapter', 1);

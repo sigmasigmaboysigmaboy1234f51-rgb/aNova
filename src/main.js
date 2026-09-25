@@ -31,6 +31,7 @@ import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
 import { BOSSES } from './boss.js';
 import { Mobs } from './mobs.js';
+import { Adventure, CITY_THEME } from './adventure.js';
 import { Hud } from './hud.js';
 import { SkinPreview } from './preview.js';
 import { SkinEditor } from './editor.js';
@@ -170,6 +171,7 @@ class Game {
     this.modes = new Modes(this);
     this.story = null;
     this.duel = null;
+    this.adventure = null;
     this.bots = [];
     this.botDuel = null;
     this.variant = 'endless';
@@ -316,6 +318,7 @@ class Game {
     $('#btn-cheats').addEventListener('click', () => this.cheats.open('menu'));
     $('#btn-pause-cheats').addEventListener('click', () => this.cheats.open('paused'));
     $('#btn-story').addEventListener('click', () => this.setState('story'));
+    $('#btn-adventure').addEventListener('click', () => this.startAdventure());
     $('#btn-challenges').addEventListener('click', () => this.setState('challenges'));
     $('#sw-next').addEventListener('click', () => {
       const next = this.story ? this.story.index + 1 : 0;
@@ -496,6 +499,7 @@ class Game {
     if (s !== 'playing') {
       this.input.releaseAll();
       if (this.mp) this.mp.closeChat();
+      if (this.adventure) this.adventure.quiet();
     }
     if (s === 'menu') {
       this.renderLevel();
@@ -551,6 +555,7 @@ class Game {
   startStory(index) {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
+    this.endAdventure();
     this.clearBots();
     this.duel = null;
     this.botDuel = null;
@@ -640,6 +645,7 @@ class Game {
   play(variant = this.variant || 'endless') {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
+    this.endAdventure();
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
@@ -679,6 +685,7 @@ class Game {
   startBotDuel(opts) {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
+    this.endAdventure();
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
@@ -702,6 +709,44 @@ class Game {
     this.hud.showBanner(`Bot Duel: ${this.duel.map.name}`, `First to ${TARGET} knockouts wins`, 3.5);
     this.setState('playing');
     this.lockMouse();
+  }
+
+  // --- Adventure -------------------------------------------------------
+
+  // Blockton: a town with cars, people and jobs to do.
+  startAdventure() {
+    this.sound.unlock();
+    if (this.mp) this.leaveMp();
+    if (this.story) this.story.dispose();
+    this.story = null;
+    this.clearBots();
+    this.duel = null;
+    this.botDuel = null;
+    this.variant = 'endless';
+    this.endAdventure();
+    this.mobs.clear();
+    this.adventure = new Adventure(this);
+    this.adventure.start();
+    this.worldUsed = true;
+    this.applyTheme(CITY_THEME);
+    this.sky.begin(CITY_THEME);
+    this.resetRun();
+    this.player.reset(this.adventure.spawn);
+    // Look at your car.
+    const mine = this.adventure.cars.find((c) => c.mine);
+    if (mine) this.player.yaw = Math.atan2(this.player.pos.x - mine.pos.x, this.player.pos.z - mine.pos.z);
+    this.mobs.refreshFlow(true);
+    const first = !this.profile.adv || !Object.keys(this.profile.adv.done || {}).length;
+    this.hud.showBanner('Blockton', first ? 'Your car is in the driveway. Walk up to it and press E!' : 'Talk to people with a ! for jobs', 4.5);
+    this.progress.event('adventure', {});
+    this.setState('playing');
+    this.lockMouse();
+  }
+
+  endAdventure() {
+    if (!this.adventure) return;
+    this.adventure.dispose();
+    this.adventure = null;
   }
 
   lockMouse() {
@@ -773,6 +818,7 @@ class Game {
   toMenu() {
     this.input.exitLock();
     if (this.mp) this.leaveMp();
+    this.endAdventure();
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
@@ -886,6 +932,7 @@ class Game {
   }
 
   startMultiplayer(seed, edits, asHost, mode) {
+    this.endAdventure();
     if (this.story) this.story.dispose();
     this.story = null;
     this.duel = null;
@@ -1098,6 +1145,7 @@ class Game {
   }
 
   onKill(mob, head, byId) {
+    if (this.adventure) this.adventure.onKill(mob);
     const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (this.wave - 1) * 0.1));
     // The killer's kill effect, if they wear one. Everyone sees it.
     const killer = !byId || byId === this.myId ? this.profile.style : this.mp && this.mp.remotes.get(byId) ? this.mp.remotes.get(byId).style : null;
@@ -1179,6 +1227,14 @@ class Game {
       this.deadT = 0;
       return;
     }
+    if (this.adventure) {
+      // Wake up at the hospital. Any job you were on is a bust.
+      if (this.player.driving) this.adventure.exitCar(true);
+      if (this.adventure.active) this.adventure.endMission('fail');
+      else this.hud.showBanner('You got cubed', 'Back in 4, at the hospital', 4.5);
+      this.respawnT = 4;
+      return;
+    }
     if (this.duel) {
       const p = this.player;
       if (p.killer === 'pvp' && p.pvpKiller) {
@@ -1202,6 +1258,7 @@ class Game {
   respawn() {
     const third = this.player.thirdPerson;
     if (this.duel) this.duel.placePlayer();
+    else if (this.adventure) this.player.reset(this.adventure.hospital);
     else this.player.reset(this.world.spawnPoint());
     const s = this.player.pos;
     this.player.thirdPerson = third;
@@ -1300,6 +1357,8 @@ class Game {
         // No mobs in a duel.
       } else if (this.story) {
         if (!p.dead) this.story.update(dt);
+      } else if (this.adventure) {
+        this.adventure.update(dt);
       } else if (!p.dead || this.mp) this.updateWaves(dt);
       this.mobs.update(dt);
     } else {
@@ -1328,13 +1387,16 @@ class Game {
       this.hud.setObjective(a, b);
     } else if (this.story) {
       this.hud.setObjective(`Chapter ${this.story.index + 1}`, this.story.objective());
+    } else if (this.adventure) {
+      const [a, b] = this.adventure.objective();
+      this.hud.setObjective(a, b);
     } else {
       const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;
       this.hud.setWave(this.wave, left);
     }
     this.hud.setScore(this.stats.score);
     if (p.dead) {
-      if (this.mp || this.duel) {
+      if (this.mp || this.duel || this.adventure) {
         const before = Math.ceil(this.respawnT);
         this.respawnT -= dt;
         if (Math.ceil(this.respawnT) !== before && this.respawnT > 0) this.hud.showBanner('You died', `Back in ${Math.ceil(this.respawnT)}`, 1.5);
@@ -1363,7 +1425,8 @@ class Game {
   updateMenu(dt) {
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this.menuAngle += dt * 0.05;
     const a = this.menuAngle;
-    this.camera.position.set(SX / 2 + Math.cos(a) * 44, 30, SZ / 2 + Math.sin(a) * 44);
+    const rad = SX * 0.69;
+    this.camera.position.set(SX / 2 + Math.cos(a) * rad, 30 + (SX - 64) * 0.15, SZ / 2 + Math.sin(a) * rad);
     this.camera.lookAt(SX / 2, 8, SZ / 2);
     if (this.camera.fov !== 75) {
       this.camera.fov = 75;
@@ -1386,7 +1449,7 @@ class Game {
     const r = this.renderer;
     r.clear();
     r.render(this.scene, this.camera);
-    if (['playing', 'paused', 'talk'].includes(this.state) && this.inGame && !this.player.thirdPerson && !this.player.dead) {
+    if (['playing', 'paused', 'talk'].includes(this.state) && this.inGame && !this.player.thirdPerson && !this.player.dead && !this.player.driving) {
       r.clearDepth();
       r.render(this.viewScene, this.viewCam);
     }

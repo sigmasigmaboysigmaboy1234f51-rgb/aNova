@@ -111,7 +111,7 @@ export class Dialogue {
 
   show() {
     const [who, text] = this.lines[0];
-    const c = CAST[who] || CAST.pip;
+    const c = who && typeof who === 'object' ? who : CAST[who] || CAST.pip;
     drawPortrait(this.pic, who, this.game.skin.canvas);
     this.name.textContent = c.name;
     this.name.style.color = c.color;

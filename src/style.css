@@ -829,3 +829,20 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
   .splash, .hearts.low img, .lowhp.on, .banner.in, .popup, .buff.ending, .streak.in b, .combo.bump b { animation: none; }
   .lowhp.on { opacity: 0.6; }
 }
+
+/* ---- Adventure mode ---- */
+.minimap { position: absolute; left: 18px; top: calc(100px + env(safe-area-inset-top, 0px)); width: 160px; height: 160px; border: 3px solid var(--edge); box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45); image-rendering: pixelated; background: #245a9a; }
+.prompt { position: absolute; left: 50%; top: calc(50% + 64px); transform: translateX(-50%); font: 400 24px/1 var(--font-display); color: #fff; background: rgba(12, 11, 9, 0.62); border: 3px solid var(--edge); padding: 8px 14px; text-shadow: 2px 2px 0 #000; white-space: nowrap; }
+.drive-hud { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 4px; min-width: 240px; }
+.dh-name { font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper); text-shadow: 2px 2px 0 #000; }
+.dh-speed { font: 400 64px/0.85 var(--font-display); color: #fff; text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.6); font-variant-numeric: tabular-nums; }
+.dh-speed small { font-size: 22px; margin-left: 6px; color: var(--paper); }
+.dh-bar { width: 240px; height: 12px; background: #2a0d09; border: 2px solid var(--edge); }
+.dh-hp { height: 100%; width: 100%; background: linear-gradient(#8fe070, #4a9a2c); transition: width 0.15s; }
+.dh-keys { font-size: 13px; color: var(--paper); text-shadow: 1px 1px 0 #000; }
+.dh-keys kbd { font: 11px/1 var(--font-ui); padding: 2px 5px; margin-left: 6px; }
+body.driving #crosshair, body.driving .hud-bottom, body.driving #scope { display: none; }
+.btn-new { position: relative; }
+.btn-new::after { content: 'NEW'; position: absolute; right: -6px; top: -9px; font: 700 11px/1 var(--font-ui); letter-spacing: 0.08em; color: #1a1206; background: var(--gold); padding: 3px 5px; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5); transform: rotate(6deg); }
+@media (max-width: 700px) { .minimap { width: 110px; height: 110px; } }
+

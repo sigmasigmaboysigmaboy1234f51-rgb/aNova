@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { T, TILE_UV } from './textures.js';
 import { mulberry32, fbm2, smoothstep } from './rng.js';
 
-export const SX = 64;
+// The world is 64 x 64 for most modes and 128 x 128 for Adventure. These
+// are live bindings: resize() changes them for every module at once.
+export let SX = 64;
 export const SY = 32;
-export const SZ = 64;
+export let SZ = 64;
 export const CHUNK = 16;
 export const SEA = 6;
-const NCX = SX / CHUNK;
-const NCZ = SZ / CHUNK;
+let NCX = SX / CHUNK;
+let NCZ = SZ / CHUNK;
 
 export const B = {
   AIR: 0,
@@ -33,6 +35,19 @@ export const B = {
   DARKGRASS: 19,
   SLIME: 20,
   MARBLE: 21,
+  ASPHALT: 22,
+  LINE_X: 23,
+  LINE_Z: 24,
+  CROSSWALK: 25,
+  SIDEWALK: 26,
+  CONCRETE: 27,
+  WINDOW: 28,
+  GLASS: 29,
+  METAL: 30,
+  LAMP: 31,
+  AWNING: 32,
+  ROOF: 33,
+  SIDING: 34,
 };
 
 const def = (name, hp, sound, top, side = top, bottom = top) => ({ name, hp, sound, top, side, bottom });
@@ -59,6 +74,19 @@ export const BLOCKS = [
   def('Dark grass', 2, 'soft', T.DARK_TOP, T.DARK_SIDE, T.DIRT),
   def('Slime', 1, 'soft', T.SLIME),
   def('Marble', 5, 'hard', T.MARBLE),
+  def('Asphalt', 6, 'hard', T.ASPHALT),
+  def('Road line', 6, 'hard', T.LINE_X, T.ASPHALT),
+  def('Road line', 6, 'hard', T.LINE_Z, T.ASPHALT),
+  def('Crosswalk', 6, 'hard', T.CROSSWALK, T.ASPHALT),
+  def('Sidewalk', 5, 'hard', T.SIDEWALK),
+  def('Concrete', 5, 'hard', T.CONCRETE),
+  def('Window', 2, 'hard', T.WINDOW),
+  def('Glass', 3, 'hard', T.GLASS),
+  def('Metal', 7, 'hard', T.METAL),
+  def('Street lamp', 2, 'hard', T.LAMP),
+  def('Awning', 1, 'soft', T.AWNING),
+  def('Roof tiles', 3, 'hard', T.ROOF),
+  def('Siding', 3, 'wood', T.SIDING),
 ];
 
 // Faces list corners in bottom-left, bottom-right, top-right, top-left order
@@ -120,6 +148,26 @@ export class World {
 
   idx(x, y, z) {
     return (y * SZ + z) * SX + x;
+  }
+
+  // Change the world's size. Everything in it is thrown away.
+  resize(sx, sz) {
+    if (sx === SX && sz === SZ) return;
+    for (const m of this.meshes) {
+      if (!m) continue;
+      this.group.remove(m);
+      m.geometry.dispose();
+    }
+    for (const k of [...this.cracks.keys()]) this.clearDamage(k);
+    this.damage.clear();
+    SX = sx;
+    SZ = sz;
+    NCX = SX / CHUNK;
+    NCZ = SZ / CHUNK;
+    this.data = new Uint8Array(SX * SY * SZ);
+    this.meshes = new Array(NCX * NCZ).fill(null);
+    this.dirty = new Set();
+    this.version++;
   }
 
   get(x, y, z) {
@@ -202,6 +250,7 @@ export class World {
 
   // theme (see themes.js) picks the ground blocks, trees and landmarks.
   generate(seed, theme = null) {
+    this.resize(64, 64);
     const th = theme || { top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 24, ruins: 5, pillars: 3 };
     this.seed = seed;
     this.theme = th;

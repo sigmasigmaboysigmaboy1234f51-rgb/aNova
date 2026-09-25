@@ -914,4 +914,142 @@ export class Sound {
     this.oscL({ out, t: 0.2, type: 'triangle', f0: 311, f1: 155, dur: 1.2, vol: 0.07, attack: 0.02 });
     this.noiseL({ out, dur: 1.2, vol: 0.2, color: 'brown', filters: [['lowpass', 800, 100, 0.6]] });
   }
+
+  // --- Cars (Adventure mode) --------------------------------------------------
+
+  // A car horn: two slightly clashing reedy tones, the classic "honk".
+  horn(vol = 1) {
+    if (!this.ready('horn', 250)) return;
+    const c = this.ctx;
+    const t = c.currentTime;
+    const out = this.voice(0.18);
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1300;
+    bp.Q.value = 0.9;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3200;
+    const g = c.createGain();
+    const len = 0.42;
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16 * vol, t + 0.015);
+    g.gain.setValueAtTime(0.16 * vol, t + len);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len + 0.06);
+    bp.connect(lp).connect(g).connect(out);
+    for (const f of [370, 466]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f * rnd(0.995, 1.005);
+      o.connect(bp);
+      o.start(t);
+      o.stop(t + len + 0.1);
+    }
+  }
+
+  // The engine while you drive. level 0 is idle, 1 is flat out.
+  engine(on, level = 0) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (on && !this.engineNode && !this.muted) {
+      const t = c.currentTime;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 320;
+      lp.Q.value = 1.4;
+      const g = c.createGain();
+      g.gain.value = 0;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.1, t + 0.25);
+      // Put-put: the volume pulses with the cylinders firing.
+      const trem = c.createGain();
+      trem.gain.value = 0.7;
+      const lfo = c.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = 12;
+      const lg = c.createGain();
+      lg.gain.value = 0.3;
+      lfo.connect(lg).connect(trem.gain);
+      const a = c.createOscillator();
+      a.type = 'sawtooth';
+      a.frequency.value = 40;
+      const b = c.createOscillator();
+      b.type = 'square';
+      b.frequency.value = 80.5;
+      const bg = c.createGain();
+      bg.gain.value = 0.35;
+      a.connect(trem);
+      b.connect(bg).connect(trem);
+      const n = c.createBufferSource();
+      n.buffer = this.brown;
+      n.loop = true;
+      const ng = c.createGain();
+      ng.gain.value = 0.5;
+      n.connect(ng).connect(trem);
+      trem.connect(lp).connect(g).connect(this.voice(0.04));
+      for (const o of [a, b, lfo, n]) o.start(t);
+      this.engineNode = { a, b, lfo, lp, g, n, level: 0, upd: 0 };
+    } else if (!on && this.engineNode) {
+      const e = this.engineNode;
+      const t = c.currentTime;
+      e.g.gain.cancelScheduledValues(t);
+      e.g.gain.setValueAtTime(e.g.gain.value, t);
+      e.g.gain.linearRampToValueAtTime(0.0001, t + 0.3);
+      for (const o of [e.a, e.b, e.lfo, e.n]) o.stop(t + 0.35);
+      this.engineNode = null;
+      return;
+    }
+    const e = this.engineNode;
+    if (!e) return;
+    const now = performance.now();
+    if (now - e.upd < 50) return;
+    e.upd = now;
+    const k = clamp01(level);
+    const t = c.currentTime;
+    const f = 38 + k * 92;
+    e.a.frequency.setTargetAtTime(f, t, 0.08);
+    e.b.frequency.setTargetAtTime(f * 2.01, t, 0.08);
+    e.lfo.frequency.setTargetAtTime(f * 0.33, t, 0.08);
+    e.lp.frequency.setTargetAtTime(300 + k * 1300, t, 0.1);
+    e.g.gain.setTargetAtTime(0.06 + k * 0.06, t, 0.1);
+  }
+
+  // A police siren: a tone that wails up and down.
+  siren(on) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (on && !this.sirenNode && !this.muted) {
+      const t = c.currentTime;
+      const o = c.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 950;
+      const lfo = c.createOscillator();
+      lfo.type = 'triangle';
+      lfo.frequency.value = 0.4;
+      const depth = c.createGain();
+      depth.gain.value = 380;
+      lfo.connect(depth).connect(o.frequency);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2200;
+      const g = c.createGain();
+      g.gain.value = 0;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.2);
+      o.connect(lp).connect(g).connect(this.voice(0.25));
+      o.start(t);
+      lfo.start(t);
+      this.sirenNode = { o, lfo, g };
+    } else if (!on && this.sirenNode) {
+      const { o, lfo, g } = this.sirenNode;
+      const t = c.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(0.0001, t + 0.15);
+      o.stop(t + 0.2);
+      lfo.stop(t + 0.2);
+      this.sirenNode = null;
+    }
+  }
 }

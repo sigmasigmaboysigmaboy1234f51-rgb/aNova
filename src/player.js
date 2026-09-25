@@ -194,6 +194,7 @@ export class Player {
     this.h = H_STAND;
     this.maxHp = MAX_HP;
     this.thirdPerson = false;
+    this.driving = null;
     this.weapons = [null, null, null];
     this.views = [null, null, null];
     this.guns3p = [null, null, null];
@@ -349,6 +350,7 @@ export class Player {
     this.deadT = 0;
     this.killer = null;
     this.buffs = {};
+    this.driving = null;
     this.stopEmote();
     for (const w of this.weapons) {
       if (!w) continue;
@@ -482,6 +484,27 @@ export class Player {
       this.selection.visible = false;
       this.sprint = false;
       g.combat.beamTick(this, null, 0, false);
+      return;
+    }
+
+    // In a car (Adventure mode): the car does the moving and the mouse
+    // swings the camera round.
+    if (this.driving) {
+      const c = this.driving;
+      this.pos.set(c.pos.x, c.pos.y + 0.3, c.pos.z);
+      this.vel.set(0, 0, 0);
+      this.selection.visible = false;
+      this.sprint = false;
+      this.crouch = false;
+      this.ads = 0;
+      this.walkAmt = 0;
+      this.onGround = true;
+      this.inWater = false;
+      this.inspectT = 0;
+      g.combat.beamTick(this, null, 0, false);
+      this.invuln -= dt;
+      this.sinceHurt += dt;
+      this.updateStatus(dt);
       return;
     }
 
@@ -859,6 +882,10 @@ export class Player {
   // Damage over time: no knockback, no invulnerability window.
   dot(n, source) {
     if (this.dead || this.shielded()) return;
+    if (this.driving) {
+      this.driving.damage(n, null);
+      return;
+    }
     this.hp -= n;
     this.sinceHurt = 0;
     this.regenT = 0;
@@ -931,6 +958,12 @@ export class Player {
     if (this.dead || this.invuln > 0) return;
     const g = this.game;
     if (this.shielded()) return;
+    // In a car, the car takes the hits.
+    if (this.driving && source !== 'cheat') {
+      this.driving.damage(amount * 1.5, from);
+      this.invuln = 0.25;
+      return;
+    }
     if (fx && fx.shock) {
       amount += fx.shock;
       this.shake = Math.max(this.shake, 0.25);
@@ -1065,6 +1098,11 @@ export class Player {
   }
 
   updateCamera(cam, dt) {
+    if (this.driving && !this.dead) {
+      this.game.adventure.carCamera(cam, dt);
+      this.fov = cam.fov;
+      return;
+    }
     this.eye = damp(this.eye, this.crouch ? EYE_CROUCH : EYE_STAND, 14, dt);
     this.landDip = Math.max(0, this.landDip - dt * 3.2);
     this.hurtRoll *= Math.exp(-7 * dt);
@@ -1142,7 +1180,7 @@ export class Player {
 
   updateModels(dt) {
     const m = this.model;
-    m.root.visible = this.thirdPerson;
+    m.root.visible = this.thirdPerson && !this.driving;
     const flash = this.hurtT > 0 ? this.hurtT / 0.3 : this.dead ? 0.5 : 0;
     for (const mat of m.materials) mat.emissive.setRGB(0.6 * flash, 0.05 * flash, 0.03 * flash);
     const weapon = this.weapon;
@@ -1163,7 +1201,7 @@ export class Player {
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.sprintW = damp(this.sprintW, this.sprint && hs > 1 ? 1 : 0, 9, dt);
     this.crouchW = damp(this.crouchW, this.crouch ? 1 : 0, 9, dt);
-    const firstPerson = !this.thirdPerson && !this.dead;
+    const firstPerson = !this.thirdPerson && !this.dead && !this.driving;
     const scoped = this.scoped();
     this.views.forEach((v, i) => {
       if (v) v.group.visible = firstPerson && i === this.held && !scoped;

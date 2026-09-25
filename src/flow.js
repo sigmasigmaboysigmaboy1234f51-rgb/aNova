@@ -74,6 +74,12 @@ export class FlowField {
 
   // targets: [[x, z], ...] columns to walk toward (every living player).
   compute(world, targets) {
+    // The world can change size between modes.
+    if (this.dist.length !== SX * SZ) {
+      this.dist = new Float32Array(SX * SZ).fill(Infinity);
+      this.stand = new Int16Array(SX * SZ).fill(-1);
+      this.heap = new MinHeap(SX * SZ * 9);
+    }
     world.computeStand(this.stand);
     const dist = this.dist;
     const stand = this.stand;

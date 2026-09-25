@@ -40,6 +40,9 @@ export class Profile {
     // Extras: mastery kills per gun, the lucky wheel, and settings.
     this.gunKills = (data && data.gunKills) || {};
     this.wheel = (data && data.wheel) || null;
+    // Adventure mode: jobs done, golden cubes found, people met.
+    const adv = (data && data.adv) || {};
+    this.adv = { done: { ...(adv.done || {}) }, cubes: Array.isArray(adv.cubes) ? adv.cubes.filter(Number.isInteger) : [], met: { ...(adv.met || {}) } };
     this.listeners = new Set();
     this.saveTimer = 0;
   }
@@ -193,6 +196,7 @@ export class Profile {
         style: this.style,
         gunKills: this.gunKills,
         wheel: this.wheel,
+        adv: this.adv,
       }),
     );
   }

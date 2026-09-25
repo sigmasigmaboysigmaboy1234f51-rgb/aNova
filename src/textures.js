@@ -5,7 +5,7 @@ import { mulberry32 } from './rng.js';
 
 export const TILE = 16;
 const COLS = 8;
-const ROWS = 4;
+const ROWS = 5;
 
 export const T = {
   GRASS_TOP: 0,
@@ -33,6 +33,19 @@ export const T = {
   DARK_SIDE: 22,
   SLIME: 23,
   MARBLE: 24,
+  ASPHALT: 25,
+  LINE_X: 26,
+  LINE_Z: 27,
+  CROSSWALK: 28,
+  SIDEWALK: 29,
+  CONCRETE: 30,
+  WINDOW: 31,
+  GLASS: 32,
+  METAL: 33,
+  LAMP: 34,
+  AWNING: 35,
+  ROOF: 36,
+  SIDING: 37,
 };
 
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -40,6 +53,11 @@ const GREENS = ['#5f9a37', '#67a23d', '#6fab44', '#5a9234'];
 
 function fillAll(set, rng, palette) {
   for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) set(x, y, pick(rng, palette));
+}
+
+function asphalt(set, rng) {
+  fillAll(set, rng, ['#3a3b3e', '#35363a', '#404145', '#38393c', '#2f3033']);
+  for (let i = 0; i < 6; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#55565a');
 }
 
 function dirt(set, rng) {
@@ -198,6 +216,81 @@ const PAINTERS = {
         x = (x + (rng() < 0.5 ? 1 : 15)) % 16;
       }
     }
+  },
+  // --- City blocks ---
+  [T.ASPHALT]: (set, rng) => asphalt(set, rng),
+  [T.LINE_X](set, rng) {
+    asphalt(set, rng);
+    for (let x = 2; x < 14; x++) for (let y = 7; y < 9; y++) set(x, y, rng() < 0.15 ? '#c9a52a' : '#e8c440');
+  },
+  [T.LINE_Z](set, rng) {
+    asphalt(set, rng);
+    for (let y = 2; y < 14; y++) for (let x = 7; x < 9; x++) set(x, y, rng() < 0.15 ? '#c9a52a' : '#e8c440');
+  },
+  [T.CROSSWALK](set, rng) {
+    asphalt(set, rng);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (x % 8 < 4) set(x, y, rng() < 0.12 ? '#cfcfcf' : '#eeeeee');
+  },
+  [T.SIDEWALK](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const seam = x === 0 || y === 0 || x === 8 || y === 8;
+        set(x, y, seam ? '#8f8d88' : pick(rng, ['#bdbab3', '#b5b2ab', '#c4c1ba', '#b9b6af']));
+      }
+    }
+  },
+  [T.CONCRETE](set, rng) {
+    fillAll(set, rng, ['#d6d2c8', '#cfcbc1', '#dcd8ce', '#d2cec4']);
+    for (let i = 0; i < 6; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#bdb9af');
+  },
+  [T.WINDOW](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const frame = x === 0 || x === 15 || y === 0 || y === 15 || x === 7 || x === 8 || y === 7;
+        if (frame) set(x, y, '#e8e4dc');
+        else {
+          // Sky reflected in the glass, brighter toward the top corner.
+          const k = (x + (15 - y)) / 30;
+          set(x, y, k > 0.62 && rng() < 0.5 ? '#cfe8f6' : k > 0.4 ? '#8cc0e0' : '#6aa4cc');
+        }
+      }
+    }
+  },
+  [T.GLASS](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const frame = x === 0 || y === 0;
+        const k = (x + (15 - y)) / 30;
+        set(x, y, frame ? '#4a5a62' : k > 0.7 ? '#6fa7b8' : rng() < 0.08 ? '#3f7486' : '#2f5f70');
+      }
+    }
+  },
+  [T.METAL](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x % 4 === 0 ? '#7c828a' : x % 4 === 1 ? '#b4bac2' : pick(rng, ['#9aa0a8', '#a2a8b0', '#959ba3']));
+  },
+  [T.LAMP](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const edge = x === 0 || x === 15 || y === 0 || y === 15;
+        set(x, y, edge ? '#6c6a64' : rng() < 0.2 ? '#fff2b0' : '#fffbe0');
+      }
+    }
+  },
+  [T.AWNING](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, (x >> 2) % 2 ? (rng() < 0.1 ? '#e8e4dc' : '#f7f4ee') : rng() < 0.1 ? '#b8281c' : '#d8392b');
+  },
+  [T.ROOF](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      const off = (y >> 2) % 2 ? 2 : 0;
+      for (let x = 0; x < 16; x++) {
+        if (y % 4 === 3) set(x, y, '#3a1c16');
+        else if ((x + off) % 4 === 0) set(x, y, '#5a2a20');
+        else set(x, y, pick(rng, ['#8a3a2c', '#7c3226', '#944232']));
+      }
+    }
+  },
+  [T.SIDING](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y % 4 === 3 ? '#b8c2c8' : rng() < 0.08 ? '#dde4e8' : '#e8eef2');
   },
   [T.GRAVEL](set, rng) {
     fillAll(set, rng, ['#7f7a74', '#8f8a83', '#6c6862', '#9a948c', '#76706a', '#7a6a58']);

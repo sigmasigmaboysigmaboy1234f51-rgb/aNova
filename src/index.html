@@ -21,6 +21,14 @@
   <div id="combo" class="combo" hidden><b id="combo-n">×2</b><span>combo</span><i><i id="combo-bar"></i></i></div>
   <div id="streak" class="streak" hidden aria-live="polite"></div>
   <div id="feed" class="feed" aria-live="polite"></div>
+  <canvas id="minimap" class="minimap" width="160" height="160" hidden aria-label="Map of Blockton"></canvas>
+  <div id="prompt" class="prompt" hidden></div>
+  <div id="drive-hud" class="drive-hud" hidden>
+    <div id="dh-name" class="dh-name">Sedan</div>
+    <div class="dh-speed"><span id="dh-speed">0</span><small>km/h</small></div>
+    <div class="dh-bar" aria-hidden="true"><div id="dh-hp" class="dh-hp"></div></div>
+    <div class="dh-keys"><kbd>E</kbd> get out <kbd>H</kbd> horn <kbd>Space</kbd> brake</div>
+  </div>
   <div class="hud-top">
     <div>
       <div id="hud-wave" class="hud-wave">Get ready</div>
@@ -101,7 +109,10 @@
           <span class="lvl-bar"><i id="lvl-fill"></i></span>
           <span id="lvl-xp" class="lvl-xp">0 / 150 XP</span>
         </div>
-        <button id="btn-story" class="btn btn-go" type="button">Story</button>
+        <div class="btn-row">
+          <button id="btn-story" class="btn btn-go" type="button">Story</button>
+          <button id="btn-adventure" class="btn btn-go btn-new" type="button">Adventure</button>
+        </div>
         <div class="btn-row">
           <button id="btn-play" class="btn" type="button">More modes</button>
           <button id="btn-mp" class="btn" type="button">Multiplayer</button>
@@ -147,6 +158,8 @@
         <dt><kbd>T</kbd> / <kbd>Tab</kbd></dt><dd>Chat / player list (multiplayer)</dd>
         <dt><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>H</kbd></dt><dd>Emotes: wave, dance, flex, dab</dd>
         <dt><kbd>I</kbd></dt><dd>Inspect your gun</dd>
+        <dt><kbd>E</kbd></dt><dd>Adventure: get in or out of a car, talk to people</dd>
+        <dt><kbd>H</kbd> <kbd>F</kbd></dt><dd>In a car: horn, and the siren in a police car</dd>
         <dt><kbd>`</kbd></dt><dd>Cheat menu</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>

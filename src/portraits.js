@@ -130,7 +130,9 @@ function boss(canvas, index) {
 }
 
 export function drawPortrait(canvas, who, skinCanvas) {
-  if (who === 'gran') gran(canvas);
+  // Anyone with their own skin (the people of Blockton).
+  if (who && typeof who === 'object') you(canvas, who.skin || skinCanvas);
+  else if (who === 'gran') gran(canvas);
   else if (who === 'pip') pip(canvas);
   else if (who === 'you') you(canvas, skinCanvas);
   else {

@@ -224,6 +224,7 @@ export const MAP_ORDER = Object.keys(MAPS);
 
 // Build a duel map into the world. Returns the spawn points.
 export function buildMap(world, id) {
+  world.resize(64, 64);
   const map = MAPS[id] || MAPS.towers;
   world.data.fill(0);
   for (const k of [...world.cracks.keys()]) world.clearDamage(k);

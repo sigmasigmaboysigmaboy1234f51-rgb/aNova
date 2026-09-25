@@ -35,6 +35,8 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Switch to third person to see your skin |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
+| E | Adventure: get in or out of a car, talk to people |
+| H / F (in a car) | Horn / police siren |
 | ` (under Esc) | Cheat menu |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
@@ -47,11 +49,22 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 
 There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloop Bog, Mount Ember (where the sea is lava), Frostpeak, the Storm Arena, Nightfall Hollow, Rumble Quarry, the Stinkwater Sewers and the Golden Palace. Every chapter has story scenes and three or four goals: survive waves, find Heartstone sparks, protect Grandma's beacon, and beat the chapter's boss. Finishing a chapter unlocks a new gun, and you earn up to 3 stars: one for finishing, one for never getting cubed, one for beating the par time. If you get cubed, you retry only the part you were on.
 
+## Adventure
+
+Click **Adventure** on the title screen to explore **Blockton**, a modern town on an island.
+
+- **Drive anything.** Your own car is parked in your driveway. Walk up to any car and press **E** to get in: sedans, taxis, police cars (press **F** for the siren), sports cars, pickup trucks, the bus and the ice cream van. You can even take a car that's stopped at a light (the driver won't be happy). **W/S** drive and reverse, **A/D** steer, **Space** is the handbrake, **H** honks. Move the mouse to look around.
+- **A living town.** Traffic drives on the right, stops at red lights and honks when you're in the way. People walk the sidewalks, jump out of the way of cars and run away from gunfire.
+- **Jobs.** People with a yellow **!** over their head have work for you: deliver pizzas against the clock, drive a taxi, win a street race, clear mobs out of the park, chase down the Golden Overlord's gold getaway van, beat a boss at the stadium and defend the building site. Jobs pay coins and XP.
+- **10 golden cubes** are hidden around town: on rooftops (the towers have stairs), on the crane, behind a house and on the beach. Kid Kevin in the park pays a bonus for finding them all.
+- **Watch out at night.** When it gets dark the street lamps come on, and so do the mobs.
+- Cars can be shot, crashed and blown up. If you get cubed you wake up at the hospital.
+
 ## Levels, challenges and achievements
 
 - Everything you do earns **XP**. Each level pays out coins.
 - **3 daily challenges** that change every day, like "Beat 15 Skitters" or "Reach wave 10 in Endless".
-- **32 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
+- **36 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
 - **Weapon mastery:** every gun ranks up as you beat mobs with it, from Iron to Master. Ranks pay coins, and Bronze, Diamond and Lava paints can only be earned this way. The Armory shows each gun's rank.
 - **Lucky Wheel:** one free spin every day, more for 200 coins. Win coins, XP, gun parts, Style items or the 2,000 coin jackpot.
 
@@ -289,6 +302,8 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/wheel.js` | The Lucky Wheel |
 | `src/settings.js` | The Settings screen |
 | `src/cheats.js`, `src/sha256.js` | The cheat menu, cheat guns and the password lock |
+| `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights and the minimap |
+| `src/cars.js`, `src/townsfolk.js` | Drivable cars and traffic, and the people of Blockton |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |
