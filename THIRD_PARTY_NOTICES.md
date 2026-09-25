@@ -13,6 +13,10 @@ https://github.com/mrdoob/three.js/blob/dev/LICENSE
 - **Jersey 10**. Copyright 2023 The Soft Type Project Authors. SIL Open Font License 1.1. See `src/fonts/OFL-Jersey10.txt`.
 - **Pixelify Sans**. Copyright 2021 The Pixelify Sans Project Authors. SIL Open Font License 1.1. See `src/fonts/OFL-PixelifySans.txt`.
 
+## PeerJS
+
+Peer-to-peer connections for online play. MIT License. Copyright © 2015 Michelle Bu and Eric Zhang. Join codes are introduced through the free PeerJS cloud service.
+
 ## ws
 
 WebSocket library used by the game server. MIT License. Copyright © 2011 Einar Otto Stangvik and contributors.

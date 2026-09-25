@@ -128,26 +128,33 @@ You carry three guns. Pick them in the Armory with **Carry in slot 1/2/3**.
 
 ## Multiplayer
 
-Up to 8 players share one island and fight the same waves. Waves get bigger with more players. When you die you come back after 5 seconds.
+Play online with up to 8 friends, from anywhere. You don't need the same Wi-Fi, a server or any setup.
 
-**Host from the app (easiest):**
+**Host a game:**
 
-1. Click **Multiplayer → Host game**.
-2. The chat shows your address, like `192.168.1.23`. Friends on the same Wi-Fi type it into **Join a game**.
-3. The first time, Windows asks whether Blockfire may use the network. Allow it on private networks.
+1. Click **Multiplayer**, pick a game and click **Host online game**.
+2. You get a **join code** like `K7P2QX`. It shows on screen, in the chat, and in the pause menu (with a Copy button).
+3. Keep Blockfire open while you host. Your computer runs the game for everyone.
 
-**Run a dedicated server** on any computer with [Node.js](https://nodejs.org):
+**Join a friend:** click **Multiplayer**, type their code under **Join a friend**, and click **Join**.
+
+**Games you can host:**
+
+- **Co-op waves:** fight the mobs and bosses together. Waves get bigger with more players. When you die you come back after 5 seconds.
+- **1v1 Duel:** no mobs, just players, on one of 5 handmade maps: Twin Towers, The Bridges, The Pit, Castle Clash and Snow Forts. First to 10 knockouts wins, then the map resets for a rematch. With more than two players it's a free-for-all.
+
+**How it works:** the host's own game runs the room (`src/room.js`) and the players' games connect straight to it using WebRTC, the same tech video calls use. A free public service (PeerJS) introduces the computers to each other using the join code, and a relay steps in when a home router is strict. Every player builds the identical island from one shared number (the seed), so the world never has to be sent over the network. If the host leaves, the game ends for everyone.
+
+**Dedicated server (optional):** if you want a game that stays up on its own machine, run a server with [Node.js](https://nodejs.org):
 
 ```sh
 npm install
 npm run server
 ```
 
-It listens on port 25580. Everyone, including you, joins with that computer's address. To play with friends outside your Wi-Fi, forward TCP port 25580 on the server's router, or run the server on an online host.
+Players join it under **Join a server by address**. It listens on port 25580, and friends outside your network need that port forwarded. On a dedicated server, if the host leaves the next player takes over.
 
-**How it's built:** the server is **JavaScript running on Node.js**, talking to the game over **WebSockets**. The game is JavaScript too, so both sides share code. For example, every player builds the identical island from one shared number (the seed), so the whole world never has to be sent over the network. The server itself stays small (`server/server.cjs`). The first player in is the host: their game runs the mobs and waves, and the server passes messages between everyone. If the host leaves, the next player takes over and the game carries on.
-
-The copy of the game hosted on claude.ai can't connect to servers, so use the app or the downloaded file for multiplayer.
+The copy of the game hosted on claude.ai can't go online, so use the app or the downloaded file for multiplayer.
 
 ## Skins
 
@@ -184,7 +191,7 @@ The code lives in `src/`. `index.html` is built from it, so edit `src/` and then
 npm install
 npm run build      # rebuild index.html
 npm run app        # run the desktop app
-npm run server     # run a multiplayer server
+npm run server     # run a dedicated multiplayer server
 npm run dist:win   # build the Windows .exe (on Windows)
 ```
 
@@ -211,8 +218,10 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/themes.js`, `src/portraits.js` | Each chapter's world, and the talking-head portraits |
 | `src/progress.js`, `src/challenges.js` | Levels, daily challenges and achievements |
 | `src/flow.js` | Pathfinding, so mobs find their way around walls |
-| `src/multiplayer.js`, `src/net.js`, `src/remote.js` | Multiplayer: networking, other players, chat |
-| `server/server.cjs` | The multiplayer server (Node.js) |
+| `src/multiplayer.js`, `src/remote.js` | Multiplayer: other players, chat, syncing |
+| `src/room.js`, `src/p2p.js`, `src/net.js` | The game room, join codes and peer-to-peer connections, dedicated-server connections |
+| `src/duel.js`, `src/maps.js` | 1v1 duels and the duel maps |
+| `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |
 | `src/model.js` | Blocky character models |
@@ -226,4 +235,4 @@ Copyright © 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved.
 
 Blockfire is not open source. You can play it, but you may not copy, re-upload, sell or publish changed versions of it without permission. See [LICENSE](LICENSE) for the details.
 
-Blockfire uses a few open-source pieces, which keep their own licenses: [three.js](https://threejs.org/), [ws](https://github.com/websockets/ws) and [Electron](https://www.electronjs.org/) (MIT), and the fonts [Jersey 10](https://github.com/scfried/soft-type-jersey) and [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) (SIL Open Font License). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Blockfire uses a few open-source pieces, which keep their own licenses: [three.js](https://threejs.org/), [PeerJS](https://peerjs.com/), [ws](https://github.com/websockets/ws) and [Electron](https://www.electronjs.org/) (MIT), and the fonts [Jersey 10](https://github.com/scfried/soft-type-jersey) and [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) (SIL Open Font License). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

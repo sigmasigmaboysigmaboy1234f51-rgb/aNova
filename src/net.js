@@ -1,6 +1,7 @@
-// Talks to a Blockfire server (server/server.cjs) over a WebSocket.
+import { PROTOCOL } from './room.js';
 
-export const PROTOCOL = 3;
+// Talks to a dedicated Blockfire server (server/server.cjs) over a
+// WebSocket. Online games hosted from inside the game use p2p.js instead.
 export const DEFAULT_PORT = 25580;
 
 // Accepts "192.168.1.5", "192.168.1.5:25580", "myserver.net" or a full

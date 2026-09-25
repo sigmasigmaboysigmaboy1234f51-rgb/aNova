@@ -12,6 +12,7 @@ const vC = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const FIRE = ['#fff2b0', '#ffd36b', '#ff9a3c', '#ff6a20', '#e0402f'].map((c) => new THREE.Color(c));
 const SMOKE = ['#4a4640', '#5e5a52', '#35322d'].map((c) => new THREE.Color(c));
+const BLOOD = ['#d8392b', '#a8281c', '#ff6a5a'].map((c) => new THREE.Color(c));
 
 function jitter(dir, spread, out) {
   out.copy(dir);
@@ -78,7 +79,16 @@ export class Combat {
     const g = this.game;
     const block = g.world.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, range);
     const blockT = block ? block.t : range;
-    const hits = g.mobs.raycastAll(origin, dir, blockT).slice(0, maxMobs);
+    const hits = g.mobs.raycastAll(origin, dir, blockT);
+    // In a duel, other players can be hit too.
+    if (g.duel && g.mp) {
+      for (const r of g.mp.remotes.list()) {
+        const h = r.hitTest(origin, dir, blockT);
+        if (h) hits.push({ remote: r, t: h.t, head: h.head });
+      }
+      hits.sort((a, b) => a.t - b.t);
+    }
+    hits.length = Math.min(hits.length, maxMobs);
     const stopped = hits.length >= maxMobs;
     const endT = stopped ? hits[hits.length - 1].t : blockT;
     for (const h of hits) h.at = origin.clone().addScaledVector(dir, h.t);
@@ -117,7 +127,9 @@ export class Combat {
         const res = this.trace(origin, dir, s.range, 1 + s.pierce);
         for (const h of res.hits) {
           const fall = s.pellets > 1 ? Math.max(0.35, Math.min(1, 1.25 - h.t / s.range)) : 1;
-          this.hitMob(p, h.mob, s.dmg * (h.head ? s.head : 1) * fall, dir, h.head, h.at, s, color);
+          const dmg = s.dmg * (h.head ? s.head : 1) * fall;
+          if (h.remote) this.hitRemote(p, h.remote, dmg, h.head, dir, h.at, s);
+          else this.hitMob(p, h.mob, dmg, dir, h.head, h.at, s, color);
           hitAny = true;
           head = head || h.head;
         }
@@ -150,6 +162,21 @@ export class Combat {
     }
     if (s.chain) this.chain(mob, dmg * 0.5, s.chain, s, color);
     if (s.splash) this.explode(at, s.splash, dmg * 0.45, { local: true, breaks: false, small: true });
+  }
+
+  // Duels: tell the other player they were hit. Their game takes the damage.
+  hitRemote(p, r, dmg, head, dir, at, s) {
+    const g = this.game;
+    g.mp.sendHitPlayer(r.id, dmg, head, s, dir);
+    r.invuln = 0;
+    if (at) g.fx.burst(at.x, at.y, at.z, BLOOD, 5, { speed: 2.5, size: 0.07, up: 1.5, life: 0.45, spread: 0.1 });
+    if (s && s.leech) {
+      this.leechAcc += dmg * s.leech;
+      while (this.leechAcc >= 1) {
+        this.leechAcc -= 1;
+        p.heal(1);
+      }
+    }
   }
 
   hitBlock(hit, at, dir, s, color) {
@@ -248,7 +275,10 @@ export class Combat {
       w.beamT = s.gap;
       w.ammo = Math.max(0, w.ammo - 1);
       const h = res.hits[0];
-      if (h) {
+      if (h && h.remote) {
+        this.hitRemote(p, h.remote, s.dmg * (h.head ? s.head : 1), h.head, aim, h.at, s);
+        if (Math.random() < 0.3) g.hud.hitmarker(h.head);
+      } else if (h) {
         this.hitMob(p, h.mob, s.dmg * (h.head ? s.head : 1), aim, h.head, h.at, s, color);
         if (Math.random() < 0.3) g.hud.hitmarker(h.head);
       } else if (res.block && Math.random() < 0.12) {
@@ -353,7 +383,13 @@ export class Combat {
       if (len > 1e-6) seg.divideScalar(len);
       // Mobs first (only our own projectiles can hurt).
       if (pr.local && pr.kind !== 'nade' && len > 0) {
-        const hit = g.mobs.raycast(prev, seg, len + 0.1);
+        let hit = g.mobs.raycast(prev, seg, len + 0.1);
+        if (g.duel && g.mp) {
+          for (const r of g.mp.remotes.list()) {
+            const h = r.hitTest(prev, seg, len + 0.1);
+            if (h && (!hit || h.t < hit.t)) hit = { remote: r, t: h.t, head: h.head };
+          }
+        }
         if (hit) {
           const at = prev.clone().addScaledVector(seg, hit.t);
           this.impactMob(pr, hit, at, seg);
@@ -405,6 +441,13 @@ export class Combat {
     const s = pr.stats || {};
     if (pr.kind === 'grenade') {
       this.explode(at, s.splash || 3, s.dmg || 14, { local: true, breaks: !!s.breaks });
+      return;
+    }
+    if (hit.remote) {
+      const dmg = (s.dmg || 3) * (hit.head ? s.head || 1 : 1);
+      this.hitRemote(g.player, hit.remote, dmg, hit.head, dir, at, s);
+      g.hud.hitmarker(hit.head);
+      g.sound.hit();
       return;
     }
     const dmg = (s.dmg || 3) * (hit.head ? s.head || 1 : 1);
@@ -521,6 +564,14 @@ export class Combat {
       const dir = c.clone().sub(at).normalize();
       if (!Number.isFinite(dir.x)) dir.copy(UP);
       m.damage(dmg * f, dir, false, c.clone(), g.myId, {});
+    }
+    // Duels: blasts hurt the other players too.
+    if (g.duel && g.mp && dmg > 0) {
+      for (const rp of g.mp.remotes.list()) {
+        if (rp.dead || !rp.hasState) continue;
+        const rd = vB.set(rp.pos.x, rp.pos.y + 0.9, rp.pos.z).distanceTo(at);
+        if (rd < r) this.hitRemote(p, rp, Math.max(1, dmg * 0.6 * (1 - rd / r)), false, vB.clone().sub(at).normalize(), null, null);
+      }
     }
     const pc = vA.set(p.pos.x, p.pos.y + 0.9, p.pos.z);
     const pd = pc.distanceTo(at);

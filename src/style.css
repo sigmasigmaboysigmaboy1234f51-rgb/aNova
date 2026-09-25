@@ -421,6 +421,21 @@ body:not(.desktop) .app-only { display: none; }
   min-width: 0;
 }
 .pause-mp { margin: 0; color: var(--paper); font-size: 15px; }
+.pause-code { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; background: rgba(0, 0, 0, 0.3); border: 2px solid var(--edge); }
+.code-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.code-big { font: 400 44px/1 var(--font-display); color: var(--gold); letter-spacing: 0.12em; text-shadow: 2px 2px 0 #000; flex: 1; }
+.code-input { text-transform: uppercase; letter-spacing: 0.2em; font-size: 26px !important; }
+.field select {
+  font: 16px/1.2 var(--font-ui);
+  color: var(--paper);
+  background: #12110e;
+  border: 2px solid var(--edge);
+  padding: 8px 10px;
+  width: 100%;
+}
+.mp-more summary { cursor: pointer; font: 600 13px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
+.mp-more[open] summary { margin-bottom: 10px; }
+.mp-more summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
 .chat { position: absolute; left: 16px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100% - 32px)); display: grid; gap: 6px; }
 .chat-log { display: grid; gap: 2px; max-height: 40vh; overflow: hidden; align-content: end; }
 .chat-line { font-size: 15px; color: var(--paper); background: rgba(0, 0, 0, 0.45); padding: 3px 8px; justify-self: start; transition: opacity 0.6s; text-shadow: 1px 1px 0 #000; overflow-wrap: anywhere; }

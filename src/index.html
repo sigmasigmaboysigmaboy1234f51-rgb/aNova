@@ -149,18 +149,30 @@
   <div class="panel overlay-panel mp-panel">
     <h2 class="overlay-title">Multiplayer</h2>
     <label class="field" for="mp-name"><span>Your name</span><input id="mp-name" maxlength="16" autocomplete="nickname"></label>
-    <div id="mp-host-box" class="mp-box">
+    <div class="mp-box">
       <h3>Host a game</h3>
-      <p>Your computer runs the world. Friends on the same Wi-Fi join with your address, which shows up once you start.</p>
-      <button id="mp-host" class="btn btn-go" type="button">Host game</button>
+      <p>Your game becomes the server and you get a join code. Friends anywhere in the world type the code to join you. No setup, no same Wi-Fi needed. Keep Blockfire open while you host.</p>
+      <label class="field" for="mp-mode"><span>Game</span>
+        <select id="mp-mode">
+          <option value="coop">Co-op waves: fight the mobs together</option>
+        </select>
+      </label>
+      <button id="mp-host" class="btn btn-go" type="button">Host online game</button>
     </div>
     <form id="mp-form" class="mp-box" autocomplete="off">
-      <h3>Join a game</h3>
-      <label class="field" for="mp-addr"><span>Server address</span><input id="mp-addr" placeholder="192.168.1.23" inputmode="url" spellcheck="false"></label>
+      <h3>Join a friend</h3>
+      <label class="field" for="mp-code"><span>Join code</span><input id="mp-code" class="code-input" placeholder="K7P2QX" maxlength="8" spellcheck="false" autocapitalize="characters"></label>
       <button id="mp-join" class="btn" type="submit">Join</button>
     </form>
-    <p id="mp-web-note" class="mp-note">To host from this browser, run the server that comes with the game (<code>npm run server</code>), or use the Blockfire desktop app, which has a Host button.</p>
-    <p id="mp-artifact-note" class="mp-note" hidden>This page can't connect to game servers. Download Blockfire to play online.</p>
+    <details class="mp-more">
+      <summary>Join a server by address</summary>
+      <form id="mp-addr-form" class="mp-box" autocomplete="off">
+        <p>For dedicated servers started with <code>npm run server</code>.</p>
+        <label class="field" for="mp-addr"><span>Server address</span><input id="mp-addr" placeholder="192.168.1.23" inputmode="url" spellcheck="false"></label>
+        <button id="mp-addr-join" class="btn btn-small" type="submit">Join server</button>
+      </form>
+    </details>
+    <p id="mp-artifact-note" class="mp-note" hidden>This page can't go online. Download Blockfire to play with friends.</p>
     <p id="mp-status" class="note" role="status"></p>
     <button id="mp-back" class="btn btn-quiet" type="button">Back</button>
   </div>
@@ -353,6 +365,11 @@
     <h2 class="overlay-title">Paused</h2>
     <p id="pause-msg" class="note" hidden></p>
     <p id="pause-mp" class="pause-mp" hidden></p>
+    <div id="pause-code" class="pause-code" hidden>
+      <span class="code-label">Join code</span>
+      <span id="pause-code-text" class="code-big"></span>
+      <button id="btn-copy-code" class="btn btn-small" type="button">Copy</button>
+    </div>
     <div class="menu-buttons">
       <button id="btn-resume" class="btn btn-go" type="button">Resume</button>
       <button id="btn-pause-armory" class="btn btn-gold" type="button">Armory <kbd>B</kbd></button>

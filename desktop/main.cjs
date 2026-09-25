@@ -1,12 +1,9 @@
-// Blockfire desktop app (Electron). Opens the game in its own window and can
-// run a multiplayer server on this computer when you click "Host game".
+// Blockfire desktop app (Electron). Opens the game in its own window.
+// Online games are hosted from inside the game itself (see src/p2p.js).
 
 const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
-const { createServer, DEFAULT_PORT } = require('../server/server.cjs');
-
 let win = null;
-let server = null;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -23,6 +20,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // A host keeps running the game for friends even when minimised.
+      backgroundThrottling: false,
     },
   });
   win.loadFile(path.join(__dirname, '..', 'index.html'));
@@ -43,31 +42,6 @@ function createWindow() {
 Menu.setApplicationMenu(null);
 
 app.whenReady().then(() => {
-  ipcMain.handle('host', async (_event, port) => {
-    port = Number(port) || DEFAULT_PORT;
-    if (!server) {
-      try {
-        server = await createServer({ port, log: (s) => console.log(s) });
-      } catch (err) {
-        return {
-          ok: false,
-          error:
-            err.code === 'EADDRINUSE'
-              ? `Port ${port} is already in use. Close any other Blockfire server and try again.`
-              : `Could not start the server: ${err.message}`,
-        };
-      }
-    }
-    return { ok: true, port: server.port, addresses: server.addresses };
-  });
-  ipcMain.handle('stopHost', async () => {
-    if (server) {
-      const s = server;
-      server = null;
-      await s.close();
-    }
-    return { ok: true };
-  });
   ipcMain.handle('quit', () => app.quit());
   createWindow();
 });

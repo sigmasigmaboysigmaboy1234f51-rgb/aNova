@@ -281,6 +281,11 @@ export class World {
     this.version++;
   }
 
+  markAllDirty() {
+    for (let i = 0; i < NCX * NCZ; i++) this.dirty.add(i);
+    this.version++;
+  }
+
   placeTree(x, y0, z, rng, th = {}) {
     const top = y0 + 3 + (rng() < 0.5 ? 1 : 0);
     for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;

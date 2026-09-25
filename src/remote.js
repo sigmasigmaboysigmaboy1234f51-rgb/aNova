@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildHumanoid, holdGun, PX } from './model.js';
 import { GUNS, parseBuildCode } from './weapons.js';
 import { B } from './world.js';
+import { rayBox } from './mob.js';
 import { Rig, posePlayer } from './anim.js';
 import { makeSkinTexture, paintOutfit, DEFAULT_OUTFIT } from './skin.js';
 import { loadImage, clamp, wrapAngle } from './util.js';
@@ -153,6 +154,22 @@ class RemotePlayer {
       this.hasState = true;
       this.pos.set(s.p[0], s.p[1], s.p[2]);
     }
+  }
+
+  // For duels: did a shot along this ray hit them, and in the head?
+  hitTest(o, d, maxT) {
+    if (!this.hasState || this.dead || !this.model.root.visible) return null;
+    const k = this.h / 1.8;
+    const x = this.pos.x;
+    const y = this.pos.y;
+    const z = this.pos.z;
+    const tb = rayBox(o, d, x - 0.36, y, z - 0.36, x + 0.36, y + 1.36 * k, z + 0.36);
+    const th = rayBox(o, d, x - 0.3, y + 1.36 * k, z - 0.3, x + 0.3, y + this.h + 0.1, z + 0.3);
+    const okB = tb >= 0 && tb < maxT;
+    const okH = th >= 0 && th < maxT;
+    if (okH && (!okB || th <= tb)) return { t: th, head: true };
+    if (okB) return { t: tb, head: false };
+    return null;
   }
 
   // Called by the host's mobs when they hit this player.

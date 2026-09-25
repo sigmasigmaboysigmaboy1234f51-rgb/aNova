@@ -15,6 +15,8 @@ import { CHAPTERS } from './storydata.js';
 import { THEMES } from './themes.js';
 import { Progress, xpForLevel } from './progress.js';
 import { Challenges } from './challenges.js';
+import { Duel, TARGET } from './duel.js';
+import { MAPS, MAP_ORDER } from './maps.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
 import { BOSSES } from './boss.js';
@@ -23,7 +25,8 @@ import { Hud } from './hud.js';
 import { SkinPreview } from './preview.js';
 import { SkinEditor } from './editor.js';
 import { Multiplayer } from './multiplayer.js';
-import { parseAddress, DEFAULT_PORT } from './net.js';
+import { parseAddress } from './net.js';
+import { cleanCode } from './p2p.js';
 import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
 
@@ -146,6 +149,7 @@ class Game {
     this.storyMenu = new StoryMenu(this);
     this.challenges = new Challenges(this);
     this.story = null;
+    this.duel = null;
     this.profile.listeners.add(() => this.player.refreshLoadout());
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
@@ -300,7 +304,17 @@ class Game {
     });
     $('#mp-form').addEventListener('submit', (e) => {
       e.preventDefault();
+      this.joinByCode();
+    });
+    $('#mp-addr-form').addEventListener('submit', (e) => {
+      e.preventDefault();
       this.joinFromForm();
+    });
+    $('#btn-copy-code').addEventListener('click', () => {
+      const code = this.mp && this.mp.code;
+      if (!code) return;
+      const done = () => ($('#btn-copy-code').textContent = 'Copied!');
+      if (navigator.clipboard) navigator.clipboard.writeText(code).then(done, () => {});
     });
     $('#mp-host').addEventListener('click', () => this.hostGame());
     const quitApp = $('#btn-quit-app');
@@ -311,6 +325,13 @@ class Game {
     name.value = store.get('name', '') || `Player${100 + Math.floor(Math.random() * 900)}`;
     name.addEventListener('change', () => store.set('name', this.mpName()));
     $('#mp-addr').value = store.get('addr', '');
+    const modes = $('#mp-mode');
+    for (const id of MAP_ORDER) {
+      const o = document.createElement('option');
+      o.value = `duel:${id}`;
+      o.textContent = `1v1 Duel: ${MAPS[id].name}. ${MAPS[id].desc}`;
+      modes.appendChild(o);
+    }
 
     const sens = $('#sens');
     sens.value = String(this.settings.sens);
@@ -590,7 +611,13 @@ class Game {
     $('#pause-msg').hidden = !msg;
     const info = $('#pause-mp');
     info.hidden = !this.mp;
-    if (this.mp) info.textContent = this.mp.hosting ? this.mp.inviteText() : 'The game keeps going while you are paused.';
+    if (this.mp) info.textContent = this.mp.hosting ? 'You are hosting. Friends join with this code:' : 'The game keeps going while you are paused.';
+    const code = this.mp && this.mp.hosting && this.mp.code;
+    $('#pause-code').hidden = !code;
+    if (code) {
+      $('#pause-code-text').textContent = code;
+      $('#btn-copy-code').textContent = 'Copy';
+    }
     $('#btn-quit').textContent = this.mp ? 'Leave game' : 'Quit to title';
     this.input.exitLock();
     this.setState('paused');
@@ -655,60 +682,86 @@ class Game {
   }
 
   openMp() {
-    $('#mp-host-box').hidden = !this.desktop;
-    $('#mp-web-note').hidden = this.desktop;
     $('#mp-artifact-note').hidden = !inArtifactViewer();
     this.mpStatus('');
     this.setState('mp');
   }
 
-  async hostGame() {
+  // Host an online game from this computer. Friends join with the code.
+  hostGame() {
     this.sound.unlock();
     store.set('name', this.mpName());
-    this.mpStatus('Starting a server on this computer…');
-    const res = await window.blockfireDesktop.host(DEFAULT_PORT);
-    if (!res.ok) {
-      this.mpStatus(res.error);
+    this.mpMode = $('#mp-mode').value || 'coop';
+    this.mpStatus('Getting a join code…');
+    this.connect({ kind: 'host' });
+  }
+
+  onHostCode(code) {
+    this.mpStatus(`Your join code is ${code}.`);
+    if (this.mp) this.mp.system(this.mp.inviteText());
+    this.hud.showBanner(code, 'Your join code. Friends type it under Multiplayer, Join a friend.', 6);
+  }
+
+  joinByCode() {
+    const code = cleanCode($('#mp-code').value);
+    if (!code) {
+      this.mpStatus('A join code is 6 letters and numbers, like K7P2QX.');
       return;
     }
-    this.connect(`ws://127.0.0.1:${res.port}`, { hosting: true, addresses: res.addresses, port: res.port });
+    store.set('name', this.mpName());
+    this.mpStatus(`Looking for game ${code}…`);
+    this.connect({ kind: 'join', code });
   }
 
   joinFromForm() {
     const raw = $('#mp-addr').value;
     const url = parseAddress(raw);
     if (!url) {
-      this.mpStatus('Type the address the host gave you, like 192.168.1.23.');
+      this.mpStatus('Type the server address, like 192.168.1.23.');
       return;
     }
     store.set('addr', raw.trim());
     store.set('name', this.mpName());
-    this.connect(url, {});
+    this.mpStatus('Connecting…');
+    this.connect({ kind: 'server', url });
   }
 
-  connect(url, opts) {
+  connect(opts) {
     this.sound.unlock();
-    if (this.mp) this.leaveMp(false);
-    this.mpStatus('Connecting…');
-    this.mp = new Multiplayer(this, url, { name: this.mpName(), ...opts });
+    if (this.mp) this.leaveMp();
+    this.mp = new Multiplayer(this, { name: this.mpName(), ...opts });
   }
 
   waitingForHost() {
     this.mpStatus('Connected. Waiting for the host to start the game…');
   }
 
-  startMultiplayer(seed, edits, asHost) {
+  startMultiplayer(seed, edits, asHost, mode) {
     if (this.story) this.story.dispose();
     this.story = null;
-    this.world.generate(seed, THEMES.meadow);
-    this.applyTheme(THEMES.meadow);
+    this.duel = null;
+    if (typeof mode === 'string' && mode.startsWith('duel:')) {
+      this.duel = new Duel(this, mode.slice(5));
+      this.duel.build();
+      this.applyTheme(this.duel.theme);
+    } else {
+      this.world.generate(seed, THEMES.meadow);
+      this.applyTheme(THEMES.meadow);
+    }
     for (const [x, y, z, b] of edits) this.world.set(x, y, z, b, true);
     this.world.flush();
     this.worldUsed = true;
     this.resetRun();
+    if (this.duel) {
+      this.duel.placePlayer();
+      this.hud.showBanner(`Duel: ${this.duel.map.name}`, `First to ${TARGET} knockouts wins. No mobs, just you and them.`, 4);
+      this.setState('playing');
+      this.lockMouse();
+      return;
+    }
     if (asHost) {
       this.mobs.refreshFlow(true);
-      this.hud.showBanner('Get ready', 'You are hosting. Friends can join any time.', 3);
+      if (this.mp && this.mp.code) this.hud.showBanner(this.mp.code, 'Your join code. Press Esc to see it again.', 6);
     } else {
       this.hud.showBanner('Joined', 'Press T to chat. Hold Tab to see players.', 3);
     }
@@ -728,13 +781,11 @@ class Game {
     this.spawnTimer = 1;
   }
 
-  leaveMp(stopServer = true) {
+  leaveMp() {
     const mp = this.mp;
     this.mp = null;
-    if (mp) {
-      mp.close();
-      if (stopServer && mp.hosting && this.desktop) window.blockfireDesktop.stopHost();
-    }
+    this.duel = null;
+    if (mp) mp.close();
     this.inGame = false;
     this.mobs.clear();
     this.input.exitLock();
@@ -742,16 +793,18 @@ class Game {
   }
 
   onDisconnected(reason, msg) {
-    const hosting = this.mp && this.mp.hosting;
-    this.leaveMp(hosting);
-    let text = msg;
-    if (!text && reason === 'unreachable') {
-      text = inArtifactViewer()
-        ? 'This page is not allowed to connect to game servers. Use the Blockfire app or the downloaded game to play online.'
-        : "Could not reach that server. Check the address, and that the host's firewall lets Blockfire through.";
-    }
+    this.leaveMp();
+    const why = {
+      unreachable: "Could not reach that server. Check the address, and that the server's firewall lets Blockfire through.",
+      nocode: 'No game found with that code. Check the code, and that your friend is still hosting.',
+      broker: 'Could not reach the online game service. Check your internet connection and try again.',
+      webrtc: "This browser can't play online. Use the Blockfire app, or Chrome, Edge or Firefox.",
+      lost: 'Lost connection to the game.',
+    };
+    let text = msg || why[reason] || why.lost;
+    if (!msg && inArtifactViewer() && reason !== 'lost') text = "This page can't go online. Download Blockfire to play with friends.";
     this.openMp();
-    this.mpStatus(text || 'Lost connection to the server.');
+    this.mpStatus(text);
   }
 
   // --- Waves ----------------------------------------------------------
@@ -924,6 +977,16 @@ class Game {
       this.deadT = 0;
       return;
     }
+    if (this.mp && this.duel) {
+      const p = this.player;
+      if (p.killer === 'pvp' && p.pvpKiller) {
+        this.mp.sendKnockout(p.pvpKiller);
+        this.duel.onKill(p.pvpKiller, this.myId);
+      } else this.mp.sendDied(p.killer);
+      this.respawnT = 3;
+      this.hud.showBanner('Knocked out', 'Back in 3', 3.5);
+      return;
+    }
     if (this.mp) {
       this.mp.sendDied(this.player.killer);
       this.respawnT = 5;
@@ -935,9 +998,10 @@ class Game {
   }
 
   respawn() {
-    const s = this.world.spawnPoint();
     const third = this.player.thirdPerson;
-    this.player.reset(s);
+    if (this.duel) this.duel.placePlayer();
+    else this.player.reset(this.world.spawnPoint());
+    const s = this.player.pos;
     this.player.thirdPerson = third;
     this.hud.banner.hidden = true;
     this.fx.burst(s.x, s.y + 1, s.z, this.atlas.colors[T.GRASS_TOP], 16, { speed: 2.5, size: 0.1, up: 3, life: 0.7, spread: 0.4 });
@@ -1007,7 +1071,9 @@ class Game {
     }
     if (this.state === 'playing' && this.input.pressed.has('KeyB')) this.openArmory('playing');
     if (this.authority) {
-      if (this.story) {
+      if (this.duel) {
+        // No mobs in a duel.
+      } else if (this.story) {
         if (!p.dead) this.story.update(dt);
       } else if (!p.dead || this.mp) this.updateWaves(dt);
       this.mobs.update(dt);
@@ -1026,7 +1092,10 @@ class Game {
     if (boss) this.hud.setBoss(boss.def.name, boss.remote ? boss.net.hp : boss.hp / boss.maxHp);
     else if (beacon) this.hud.setBoss("Grandma's beacon", beacon.hp / beacon.maxHp);
     else this.hud.setBoss(null, null);
-    if (this.story) {
+    if (this.duel) {
+      const [a, b] = this.duel.hud();
+      this.hud.setObjective(a, b);
+    } else if (this.story) {
       this.hud.setObjective(`Chapter ${this.story.index + 1}`, this.story.objective());
     } else {
       const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;

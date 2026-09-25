@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { NetClient } from './net.js';
+import { PeerHost, PeerClient } from './p2p.js';
 import { RemotePlayers, F } from './remote.js';
 import { $ } from './util.js';
 
@@ -37,12 +38,14 @@ export const DEATH_VERBS = {
 };
 
 export class Multiplayer {
-  constructor(game, url, { name, hosting = false, addresses = [], port = 0 }) {
+  // kind: 'host' (online, peer to peer), 'join' (by code) or 'server'
+  // (a dedicated server by address).
+  constructor(game, { name, kind, url, code }) {
     this.game = game;
     this.name = name;
-    this.hosting = hosting;
-    this.addresses = addresses;
-    this.port = port;
+    this.kind = kind;
+    this.hosting = kind === 'host';
+    this.code = kind === 'join' ? code : null;
     this.remotes = new RemotePlayers(game);
     this.stateT = 0;
     this.mobT = 0;
@@ -79,7 +82,16 @@ export class Multiplayer {
     game.world.onEdit = (x, y, z, b) => this.net.send({ t: 'block', x, y, z, b });
 
     const hello = { name, skin: game.skin.canvas.toDataURL('image/png'), slim: game.skin.slim };
-    this.net = new NetClient(url, hello, this.handlers());
+    const on = this.handlers();
+    if (kind === 'host') {
+      this.net = new PeerHost(hello, on, {
+        onCode: (c) => {
+          this.code = c;
+          game.onHostCode(c);
+        },
+      });
+    } else if (kind === 'join') this.net = new PeerClient(code, hello, on);
+    else this.net = new NetClient(url, hello, on);
   }
 
   get id() {
@@ -97,11 +109,12 @@ export class Multiplayer {
         for (const p of m.players) this.remotes.add(p);
         if (m.id === m.host && !m.started) {
           const seed = (Math.random() * 2 ** 31) | 0;
-          g.startMultiplayer(seed, [], true);
-          this.net.send({ t: 'start', seed });
+          const mode = g.mpMode || null;
+          g.startMultiplayer(seed, [], true, mode);
+          this.net.send({ t: 'start', seed, mode });
           this.system(this.hosting ? this.inviteText() : 'You are the host. Mobs and waves run on your computer.');
         } else if (m.started) {
-          g.startMultiplayer(m.seed, m.edits, m.id === m.host);
+          g.startMultiplayer(m.seed, m.edits, m.id === m.host, m.mode);
           if (m.wave) this.applyWave(m.wave);
           const host = this.remotes.get(m.host);
           this.system(`Joined ${host ? host.name + "'s" : 'the'} game. Press T to chat, hold Tab to see players.`);
@@ -109,7 +122,7 @@ export class Multiplayer {
           g.waitingForHost();
         }
       },
-      start: (m) => g.startMultiplayer(m.seed, [], false),
+      start: (m) => g.startMultiplayer(m.seed, [], false, m.mode),
       join: (m) => {
         this.remotes.add(m);
         this.system(`${m.name} joined the game`);
@@ -158,6 +171,18 @@ export class Multiplayer {
       bfx: (m) => {
         if (!this.isHost && m.e && typeof m.e.k === 'string') g.mobs.applyBossFx(m.e);
       },
+      hitp: (m) => {
+        if (!g.duel || m.to !== this.id) return;
+        const r = this.remotes.get(m.from);
+        const fx = m.fx ? { burn: Math.min(3, Number(m.fx[0]) || 0) > 0 ? 1 : 0, slow: Math.min(0.6, Number(m.fx[1]) || 0) } : null;
+        g.player.pvpHit(Math.min(60, Number(m.d) || 0), r ? r.pos : null, m.from, fx, !!m.h);
+      },
+      pvp: (m) => {
+        if (g.duel && m.k === 'kill') g.duel.onKill(m.by, m.id);
+      },
+      duel: (m) => {
+        if (g.duel && m.k === 'win') g.duel.onWin(m);
+      },
       mboom: (m) => {
         if (!this.isHost) g.mobs.applyBlast(vec(m.p), Math.min(8, Number(m.r) || 3), Number(m.d) || 0, { source: m.s, fx: cleanFx(m.fx) });
       },
@@ -192,8 +217,7 @@ export class Multiplayer {
   }
 
   inviteText() {
-    const where = this.addresses.length ? this.addresses.map((a) => `${a}${this.port !== 25580 ? ':' + this.port : ''}`).join(' or ') : 'this computer';
-    return `You are hosting. Friends on the same Wi-Fi can join at ${where}.`;
+    return this.code ? `You are hosting. Your join code is ${this.code}. Friends click Multiplayer, then type it under Join a friend.` : 'You are hosting.';
   }
 
   applyWave(m) {
@@ -262,6 +286,17 @@ export class Multiplayer {
 
   pickupTaken(id) {
     this.net.send(this.isHost ? { t: 'pickupGone', k: id } : { t: 'pickup', k: id });
+  }
+
+  sendHitPlayer(to, d, head, s, dir) {
+    const msg = { t: 'hitp', to, d: r2(d), h: head ? 1 : 0 };
+    if (s && (s.burn || s.slow)) msg.fx = [r2(s.burn || 0), r2(s.slow || 0)];
+    this.net.send(msg);
+  }
+
+  // We got knocked out in a duel.
+  sendKnockout(by) {
+    this.net.send({ t: 'pvp', k: 'kill', by });
   }
 
   sendDied(by) {

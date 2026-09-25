@@ -780,6 +780,34 @@ export class Player {
     if (this.hp <= 0) this.die(source);
   }
 
+  // Duels: another player hit us. No invulnerability window, so fast guns
+  // work, but a small knockback away from the shooter.
+  pvpHit(amount, from, byId, fx, head) {
+    if (this.dead || this.invuln > 0.6) return;
+    const g = this.game;
+    this.hp -= Math.max(1, Math.round(amount));
+    this.sinceHurt = 0;
+    this.regenT = 0;
+    this.hurtT = 0.25;
+    this.applyStatus(fx, 'pvp');
+    if (from) {
+      const dx = this.pos.x - from.x;
+      const dz = this.pos.z - from.z;
+      const l = Math.hypot(dx, dz) || 1;
+      this.vel.x += (dx / l) * 2.5;
+      this.vel.z += (dz / l) * 2.5;
+      const right = Math.cos(this.yaw) * (dx / l) - Math.sin(this.yaw) * (dz / l);
+      this.hurtRoll = (right >= 0 ? -1 : 1) * 0.07;
+    }
+    this.shake = Math.max(this.shake, head ? 0.18 : 0.1);
+    g.hud.damage();
+    g.sound.hurt();
+    if (this.hp <= 0) {
+      this.pvpKiller = byId;
+      this.die('pvp');
+    }
+  }
+
   applyStatus(fx, source) {
     if (!fx) return;
     if (fx.slow) {
