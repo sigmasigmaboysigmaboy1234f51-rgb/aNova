@@ -3,7 +3,7 @@ import { $ } from './util.js';
 import { SX, SZ, SY, BLOCKS, B } from './world.js';
 import { THEMES } from './themes.js';
 import { generateCity, roadNodes, sidewalkLoops, GY, LANE, CITY_SIZE } from './city.js';
-import { Car, CAR_TYPES } from './cars.js';
+import { Car, CAR_TYPES, Skids } from './cars.js';
 import { Person } from './townsfolk.js';
 import { Police, POLICE_NUMBER } from './police.js';
 import { MOB_TYPES } from './mobtypes.js';
@@ -319,16 +319,18 @@ export class Adventure {
     this.info = generateCity(g.world, 7);
     g.world.flush();
     this.traffic = new Traffic(this);
+    this.skids = new Skids(g.scene);
+    this.nightK = 0;
     this.police = new Police(this);
     this.buildSigns();
     // Parked cars.
     for (const s of this.info.parking) {
-      const type = s.type === 'player' ? 'sedan' : s.type === 'parked' ? (Math.random() < 0.5 ? 'sedan' : 'pickup') : s.type;
+      const type = s.type === 'player' ? 'sedan' : s.type === 'parked' ? ['sedan', 'pickup', 'suv'][Math.floor(Math.random() * 3)] : s.type;
       const c = this.addCar(type, s.x, s.z, s.yaw, false, s.type === 'player' ? '#f2c230' : undefined);
       if (s.type === 'player') c.mine = true;
     }
     // Traffic.
-    const types = ['sedan', 'sedan', 'sedan', 'taxi', 'pickup', 'sedan', 'police', 'sports', 'sedan', 'bus', 'icecream'];
+    const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'sedan', 'police', 'sports', 'suv', 'bus', 'icecream'];
     for (const t of types) {
       const r = this.traffic.randomSpot();
       const c = this.addCar(t, r.x, r.z, r.yaw, true);
@@ -396,6 +398,8 @@ export class Adventure {
     }
     this.clearBeacon();
     if (this.traffic) this.traffic.dispose();
+    if (this.skids) this.skids.dispose();
+    this.skids = null;
     if (this.police) this.police.dispose();
     for (const m of this.signs || []) {
       g.scene.remove(m);
@@ -419,6 +423,7 @@ export class Adventure {
     snd.siren(false);
     snd.copSiren(0);
     snd.heli(0);
+    snd.skid(0);
   }
 
   showUI(on) {
@@ -707,8 +712,8 @@ export class Adventure {
     p.stopEmote();
     this.camYaw = 0;
     g.combat.beamTick(p, null, 0, false);
-    g.sound.clank(0.5);
-    g.sound.engine(true);
+    c.openDoor();
+    g.sound.engine(true, 0, c.def.snd || 'car');
     document.body.classList.add('driving');
     $('#drive-hud').hidden = false;
     $('#dh-name').textContent = c.def.name;
@@ -742,7 +747,8 @@ export class Adventure {
     p.pos.set(x, y, z);
     p.vel.set(0, 0, 0);
     p.yaw = c.yaw + Math.PI;
-    if (!silent) g.sound.clank(0.5);
+    if (!silent) c.openDoor();
+    g.sound.skid(0);
   }
 
   // The camera follows the car from behind. Move the mouse to look around.
@@ -758,10 +764,11 @@ export class Adventure {
     this.camYaw = Math.atan2(Math.sin(this.camYaw), Math.cos(this.camYaw));
     const yaw = c.yaw + Math.PI + this.camYaw;
     const dist = 5.5 + c.def.len * 0.6;
-    const want = tmp.set(c.pos.x + Math.sin(yaw) * dist * Math.cos(this.camPitch), c.pos.y + 1.4 + Math.sin(this.camPitch) * dist, c.pos.z + Math.cos(yaw) * dist * Math.cos(this.camPitch));
+    const eye = 0.4 + c.def.hgt * 0.65;
+    const want = tmp.set(c.pos.x + Math.sin(yaw) * dist * Math.cos(this.camPitch), c.pos.y + eye + Math.sin(this.camPitch) * dist, c.pos.z + Math.cos(yaw) * dist * Math.cos(this.camPitch));
     // Don't go through walls.
     const w = this.game.world;
-    const from = V().set(c.pos.x, c.pos.y + 1.6, c.pos.z);
+    const from = V().set(c.pos.x, c.pos.y + eye + 0.2, c.pos.z);
     const dir = want.clone().sub(from);
     const len = dir.length();
     dir.divideScalar(len);
@@ -776,7 +783,7 @@ export class Adventure {
     if (!this.camPos) this.camPos = target.clone();
     this.camPos.lerp(target, 1 - Math.exp(-10 * dt));
     cam.position.copy(this.camPos);
-    cam.lookAt(c.pos.x, c.pos.y + 1.3, c.pos.z);
+    cam.lookAt(c.pos.x, c.pos.y + eye - 0.1, c.pos.z);
     const fov = 72 + Math.min(14, Math.abs(c.speed) * 0.5);
     if (Math.abs(cam.fov - fov) > 0.05) {
       cam.fov += (fov - cam.fov) * Math.min(1, dt * 4);
@@ -917,8 +924,13 @@ export class Adventure {
       } else {
         $('#dh-speed').textContent = String(Math.round(Math.abs(car.speed) * 3.6));
         $('#dh-hp').style.width = `${Math.max(0, (car.hp / car.def.hp) * 100)}%`;
-        g.sound.engine(true, Math.abs(car.speed) / car.def.speed);
+        // Four gears: the revs climb, then drop as it changes up.
+        const k = Math.min(1, Math.abs(car.speed) / car.def.speed) * 4;
+        const gear = Math.min(3, Math.floor(k));
+        const revs = Math.abs(car.speed) < 0.5 ? 0.05 : 0.15 + gear * 0.1 + (k - gear) * 0.5;
+        g.sound.engine(true, revs, car.def.snd || 'car');
         g.sound.siren(this.siren);
+        g.sound.skid(car.skidding ? Math.min(1, 0.4 + car.slip * 0.1) : 0);
       }
     }
     this.mapT = (this.mapT || 0) - dt;
@@ -962,7 +974,7 @@ export class Adventure {
     for (const c of this.cars.filter((c) => c.dead && c.deadT > 40 && far(c))) this.removeCar(c);
     const traffic = this.cars.filter((c) => c.driver === 'ai' && !c.dead && !c.mission).length;
     if (traffic < 10) {
-      const types = ['sedan', 'sedan', 'taxi', 'pickup', 'police', 'sports', 'bus', 'icecream'];
+      const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'police', 'sports', 'bus', 'icecream'];
       for (let k = 0; k < 6; k++) {
         const r = this.traffic.randomSpot();
         if (Math.hypot(r.x - pp.x, r.z - pp.z) < 30) continue;
@@ -1017,6 +1029,17 @@ export class Adventure {
         const b = cars[j];
         const hit = carOverlap(a, b);
         if (!hit) continue;
+        // The monster truck drives right over other cars and crushes them.
+        const big = a.def.crush && !b.def.crush ? a : b.def.crush && !a.def.crush ? b : null;
+        if (big && Math.abs(big.speed) > 3) {
+          const small = big === a ? b : a;
+          small.damage(Math.abs(big.speed) * 14 * dt, null, big.driver === 'player' ? 'player' : null);
+          small.squash = Math.min(0.45, (small.squash || 0) + dt * 2);
+          small.speed *= 1 - Math.min(1, 4 * dt);
+          big.bounceV = Math.max(big.bounceV, 0.9);
+          if (Math.random() < dt * 8) g.sound.crash(0.5);
+          continue;
+        }
         // Push them apart along the shallowest axis.
         const [ux, uz, depth] = hit;
         a.pos.x -= ux * depth * 0.5;
@@ -1033,7 +1056,7 @@ export class Adventure {
           const byB = b.driver === 'player' ? 'player' : null;
           a.damage(closing * 1.4, null, byB || byA);
           b.damage(closing * 1.4, null, byA || byB);
-          g.sound.clank(Math.min(1, closing / 15));
+          g.sound.crash(Math.min(1, closing / 15) * (a.driver === 'player' || b.driver === 'player' ? 1 : 0.6));
           if (a.driver === 'player' || b.driver === 'player') g.player.shake = Math.max(g.player.shake, Math.min(0.4, closing / 40));
         }
         a.speed *= 0.5;
@@ -1127,8 +1150,9 @@ export class Adventure {
   updateNight(dt) {
     const g = this.game;
     const sky = g.sky;
+    const day = sky.active && sky.dayNight ? Math.min(1, Math.max(0, Math.sin(sky.t * Math.PI * 2) * 3 + 0.45)) : 1;
+    this.nightK = 1 - day;
     if (this.glow) {
-      const day = sky.active && sky.dayNight ? Math.min(1, Math.max(0, Math.sin(sky.t * Math.PI * 2) * 3 + 0.45)) : 1;
       this.glow.material.opacity = (1 - day) * 0.85;
       this.glow.visible = day < 0.98;
     }

@@ -326,6 +326,7 @@ export function generateCity(world, seed = 7) {
         fill(mx - 2, GY + 3, z, mx + 2, GY + 3, z, B.SNOW);
       }
       info.givers.stadium = { x: mx, z: z0 + 1.5 };
+      park(mx + 5, z0 + 6, 0, 'monster');
       info.lots.stadium = [x0, z0, x1, z1];
     },
     construction(x0, z0, x1, z1) {

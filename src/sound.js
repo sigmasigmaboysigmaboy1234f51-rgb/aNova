@@ -8,6 +8,14 @@
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
 
+// Engine sounds: base pitch, how far it climbs, filter and volume.
+const ENGINES = {
+  car: { f0: 38, range: 92, lp: 300, lpRange: 1300, vol: 0.06 },
+  sports: { f0: 52, range: 150, lp: 500, lpRange: 2200, vol: 0.06 },
+  big: { f0: 27, range: 55, lp: 220, lpRange: 700, vol: 0.07 },
+  monster: { f0: 24, range: 70, lp: 380, lpRange: 1400, vol: 0.09 },
+};
+
 // Inharmonic partials of a small metal part, for clicks, dings and clanks.
 const METAL = [1, 2.76, 5.4, 8.93];
 
@@ -918,7 +926,8 @@ export class Sound {
   // --- Cars (Adventure mode) --------------------------------------------------
 
   // A car horn: two slightly clashing reedy tones, the classic "honk".
-  horn(vol = 1) {
+  // pitch < 1 for big vehicles (the bus has a deep one).
+  horn(vol = 1, pitch = 1) {
     if (!this.ready('horn', 250)) return;
     const c = this.ctx;
     const t = c.currentTime;
@@ -941,17 +950,19 @@ export class Sound {
     for (const f of [370, 466]) {
       const o = c.createOscillator();
       o.type = 'sawtooth';
-      o.frequency.value = f * rnd(0.995, 1.005);
+      o.frequency.value = f * pitch * rnd(0.995, 1.005);
       o.connect(bp);
       o.start(t);
       o.stop(t + len + 0.1);
     }
   }
 
-  // The engine while you drive. level 0 is idle, 1 is flat out.
-  engine(on, level = 0) {
+  // The engine while you drive. level 0 is idle, 1 is flat out. kind:
+  // 'car', 'sports' (high and raspy), 'big' (bus and vans) or 'monster'.
+  engine(on, level = 0, kind = 'car') {
     if (!this.ctx) return;
     const c = this.ctx;
+    if (on && this.engineNode && this.engineNode.kind !== kind) this.engine(false);
     if (on && !this.engineNode && !this.muted) {
       const t = c.currentTime;
       const lp = c.createBiquadFilter();
@@ -989,7 +1000,7 @@ export class Sound {
       n.connect(ng).connect(trem);
       trem.connect(lp).connect(g).connect(this.voice(0.04));
       for (const o of [a, b, lfo, n]) o.start(t);
-      this.engineNode = { a, b, lfo, lp, g, n, level: 0, upd: 0 };
+      this.engineNode = { a, b, lfo, lp, g, n, level: 0, upd: 0, kind };
     } else if (!on && this.engineNode) {
       const e = this.engineNode;
       const t = c.currentTime;
@@ -1007,12 +1018,13 @@ export class Sound {
     e.upd = now;
     const k = clamp01(level);
     const t = c.currentTime;
-    const f = 38 + k * 92;
+    const K = ENGINES[e.kind] || ENGINES.car;
+    const f = K.f0 + k * K.range;
     e.a.frequency.setTargetAtTime(f, t, 0.08);
     e.b.frequency.setTargetAtTime(f * 2.01, t, 0.08);
     e.lfo.frequency.setTargetAtTime(f * 0.33, t, 0.08);
-    e.lp.frequency.setTargetAtTime(300 + k * 1300, t, 0.1);
-    e.g.gain.setTargetAtTime(0.06 + k * 0.06, t, 0.1);
+    e.lp.frequency.setTargetAtTime(K.lp + k * K.lpRange, t, 0.1);
+    e.g.gain.setTargetAtTime(K.vol + k * 0.06, t, 0.1);
   }
 
   // A police siren: a tone that wails up and down.
@@ -1146,6 +1158,76 @@ export class Sound {
       n.start();
       lfo.start();
       return { g, srcs: [n, lfo], peak: 0.5 };
+    });
+  }
+
+  // --- More car sounds -------------------------------------------------------
+
+  // A car door: a latch click and a solid thunk.
+  door() {
+    if (!this.ready('door', 150)) return;
+    const out = this.voice(0.12);
+    this.metal({ out, f: 1800, dur: 0.03, vol: 0.05 });
+    this.thump({ t: 0.03, f0: 140, f1: 70, dur: 0.12, vol: 0.18, send: 0.1 });
+    this.noiseL({ out, t: 0.03, dur: 0.08, vol: 0.08, filters: [['lowpass', 900, 400, 0.8]] });
+  }
+
+  // Metal crunching: a low thud, torn-metal noise and clanks.
+  crash(vol = 1) {
+    if (!this.ready('crash', 90) || vol < 0.05) return;
+    const out = this.voice(0.3);
+    this.thump({ f0: 110, f1: 40, dur: 0.3, vol: 0.45 * vol, send: 0.25 });
+    this.noiseL({ out, dur: 0.35, vol: 0.28 * vol, filters: [['bandpass', 1400, 500, 1.2]], color: 'pink' });
+    this.metal({ out, t: 0.02, f: 900 + Math.random() * 500, dur: 0.25, vol: 0.09 * vol });
+    this.metal({ out, t: 0.09, f: 1500 + Math.random() * 700, dur: 0.2, vol: 0.06 * vol });
+    if (vol > 0.55) this.glass(vol * 0.6, 0.05);
+  }
+
+  // Breaking glass: bright tinkles.
+  glass(vol = 1, t0 = 0) {
+    if (!this.ready('glass', 120)) return;
+    const out = this.voice(0.25, rnd(-0.3, 0.3));
+    this.noiseL({ out, t: t0, dur: 0.12, vol: 0.12 * vol, filters: [['highpass', 3500, 3500, 0.7]] });
+    for (let i = 0; i < 6; i++) this.bell({ out, t: t0 + 0.02 + Math.random() * 0.25, f: 1500 + Math.random() * 900, dur: 0.18, vol: 0.02 * vol });
+  }
+
+  // The ice cream van's little tune.
+  jingle(vol = 1) {
+    if (!this.ready('jingle', 4000)) return;
+    const out = this.voice(0.3);
+    const notes = [784, 880, 784, 659, 698, 784, 659, 523, 587, 659, 523];
+    notes.forEach((f, i) => this.pluck({ out, t: i * 0.16, f, dur: 0.22, vol: 0.05 * vol }));
+  }
+
+  // Tyres screeching while you slide.
+  skid(level) {
+    this.loop('skidNode', level, (c) => {
+      const n = c.createBufferSource();
+      n.buffer = this.white;
+      n.loop = true;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2300;
+      bp.Q.value = 5;
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 1900;
+      const og = c.createGain();
+      og.gain.value = 0.15;
+      const lfo = c.createOscillator();
+      lfo.frequency.value = 9;
+      const lg = c.createGain();
+      lg.gain.value = 60;
+      lfo.connect(lg).connect(o.frequency);
+      const g = c.createGain();
+      g.gain.value = 0;
+      n.connect(bp).connect(g);
+      o.connect(og).connect(g);
+      g.connect(this.voice(0.2));
+      n.start();
+      o.start();
+      lfo.start();
+      return { g, srcs: [n, o, lfo], peak: 0.35 };
     });
   }
 }
