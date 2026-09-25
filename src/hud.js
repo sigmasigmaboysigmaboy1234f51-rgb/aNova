@@ -170,6 +170,8 @@ export class Hud {
       s.slot.classList.toggle('none', !w);
       s.icon.title = w ? w.def.name : 'Empty. Add a gun in the Armory.';
       if (w) ctx.drawImage(gunThumb(renderer, w.id, w.build), 0, 0, s.icon.width, s.icon.height);
+      // One new picture per frame keeps gun swaps smooth.
+      break;
     }
     if (this.changed('held', p.held)) {
       this.slots.forEach((s, i) => s.slot.classList.toggle('sel', i === p.held));

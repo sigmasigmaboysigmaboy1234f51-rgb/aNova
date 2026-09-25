@@ -328,22 +328,97 @@ export class Sound {
 
   mobHurt(type, vol = 1) {
     if (!this.ready('mhurt', 40) || vol <= 0) return;
-    if (type === 'moss') this.tone({ type: 'sawtooth', f0: 170, f1: 110, dur: 0.14, vol: 0.12 * vol });
-    else if (type === 'bone') {
-      this.tone({ f0: 720, f1: 520, dur: 0.04, vol: 0.1 * vol });
-      this.tone({ f0: 640, f1: 480, dur: 0.04, vol: 0.1 * vol, delay: 0.05 });
-    } else this.tone({ type: 'sine', f0: 480, f1: 900, dur: 0.1, vol: 0.2 * vol });
+    const v = vol;
+    switch (type) {
+      case 'moss':
+        this.tone({ type: 'sawtooth', f0: 170, f1: 110, dur: 0.14, vol: 0.12 * v });
+        break;
+      case 'bone':
+        this.tone({ f0: 720, f1: 520, dur: 0.04, vol: 0.1 * v });
+        this.tone({ f0: 640, f1: 480, dur: 0.04, vol: 0.1 * v, delay: 0.05 });
+        break;
+      case 'skitter':
+        this.noise({ dur: 0.06, vol: 0.2 * v, type: 'bandpass', f0: 3200, q: 3 });
+        this.tone({ type: 'square', f0: 900, f1: 1300, dur: 0.05, vol: 0.05 * v });
+        break;
+      case 'bat':
+        this.tone({ type: 'triangle', f0: 1800, f1: 2400, dur: 0.06, vol: 0.1 * v });
+        break;
+      case 'imp':
+        this.tone({ type: 'square', f0: 520, f1: 380, dur: 0.08, vol: 0.08 * v });
+        break;
+      case 'fuse':
+        this.noise({ dur: 0.08, vol: 0.2 * v, type: 'highpass', f0: 2500 });
+        break;
+      case 'knight':
+      case 'golem':
+        this.noise({ dur: 0.08, vol: 0.3 * v, type: 'bandpass', f0: type === 'golem' ? 700 : 2200, q: 2 });
+        this.tone({ type: 'triangle', f0: type === 'golem' ? 120 : 600, f1: type === 'golem' ? 80 : 420, dur: 0.08, vol: 0.1 * v });
+        break;
+      case 'ghost':
+        this.tone({ type: 'sine', f0: 700, f1: 420, dur: 0.2, vol: 0.1 * v });
+        break;
+      default:
+        this.tone({ type: 'sine', f0: 480, f1: 900, dur: 0.1, vol: 0.2 * v });
+    }
   }
 
   mobDie(type, vol = 1) {
     if (!this.ready('mdie', 40) || vol <= 0) return;
-    if (type === 'moss') this.tone({ type: 'sawtooth', f0: 150, f1: 45, dur: 0.45, vol: 0.14 * vol });
-    else if (type === 'bone') {
-      for (let i = 0; i < 4; i++) this.noise({ dur: 0.04, vol: 0.2 * vol, type: 'bandpass', f0: 2600 - i * 300, q: 3, delay: i * 0.06 });
-    } else {
-      this.tone({ type: 'sine', f0: 800, f1: 110, dur: 0.28, vol: 0.2 * vol });
-      this.noise({ dur: 0.15, vol: 0.15 * vol, type: 'lowpass', f0: 600 });
+    const v = vol;
+    switch (type) {
+      case 'moss':
+        this.tone({ type: 'sawtooth', f0: 150, f1: 45, dur: 0.45, vol: 0.14 * v });
+        break;
+      case 'bone':
+        for (let i = 0; i < 4; i++) this.noise({ dur: 0.04, vol: 0.2 * v, type: 'bandpass', f0: 2600 - i * 300, q: 3, delay: i * 0.06 });
+        break;
+      case 'skitter':
+        for (let i = 0; i < 3; i++) this.noise({ dur: 0.04, vol: 0.18 * v, type: 'bandpass', f0: 3400 - i * 500, q: 3, delay: i * 0.05 });
+        break;
+      case 'bat':
+        this.tone({ type: 'triangle', f0: 2400, f1: 900, dur: 0.25, vol: 0.1 * v });
+        break;
+      case 'imp':
+        [700, 560, 420].forEach((f, i) => this.tone({ type: 'square', f0: f, dur: 0.07, vol: 0.07 * v, delay: i * 0.07 }));
+        break;
+      case 'fuse':
+        this.noise({ dur: 0.2, vol: 0.2 * v, type: 'lowpass', f0: 900, f1: 200 });
+        this.tone({ type: 'sine', f0: 600, f1: 200, dur: 0.15, vol: 0.1 * v });
+        break;
+      case 'knight':
+        this.noise({ dur: 0.35, vol: 0.3 * v, type: 'bandpass', f0: 1800, f1: 600, q: 1.5 });
+        this.tone({ type: 'triangle', f0: 400, f1: 150, dur: 0.3, vol: 0.1 * v });
+        break;
+      case 'golem':
+        this.noise({ dur: 0.6, vol: 0.45 * v, type: 'lowpass', f0: 900, f1: 100 });
+        this.tone({ type: 'sine', f0: 90, f1: 35, dur: 0.5, vol: 0.3 * v });
+        break;
+      case 'ghost':
+        this.tone({ type: 'sine', f0: 900, f1: 200, dur: 0.7, vol: 0.12 * v, attack: 0.05 });
+        this.tone({ type: 'sine', f0: 905, f1: 205, dur: 0.7, vol: 0.08 * v, attack: 0.05 });
+        break;
+      default:
+        this.tone({ type: 'sine', f0: 800, f1: 110, dur: 0.28, vol: 0.2 * v });
+        this.noise({ dur: 0.15, vol: 0.15 * v, type: 'lowpass', f0: 600 });
     }
+  }
+
+  fuse(vol = 1) {
+    if (!this.ready('fuse', 110) || vol <= 0.03) return;
+    this.noise({ dur: 0.12, vol: 0.14 * vol, type: 'highpass', f0: 4000 + Math.random() * 1500 });
+  }
+
+  squeak(vol = 1) {
+    if (!this.ready('squeak', 300) || vol <= 0.03) return;
+    this.tone({ type: 'triangle', f0: 2200, f1: 3000, dur: 0.08, vol: 0.08 * vol });
+    this.tone({ type: 'triangle', f0: 2600, f1: 3200, dur: 0.06, vol: 0.06 * vol, delay: 0.1 });
+  }
+
+  clank(vol = 1) {
+    if (!this.ready('clank', 60) || vol <= 0.03) return;
+    this.tone({ type: 'square', f0: 1900, f1: 1500, dur: 0.05, vol: 0.06 * vol });
+    this.noise({ dur: 0.05, vol: 0.2 * vol, type: 'bandpass', f0: 3000, q: 4 });
   }
 
   groan(vol = 1) {

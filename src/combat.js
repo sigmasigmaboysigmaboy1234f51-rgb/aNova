@@ -36,6 +36,7 @@ export class Combat {
     this.projectiles = [];
     this.booms = [];
     this.leechAcc = 0;
+    this.fireColors = FIRE;
     const scene = game.scene;
     this.boltGeo = new THREE.BoxGeometry(0.04, 0.04, 0.6);
     this.boltMat = new THREE.MeshLambertMaterial({ color: 0x8a5a33 });
@@ -464,6 +465,32 @@ export class Combat {
 
   // --- Explosions ----------------------------------------------------------
 
+  // Blow a rough ball-shaped hole. World edits reach other players like any
+  // other block change.
+  breakBlocks(at, r) {
+    const g = this.game;
+    const w = g.world;
+    const R = Math.ceil(r * 0.8);
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dz = -R; dz <= R; dz++) {
+          const x = Math.floor(at.x) + dx;
+          const y = Math.floor(at.y) + dy;
+          const z = Math.floor(at.z) + dz;
+          const bd = Math.hypot(x + 0.5 - at.x, y + 0.5 - at.y, z + 0.5 - at.z);
+          if (bd > r * 0.8 || y <= 0) continue;
+          const id = w.get(x, y, z);
+          if (!id || id === B.BEDROCK) continue;
+          if (Math.random() > 1.25 - bd / (r * 0.8)) continue;
+          w.set(x, y, z, B.AIR);
+          if (Math.random() < 0.3) {
+            g.fx.burst(x + 0.5, y + 0.5, z + 0.5, g.atlas.colors[BLOCKS[id].side], 3, { speed: 5, size: 0.14, up: 4, life: 1, spread: 0.4 });
+          }
+        }
+      }
+    }
+  }
+
   explode(pos, r, dmg, { local = false, breaks = false, small = false } = {}) {
     const g = this.game;
     const p = g.player;
@@ -498,28 +525,7 @@ export class Combat {
     const pd = pc.distanceTo(at);
     if (!p.dead && pd < r * 0.9) p.hurt(Math.max(1, Math.round(dmg * 0.3 * (1 - pd / r))), at, 'self');
 
-    if (breaks) {
-      const w = g.world;
-      const R = Math.ceil(r * 0.8);
-      for (let dx = -R; dx <= R; dx++) {
-        for (let dy = -R; dy <= R; dy++) {
-          for (let dz = -R; dz <= R; dz++) {
-            const x = Math.floor(at.x) + dx;
-            const y = Math.floor(at.y) + dy;
-            const z = Math.floor(at.z) + dz;
-            const bd = Math.hypot(x + 0.5 - at.x, y + 0.5 - at.y, z + 0.5 - at.z);
-            if (bd > r * 0.8 || y <= 0) continue;
-            const id = w.get(x, y, z);
-            if (!id || id === B.BEDROCK) continue;
-            if (Math.random() > 1.25 - bd / (r * 0.8)) continue;
-            w.set(x, y, z, B.AIR);
-            if (Math.random() < 0.3) {
-              g.fx.burst(x + 0.5, y + 0.5, z + 0.5, g.atlas.colors[BLOCKS[id].side], 3, { speed: 5, size: 0.14, up: 4, life: 1, spread: 0.4 });
-            }
-          }
-        }
-      }
-    }
+    if (breaks) this.breakBlocks(at, r);
     if (g.mp) g.mp.sendBoom(at, r, small);
   }
 }

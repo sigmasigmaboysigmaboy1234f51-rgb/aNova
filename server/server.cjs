@@ -17,7 +17,7 @@ const MAX_PLAYERS = 8;
 // Messages any player may send, and what the server does with them.
 const RELAY = new Set(['state', 'shot', 'died', 'proj', 'boom']);
 // Messages only the host may send; they go to everyone else.
-const HOST_RELAY = new Set(['mobs', 'bolt', 'pickupAdd', 'pickupGone', 'banner', 'cleared']);
+const HOST_RELAY = new Set(['mobs', 'bolt', 'mboom', 'bfx', 'pickupAdd', 'pickupGone', 'banner', 'cleared']);
 // Messages for the host's eyes only.
 const TO_HOST = new Set(['hitMob', 'pickup']);
 

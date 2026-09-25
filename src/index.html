@@ -79,7 +79,10 @@
       <div class="menu-buttons">
         <button id="btn-play" class="btn btn-go" type="button">Single player</button>
         <button id="btn-mp" class="btn" type="button">Multiplayer</button>
-        <button id="btn-armory" class="btn btn-gold" type="button">Armory</button>
+        <div class="btn-row">
+          <button id="btn-armory" class="btn btn-gold" type="button">Armory</button>
+          <button id="btn-bestiary" class="btn" type="button">Mobs</button>
+        </div>
         <button id="btn-skin" class="btn" type="button">Edit skin</button>
         <div class="btn-row">
           <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
@@ -242,6 +245,24 @@
       <div id="arm-slots" class="seg arm-slots" role="group" aria-label="Part slot"></div>
       <div id="arm-parts" class="arm-parts"></div>
     </div>
+  </div>
+</section>
+
+<section id="bestiary" class="screen armory bestiary" hidden aria-label="Mobs">
+  <header class="arm-head">
+    <h2 class="arm-title">Mobs</h2>
+    <p id="best-count" class="arm-msg"></p>
+    <button id="best-done" class="btn btn-go" type="button">Done</button>
+  </header>
+  <div class="best-body">
+    <div id="best-grid" class="best-grid panel"></div>
+    <aside class="best-side panel">
+      <canvas id="best-pic" class="best-pic" width="440" height="440" aria-hidden="true"></canvas>
+      <h3 id="best-name" class="arm-name"></h3>
+      <p id="best-kind" class="arm-kind"></p>
+      <p id="best-blurb" class="arm-desc"></p>
+      <dl id="best-stats" class="best-stats"></dl>
+    </aside>
   </div>
 </section>
 

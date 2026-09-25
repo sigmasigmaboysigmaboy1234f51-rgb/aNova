@@ -23,8 +23,24 @@ export class Profile {
     for (const id of this.guns) this.builds[id] = cleanBuild(id, data && data.builds ? data.builds[id] : null);
     this.loadout = [0, 1, 2].map((i) => (this.loadout[i] && this.guns.has(this.loadout[i]) ? this.loadout[i] : null));
     if (!this.loadout[0]) this.loadout[0] = 'ember';
+    // The bestiary: mobs you have met, and how many of each you beat.
+    this.seen = new Set((data && data.seen) || []);
+    this.kills = (data && data.kills) || {};
     this.listeners = new Set();
     this.saveTimer = 0;
+  }
+
+  markSeen(type) {
+    if (this.seen.has(type)) return false;
+    this.seen.add(type);
+    this.scheduleSave();
+    return true;
+  }
+
+  addKill(type) {
+    this.seen.add(type);
+    this.kills[type] = (this.kills[type] || 0) + 1;
+    this.scheduleSave();
   }
 
   // Owning a gun also gives you the parts it comes with.
@@ -101,6 +117,10 @@ export class Profile {
 
   changed() {
     for (const fn of this.listeners) fn();
+    this.scheduleSave();
+  }
+
+  scheduleSave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => this.save(), 400);
   }
@@ -108,7 +128,15 @@ export class Profile {
   save() {
     store.set(
       'profile',
-      JSON.stringify({ coins: this.coins, guns: [...this.guns], parts: [...this.parts], builds: this.builds, loadout: this.loadout }),
+      JSON.stringify({
+        coins: this.coins,
+        guns: [...this.guns],
+        parts: [...this.parts],
+        builds: this.builds,
+        loadout: this.loadout,
+        seen: [...this.seen],
+        kills: this.kills,
+      }),
     );
   }
 }

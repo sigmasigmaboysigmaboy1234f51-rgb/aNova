@@ -348,6 +348,12 @@ export class Player {
     this.crouchW = 0;
     this.ads = 0;
     this.leech = 0;
+    this.burnT = 0;
+    this.slowT = 0;
+    this.slowAmt = 0;
+    this.poisonT = 0;
+    this.dotT = 0;
+    this.dotBy = null;
   }
 
   aimDir(out) {
@@ -473,6 +479,7 @@ export class Player {
     }
     this.inWater = this.pos.y < SEA - 0.35;
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
+    if (this.slowT > 0) speed *= 1 - this.slowAmt;
     if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
     if (this.inWater) speed *= 0.55;
     const accel = this.onGround ? 14 : this.inWater ? 6 : 3.5;
@@ -563,7 +570,8 @@ export class Player {
 
     this.invuln -= dt;
     this.sinceHurt += dt;
-    if (this.sinceHurt > 6 && this.hp < this.maxHp) {
+    this.updateStatus(dt);
+    if (this.sinceHurt > 6 && this.hp < this.maxHp && this.poisonT <= 0) {
       this.regenT += dt;
       if (this.regenT > 2.5) {
         this.regenT = 0;
@@ -727,9 +735,65 @@ export class Player {
     if (hit) this.selection.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
   }
 
-  hurt(amount, from, source) {
+  // Burning and poison tick damage; frost slows you down.
+  updateStatus(dt) {
+    this.slowT = Math.max(0, this.slowT - dt);
+    const burning = this.burnT > 0;
+    this.burnT = Math.max(0, this.burnT - dt);
+    this.poisonT = Math.max(0, this.poisonT - dt);
+    if (this.inWater) this.burnT = 0;
+    if (burning || this.poisonT > 0) {
+      this.dotT -= dt;
+      if (this.dotT <= 0) {
+        this.dotT = burning ? 0.9 : 1.25;
+        this.dot(1, this.dotBy);
+      }
+    } else {
+      this.dotT = 0.6;
+    }
+    const g = this.game;
+    if (burning && Math.random() < dt * 14 && this.thirdPerson) {
+      g.fx.burst(this.pos.x, this.pos.y + Math.random() * 1.6, this.pos.z, g.combat.fireColors, 1, { speed: 0.5, size: 0.1, up: 2.4, life: 0.4, spread: 0.2, grav: -3 });
+    }
+  }
+
+  // Damage over time: no knockback, no invulnerability window.
+  dot(n, source) {
+    if (this.dead) return;
+    this.hp -= n;
+    this.sinceHurt = 0;
+    this.regenT = 0;
+    this.hurtT = Math.max(this.hurtT, 0.12);
+    this.game.hud.damage();
+    if (this.hp <= 0) this.die(source);
+  }
+
+  applyStatus(fx, source) {
+    if (!fx) return;
+    if (fx.slow) {
+      this.slowT = 2.2;
+      this.slowAmt = Math.min(0.7, fx.slow);
+    }
+    if (fx.burn) {
+      this.burnT = Math.max(this.burnT, 3);
+      this.dotBy = source;
+    }
+    if (fx.poison) {
+      this.poisonT = Math.max(this.poisonT, 5);
+      this.dotBy = source;
+    }
+  }
+
+  hurt(amount, from, source, fx) {
     if (this.dead || this.invuln > 0) return;
     const g = this.game;
+    if (fx && fx.shock) {
+      amount += fx.shock;
+      this.shake = Math.max(this.shake, 0.25);
+      g.sound.zap(0.8);
+    }
+    this.applyStatus(fx, source);
+    const knock = fx && fx.knock ? fx.knock : 1;
     this.hp -= amount;
     this.invuln = 0.4;
     this.sinceHurt = 0;
@@ -739,9 +803,9 @@ export class Player {
       const dx = this.pos.x - from.x;
       const dz = this.pos.z - from.z;
       const l = Math.hypot(dx, dz) || 1;
-      this.vel.x += (dx / l) * 6;
-      this.vel.z += (dz / l) * 6;
-      this.vel.y = Math.max(this.vel.y, 4.5);
+      this.vel.x += (dx / l) * 6 * knock;
+      this.vel.z += (dz / l) * 6 * knock;
+      this.vel.y = Math.max(this.vel.y, 4.5 * Math.sqrt(knock));
       const right = Math.cos(this.yaw) * (dx / l) - Math.sin(this.yaw) * (dz / l);
       this.hurtRoll = (right >= 0 ? -1 : 1) * 0.09;
     } else {
@@ -750,15 +814,20 @@ export class Player {
     this.shake = 0.12;
     g.hud.damage();
     g.sound.hurt();
-    if (this.hp <= 0) {
-      this.hp = 0;
-      this.dead = true;
-      this.deadT = 0;
-      this.killer = source;
-      this.crouch = false;
-      g.sound.death();
-      g.onPlayerDeath();
-    }
+    if (this.hp <= 0) this.die(source);
+  }
+
+  die(source) {
+    if (this.dead) return;
+    const g = this.game;
+    this.hp = 0;
+    this.dead = true;
+    this.deadT = 0;
+    this.killer = source;
+    this.crouch = false;
+    this.burnT = this.poisonT = this.slowT = 0;
+    g.sound.death();
+    g.onPlayerDeath();
   }
 
   heal(n) {

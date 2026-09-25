@@ -9,7 +9,10 @@ import { Player, MAX_NADES } from './player.js';
 import { Profile } from './profile.js';
 import { Combat } from './combat.js';
 import { Armory } from './armory.js';
+import { Bestiary } from './bestiary.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
+import { pickMob } from './mobtypes.js';
+import { BOSSES } from './boss.js';
 import { Mobs } from './mobs.js';
 import { Hud } from './hud.js';
 import { SkinPreview } from './preview.js';
@@ -43,8 +46,14 @@ const SPLASHES = [
 const WAVE_TIPS = {
   1: 'Mossheads are waking up',
   2: 'Boneheads shoot from range. Build cover.',
-  3: 'Gloops hop over two-block walls',
-  4: 'Mossheads chew through walls if you hide too long',
+  3: 'Gloops hop over two-block walls. Tiny and Giant mobs appear.',
+  4: 'Skitters leap at you. Frost and Blazing mobs have nasty hits.',
+  6: 'Ember Imps throw fire over your walls',
+  7: 'Fuses explode. Shoot them before they reach you!',
+  8: 'Rust Knights block shots with their shields. Aim for the head.',
+  9: 'Cobble Golems smash straight through walls',
+  11: 'Flappers fly over everything',
+  12: 'Specters float through blocks. Nowhere is safe.',
 };
 const LATE_TIPS = [
   'They brought friends',
@@ -59,11 +68,16 @@ const DEATH_LINES = {
   moss: 'A Mosshead got you.',
   bone: 'Shot by a Bonehead.',
   gloop: 'Flattened by a Gloop.',
+  skitter: 'A Skitter jumped you.',
+  imp: 'Roasted by an Ember Imp.',
+  fuse: 'A Fuse blew up in your face.',
+  knight: 'Cut down by a Rust Knight.',
+  golem: 'Pounded flat by a Cobble Golem.',
+  bat: 'Bitten by a Flapper.',
+  ghost: 'Spooked to death by a Specter.',
+  boss: 'Crushed by a boss.',
   self: 'Caught in your own explosion.',
 };
-
-// Coins each mob drops.
-const COINS = { moss: 5, bone: 6, gloop: 6 };
 
 function randomSeed() {
   return (Math.random() * 2 ** 31) | 0;
@@ -117,6 +131,7 @@ class Game {
     this.combat = new Combat(this);
     this.player = new Player(this);
     this.armory = new Armory(this);
+    this.bestiary = new Bestiary(this);
     this.profile.listeners.add(() => this.player.refreshLoadout());
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
@@ -239,6 +254,7 @@ class Game {
     $('#btn-skin').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
+    $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
     $('#btn-pause-armory').addEventListener('click', () => this.openArmory('paused'));
     $('#btn-sound').addEventListener('click', () => this.toggleSound());
     $('#btn-resume').addEventListener('click', () => this.resume());
@@ -345,6 +361,8 @@ class Game {
     $('#editor').hidden = s !== 'editor';
     if (s === 'armory') this.armory.show();
     else if (this.armory.open) this.armory.hide();
+    if (s === 'bestiary') this.bestiary.show();
+    else if (this.bestiary.open) this.bestiary.hide();
     $('#pause').hidden = s !== 'paused';
     $('#gameover').hidden = !(s === 'dead' && this.gameOverShown);
     this.hud.show(s === 'playing' || s === 'paused' || s === 'dead');
@@ -400,6 +418,7 @@ class Game {
     this.waveState = 'rest';
     this.waveTimer = 3;
     this.queue = [];
+    this.bossPending = null;
     this.netLeft = null;
     this.lastWaveMsg = null;
     this.gameOverShown = false;
@@ -451,6 +470,10 @@ class Game {
     this.armoryReturn = from;
     this.input.exitLock();
     this.setState('armory');
+  }
+
+  closeBestiary() {
+    this.setState('menu');
   }
 
   closeArmory() {
@@ -589,18 +612,30 @@ class Game {
   beginWave(n) {
     this.wave = n;
     const crowd = 1 + (this.mp ? this.mp.remotes.list().length * 0.5 : 0);
-    const moss = Math.round((3 + n) * crowd);
-    const bone = Math.round((n >= 2 ? Math.floor(n / 2) + (n >= 5 ? 1 : 0) : 0) * crowd);
-    const gloop = Math.round((n >= 3 ? n - 2 : 0) * crowd);
-    const q = [...Array(moss).fill('moss'), ...Array(bone).fill('bone'), ...Array(gloop).fill('gloop')];
-    for (let i = q.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [q[i], q[j]] = [q[j], q[i]];
-    }
+    const bossWave = n % 5 === 0;
+    const count = Math.round((4 + n * 1.7 + (n > 10 ? (n - 10) * 0.8 : 0)) * crowd * (bossWave ? 0.45 : 1));
+    const q = [];
+    for (let i = 0; i < count; i++) q.push(pickMob(n));
     this.queue = q;
+    this.bossPending = null;
+    if (bossWave) {
+      // Every fifth wave brings the next boss. After all ten, they come
+      // back tougher.
+      const k = n / 5 - 1;
+      const loop = Math.floor(k / BOSSES.length);
+      this.bossPending = { index: k % BOSSES.length, boost: crowd * (1 + loop * 0.8) * (1 + k * 0.04), t: 2.5 };
+    }
     this.mul = this.waveMul(n);
     this.spawnTimer = 0.5;
     this.waveState = 'fight';
+    if (this.bossPending) {
+      const b = BOSSES[this.bossPending.index];
+      const sub = `${b.name}: ${b.title}`;
+      this.hud.showBanner(`Boss wave ${n}`, sub, 3.5);
+      this.sound.roar(1);
+      if (this.mp) this.mp.sendBanner(`Boss wave ${n}`, sub, 'wave');
+      return;
+    }
     const tip = WAVE_TIPS[n] || LATE_TIPS[n % LATE_TIPS.length];
     this.hud.showBanner(`Wave ${n}`, tip);
     this.sound.wave();
@@ -614,11 +649,26 @@ class Game {
       return;
     }
     this.spawnTimer -= dt;
-    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < 18 + (this.mp ? 6 : 0)) {
-      if (this.mobs.spawn(this.queue[this.queue.length - 1], this.mul)) this.queue.pop();
-      this.spawnTimer = Math.max(0.35, 1.1 - this.wave * 0.06);
+    const bp = this.bossPending;
+    if (bp) {
+      bp.t -= dt;
+      if (bp.t <= 0) {
+        const boss = this.mobs.spawnBoss(bp.index, this.mul, bp.boost);
+        if (boss) {
+          this.bossPending = null;
+          this.profile.markSeen(boss.type);
+        } else bp.t = 0.5;
+      }
     }
-    if (!this.queue.length && this.mobs.alive() === 0) {
+    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < 24 + (this.mp ? 8 : 0)) {
+      const m = this.mobs.spawn(this.queue[this.queue.length - 1], this.mul);
+      if (m) {
+        this.queue.pop();
+        this.profile.markSeen(m.type);
+      }
+      this.spawnTimer = Math.max(0.3, 1.1 - this.wave * 0.06);
+    }
+    if (!this.queue.length && !this.bossPending && this.mobs.alive() === 0) {
       const bonus = 250 * this.wave;
       this.onWaveCleared(this.wave, bonus);
       if (this.mp) this.mp.sendCleared(this.wave, bonus);
@@ -672,8 +722,8 @@ class Game {
 
   onKill(mob, head, byId) {
     const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (this.wave - 1) * 0.1));
-    if (!byId || byId === this.myId) this.creditKill(pts, head);
-    else if (this.mp) this.mp.sendKill(byId, pts, head);
+    if (!byId || byId === this.myId) this.creditKill(pts, head, mob.type);
+    else if (this.mp) this.mp.sendKill(byId, pts, head, mob.type);
     const drop = (kind, value = 0) => {
       const x = mob.pos.x + (Math.random() - 0.5) * 0.8;
       const z = mob.pos.z + (Math.random() - 0.5) * 0.8;
@@ -681,16 +731,32 @@ class Game {
       if (this.mp) this.mp.pickupAdded(pk);
     };
     // Coins always, sometimes a bonus coin for headshots.
-    const value = Math.round((COINS[mob.type] || 5) * (1 + Math.floor(this.wave / 5) * 0.2));
-    drop('coin', value);
+    const value = Math.round((mob.def.coins || 5) * (1 + Math.floor(this.wave / 5) * 0.2));
+    // Big payouts come as a shower of coins.
+    const pieces = Math.min(12, Math.max(1, Math.round(value / 12)));
+    for (let i = 0; i < pieces; i++) drop('coin', Math.max(1, Math.round(value / pieces)));
     if (head) drop('coin', Math.ceil(value / 2));
+    if (mob.def.boss) {
+      // Bosses always drop a supply crate and a big heart.
+      const pk = this.mobs.spawnPickup('crate', mob.pos.x, this.mobs.groundAt(mob.pos.x, mob.pos.z), mob.pos.z);
+      pk.fall = 6;
+      if (this.mp) this.mp.pickupAdded(pk);
+      drop('heart');
+      drop('nade');
+      const sub = 'It dropped a supply crate!';
+      this.hud.showBanner(`${mob.def.name} defeated!`, sub, 3.5);
+      this.sound.cleared();
+      if (this.mp) this.mp.sendBanner(`${mob.def.name} defeated!`, sub, '');
+      return;
+    }
     const r = Math.random();
     if (r < 0.16) drop('heart');
     else if (r < 0.34) drop('blocks');
     else if (r < 0.4) drop('nade');
   }
 
-  creditKill(pts, head) {
+  creditKill(pts, head, type) {
+    if (type) this.profile.addKill(type);
     this.stats.kills++;
     if (head) this.stats.heads++;
     this.stats.score += pts;
@@ -722,7 +788,9 @@ class Game {
     this.gameOverShown = true;
     this.input.exitLock();
     const s = this.stats;
-    $('#go-line').textContent = DEATH_LINES[this.player.killer] || 'The cubes won this time.';
+    const boss = this.mobs.boss();
+    $('#go-line').textContent =
+      this.player.killer === 'boss' && boss ? `The ${boss.def.name} got you.` : DEATH_LINES[this.player.killer] || 'The cubes won this time.';
     $('#go-wave').textContent = String(this.wave);
     $('#go-score').textContent = s.score.toLocaleString('en-US');
     $('#go-kills').textContent = String(s.kills);
@@ -757,7 +825,8 @@ class Game {
     if (this.mp && !this.inGame) this.mp.update(dt);
 
     if (s === 'armory') this.armory.frame(dt);
-    if (s !== 'editor' && s !== 'armory') {
+    if (s === 'bestiary') this.bestiary.frame(dt);
+    if (s !== 'editor' && s !== 'armory' && s !== 'bestiary') {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);

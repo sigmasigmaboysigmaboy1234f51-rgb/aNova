@@ -10,10 +10,29 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const vec = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 
+// Only the status effects we know, with sane numbers.
+function cleanFx(fx) {
+  if (!fx || typeof fx !== 'object') return null;
+  const out = {};
+  for (const k of ['slow', 'burn', 'poison', 'shock', 'knock']) {
+    const v = Number(fx[k]);
+    if (v > 0) out[k] = Math.min(k === 'slow' ? 0.8 : 4, v);
+  }
+  return out;
+}
+
 export const DEATH_VERBS = {
   moss: 'was clobbered by a Mosshead',
   bone: 'was shot by a Bonehead',
   gloop: 'was flattened by a Gloop',
+  skitter: 'was jumped by a Skitter',
+  imp: 'was roasted by an Ember Imp',
+  fuse: 'was blown up by a Fuse',
+  knight: 'was cut down by a Rust Knight',
+  golem: 'was pounded by a Cobble Golem',
+  bat: 'was bitten by a Flapper',
+  ghost: 'was spooked to death by a Specter',
+  boss: 'was crushed by a boss',
   self: 'blew themselves up',
 };
 
@@ -134,7 +153,13 @@ export class Multiplayer {
         if (!this.isHost) g.mobs.applySnapshot(m.l);
       },
       bolt: (m) => {
-        if (!this.isHost) g.mobs.spawnBolt(vec(m.o), vec(m.v), m.m, true);
+        if (!this.isHost) g.mobs.spawnBolt(vec(m.o), vec(m.v), m.m, true, typeof m.k === 'string' ? m.k : 'bolt');
+      },
+      bfx: (m) => {
+        if (!this.isHost && m.e && typeof m.e.k === 'string') g.mobs.applyBossFx(m.e);
+      },
+      mboom: (m) => {
+        if (!this.isHost) g.mobs.applyBlast(vec(m.p), Math.min(8, Number(m.r) || 3), Number(m.d) || 0, { source: m.s, fx: cleanFx(m.fx) });
       },
       pickupAdd: (m) => {
         if (!this.isHost) g.mobs.spawnPickup(m.kind, m.p[0], m.p[1], m.p[2], m.k, m.v | 0);
@@ -157,8 +182,8 @@ export class Multiplayer {
         if (m.sound === 'wave') g.sound.wave();
       },
       cleared: (m) => g.onWaveCleared(m.n, m.bonus),
-      hurt: (m) => g.player.hurt(m.d, m.f ? { x: m.f[0], y: m.f[1], z: m.f[2] } : null, m.s),
-      kill: (m) => g.creditKill(m.pts, m.head),
+      hurt: (m) => g.player.hurt(m.d, m.f ? { x: m.f[0], y: m.f[1], z: m.f[2] } : null, m.s, cleanFx(m.fx)),
+      kill: (m) => g.creditKill(m.pts, m.head, typeof m.mt === 'string' ? m.mt : null),
       error: (m) => {
         this.errorMsg = m.msg;
       },
@@ -210,17 +235,25 @@ export class Multiplayer {
     this.net.send(msg);
   }
 
-  sendBolt(o, v, mobId) {
+  sendBolt(o, v, mobId, kind) {
     if (!this.isHost) return;
-    this.net.send({ t: 'bolt', o: [r2(o.x), r2(o.y), r2(o.z)], v: [r2(v.x), r2(v.y), r2(v.z)], m: mobId });
+    this.net.send({ t: 'bolt', o: [r2(o.x), r2(o.y), r2(o.z)], v: [r2(v.x), r2(v.y), r2(v.z)], m: mobId, k: kind });
   }
 
-  sendHurt(to, d, from, s) {
-    this.net.send({ t: 'hurt', to, d, f: from ? [r2(from.x), r2(from.y), r2(from.z)] : null, s });
+  sendBossFx(e) {
+    this.net.send({ t: 'bfx', e });
   }
 
-  sendKill(to, pts, head) {
-    this.net.send({ t: 'kill', to, pts, head: !!head });
+  sendMobBoom(at, r, d, { source, fx } = {}) {
+    this.net.send({ t: 'mboom', p: [r2(at.x), r2(at.y), r2(at.z)], r: r2(r), d, s: source, fx: fx || null });
+  }
+
+  sendHurt(to, d, from, s, fx) {
+    this.net.send({ t: 'hurt', to, d, f: from ? [r2(from.x), r2(from.y), r2(from.z)] : null, s, fx: fx || null });
+  }
+
+  sendKill(to, pts, head, type) {
+    this.net.send({ t: 'kill', to, pts, head: !!head, mt: type });
   }
 
   pickupAdded(pk) {

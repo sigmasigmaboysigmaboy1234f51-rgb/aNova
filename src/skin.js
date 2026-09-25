@@ -62,9 +62,9 @@ export function shade(hex, amt) {
   return rgbToHex(f(r), f(g), f(b));
 }
 
-const tone = (hex) => [hex, shade(hex, -0.07), shade(hex, 0.06), shade(hex, -0.03)];
+export const tone = (hex) => [hex, shade(hex, -0.07), shade(hex, 0.06), shade(hex, -0.03)];
 
-class Painter {
+export class Painter {
   constructor(ctx, rng) {
     this.ctx = ctx;
     this.rng = rng;

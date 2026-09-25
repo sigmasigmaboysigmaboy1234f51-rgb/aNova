@@ -10,12 +10,14 @@ const NOTICE = 'Blockfire. Copyright (c) 2026 sigmasigmaboysigmaboy1234f51-rgb. 
 const args = process.argv.slice(2);
 const artifactAt = args.indexOf('--artifact');
 const artifactOut = artifactAt >= 0 ? args[artifactAt + 1] : null;
+// --dev keeps names readable for debugging.
+const dev = args.includes('--dev');
 
 const result = await build({
   entryPoints: ['src/main.js'],
   bundle: true,
   format: 'iife',
-  minify: true,
+  minify: !dev,
   target: 'es2020',
   legalComments: 'eof',
   banner: { js: `/*! ${NOTICE} */` },

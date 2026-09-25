@@ -156,10 +156,10 @@ class RemotePlayer {
   }
 
   // Called by the host's mobs when they hit this player.
-  hurt(amount, from, source) {
+  hurt(amount, from, source, fx) {
     if (this.dead || this.invuln > 0) return;
     this.invuln = 0.4;
-    this.game.mp.sendHurt(this.id, amount, from, source);
+    this.game.mp.sendHurt(this.id, amount, from, source, fx);
   }
 
   onShot(from, ends, m) {

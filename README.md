@@ -40,11 +40,47 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 
 ## How it works
 
-Waves of mobs rise out of the ground and come for you. Survive as long as you can.
+Waves of mobs rise out of the ground and come for you. Survive as long as you can. Every fifth wave is a **boss wave**.
 
-- **Mosshead:** shambles toward you and slams down with both arms. Step back during the wind-up and it misses. If you hide behind a wall too long, it chews through.
-- **Bonehead:** keeps its distance and fires glowing bolts. Its eyes light up and it pulls back just before it shoots. Beat it and it rattles apart.
-- **Gloop:** a bouncy jelly cube that hops over walls two blocks high.
+### 100 mobs
+
+There are 10 mob families. New ones join as the waves go up:
+
+| Family | From wave | What it does |
+| --- | --- | --- |
+| Mosshead | 1 | Shambles at you and slams down with both arms. Step back during the wind-up and it misses. Chews through walls |
+| Bonehead | 2 | Keeps its distance and fires glowing bolts. Rattles apart when beaten |
+| Gloop | 3 | Bouncy jelly cube that hops over two-block walls |
+| Skitter | 4 | Eight-legged and fast. Pounces from a few blocks away and scrambles up walls |
+| Ember Imp | 6 | Lobs fireballs over your walls. The blast sets you on fire |
+| Fuse | 7 | Runs up, hisses, swells and explodes, taking your walls with it |
+| Rust Knight | 8 | Its shield blocks body shots from the front. Aim for the head. Charges when close |
+| Cobble Golem | 9 | Slow, very tough, punches you across the map and smashes walls |
+| Flapper | 11 | Flies over everything, circles, then dives in to bite |
+| Specter | 12 | Floats straight through blocks |
+
+Every family comes in 10 variants, which makes 100 different mobs: plain, **Tiny**, **Giant**, **Frost** (slows you), **Blazing** (sets you on fire), **Toxic** (poisons you, so you can't heal), **Shock** (fast, zaps you), **Shadow** (see-through), **Armored** (helmet and chest plate) and the rare **Golden** one that drops a pile of coins. Variants get more common the longer you last.
+
+Click **Mobs** on the title screen to see every mob and boss you have met, how tough each one is, and how many you have beaten.
+
+### 10 bosses
+
+Every fifth wave a boss bursts out of the ground: a huge bodybuilder that flexes when it arrives and gets angry when it's hurt. Each has its own moves, and they come in this order:
+
+| Wave | Boss | Moves |
+| --- | --- | --- |
+| 5 | Mossback Brute | Ground slam shockwave (jump over it!), haymakers, calls Mossheads |
+| 10 | Bone Colossus | Bone volleys, haymakers, calls Boneheads |
+| 15 | King Gloop | Belly flop from across the map, calls Gloops |
+| 20 | Magma Titan | Throws lava boulders that burn and blow holes in the ground |
+| 25 | Glacier Hulk | Freezing breath, ice-shard volleys |
+| 30 | Storm Champion | Calls lightning down on you. Watch for the yellow circles |
+| 35 | Shadow Bruiser | Teleports behind you and uppercuts |
+| 40 | Stone Goliath | Throws boulders that build walls around you |
+| 45 | Toxic Tyrant | Poison bombs that leave clouds behind |
+| 50 | Golden Overlord | Charges straight through walls, slams, gold volleys |
+
+After wave 50 they come back, tougher. Bosses always drop a supply crate.
 
 Shooting blocks cracks them and then breaks them, and every broken block goes into your inventory. Switch to a block (4–7) to build cover, or tap F. Headshots do extra damage. Mobs drop coins, and sometimes hearts, blocks or grenades. After every wave a supply crate parachutes down near you. Walk into it for a random part.
 
@@ -152,7 +188,11 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/profile.js` | Your saved coins, guns, parts and loadout |
 | `src/armory.js`, `src/thumbs.js` | The Armory screen and gun pictures |
 | `src/anim.js` | Smooth animation for players and mobs |
-| `src/mobs.js` | Mob types, behavior, pickups, multiplayer copies of mobs |
+| `src/mobtypes.js` | The 10 mob families and 10 variants |
+| `src/mob.js`, `src/mobs.js` | Mob brains, projectiles, pickups, multiplayer copies of mobs |
+| `src/mobmodels.js`, `src/mobskins.js` | Mob bodies, armor and pixel-art skins |
+| `src/boss.js`, `src/brute.js` | The 10 bosses: moves, muscles and flexing |
+| `src/bestiary.js` | The Mobs screen |
 | `src/flow.js` | Pathfinding, so mobs find their way around walls |
 | `src/multiplayer.js`, `src/net.js`, `src/remote.js` | Multiplayer: networking, other players, chat |
 | `server/server.cjs` | The multiplayer server (Node.js) |

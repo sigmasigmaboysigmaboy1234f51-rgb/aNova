@@ -529,6 +529,42 @@ body:not(.desktop) .app-only { display: none; }
   .arm-carry { grid-template-columns: 1fr; }
 }
 
+/* ---- Mobs (bestiary) ---- */
+.best-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 360px); gap: 14px; min-height: 0; }
+.best-grid { overflow: auto; max-height: calc(100vh - 120px); padding: 14px; display: grid; gap: 8px; align-content: start; }
+.best-family { margin: 6px 0 0; font: 600 13px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.best-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.best-card {
+  font: 12px/1.15 var(--font-ui);
+  color: var(--paper);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px 4px 6px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid var(--edge);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.best-card canvas { width: 72px; height: 72px; }
+.best-card.unknown { color: var(--dim); }
+.best-card.boss { background: rgba(120, 30, 20, 0.35); }
+.best-card:hover { background: rgba(255, 255, 255, 0.06); }
+.best-card[aria-pressed="true"] { outline: 3px solid var(--gold); outline-offset: -3px; }
+.best-card:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.best-side { display: grid; gap: 8px; align-content: start; padding: 16px; }
+.best-pic { width: 100%; max-width: 280px; aspect-ratio: 1; justify-self: center; background: radial-gradient(ellipse at 50% 60%, rgba(255, 210, 63, 0.1), transparent 70%); }
+.best-side .arm-kind, .best-side .arm-desc { margin: 0; }
+.best-stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 4px 0 0; font-size: 14px; }
+.best-stats dt { color: var(--muted); }
+.best-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 800px) {
+  .best-body { grid-template-columns: minmax(0, 1fr); }
+  .best-side { grid-row: 1; }
+  .best-grid { max-height: none; }
+}
+
 /* ---- Pause and game over ---- */
 .overlay { display: grid; place-items: center; background: rgba(10, 9, 7, 0.55); }
 .overlay.dead { background: rgba(96, 10, 6, 0.5); }

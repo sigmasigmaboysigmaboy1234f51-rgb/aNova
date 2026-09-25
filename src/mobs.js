@@ -1,774 +1,85 @@
 import * as THREE from 'three';
-import { moveEntity } from './physics.js';
-import { buildHumanoid, buildGloop, PX } from './model.js';
-import { paintMoss, paintBone, paintGloop, makeSkinTexture } from './skin.js';
 import { FlowField } from './flow.js';
 import { SX, SZ, SEA, B, BLOCKS } from './world.js';
 import { TILE_UV, T } from './textures.js';
-import { Rig, poseMoss, poseBone, ease } from './anim.js';
-import { wrapAngle, clamp } from './util.js';
 import { MAX_NADES } from './player.js';
+import { Mob, MF } from './mob.js';
+import { Boss, BOSSES } from './boss.js';
+import { MOB_TYPES, TYPE_LIST } from './mobtypes.js';
 
-export const MOB_TYPES = {
-  moss: {
-    name: 'Mosshead',
-    hp: 12,
-    speed: 3.2,
-    hw: 0.3,
-    h: 1.8,
-    dmg: 3,
-    score: 100,
-    digs: true,
-    death: 1.2,
-    colors: ['#6f8c55', '#3d6a6e', '#5a7446', '#4f7d2f'],
-  },
-  bone: {
-    name: 'Bonehead',
-    hp: 9,
-    speed: 3.0,
-    hw: 0.3,
-    h: 1.85,
-    dmg: 3,
-    score: 150,
-    digs: false,
-    death: 1.6,
-    colors: ['#dcd6c4', '#c4bca6', '#3b3446'],
-  },
-  gloop: {
-    name: 'Gloop',
-    hp: 8,
-    speed: 5.4,
-    hw: 0.45,
-    h: 0.9,
-    dmg: 3,
-    score: 120,
-    digs: true,
-    death: 0.6,
-    colors: ['#9b5fd1', '#caa6ee', '#6d3aa0'],
-  },
-};
-const TYPE_LIST = ['moss', 'bone', 'gloop'];
-for (const t of Object.values(MOB_TYPES)) t.colorObjs = t.colors.map((c) => new THREE.Color(c));
+// All the mobs, their projectiles and the pickups they drop.
 
-const DIRS8 = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-  [1, 1],
-  [1, -1],
-  [-1, 1],
-  [-1, -1],
-];
-const ATTACK_TIME = 0.5;
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
-const BOLT_COLORS = [new THREE.Color('#bff3ff'), new THREE.Color('#6fd6f0')];
-const FIRE_COLORS = ['#fff2b0', '#ffd36b', '#ff9a3c', '#ff6a20'].map((c) => new THREE.Color(c));
-const FROST_COLORS = ['#ffffff', '#d8f6ff', '#9fe8ff'].map((c) => new THREE.Color(c));
-const COIN_COLORS = ['#fff2a8', '#ffd84a', '#e0a526'].map((c) => new THREE.Color(c));
+const r2 = (v) => Math.round(v * 100) / 100;
+const cols = (...c) => c.map((x) => new THREE.Color(x));
+const COIN_COLORS = cols('#fff2a8', '#ffd84a', '#e0a526');
 const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120 };
 const CRATE_DROP = 18;
-const r2 = (v) => Math.round(v * 100) / 100;
+const TYPE_INDEX = new Map(TYPE_LIST.map((t, i) => [t, i]));
+const DUST = cols('#8a7a5a', '#6b5a45', '#a89a7a');
+const FROST = cols('#ffffff', '#c9ecff', '#9fe8ff');
+const TOXIC = cols('#9be070', '#c8f25a');
+const SHADOW_PUFF = cols('#1a1620', '#2a2236', '#5a4a78', '#b46cff');
 
-function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
-  let tmin = 0;
-  let tmax = Infinity;
-  const lo = [x0, y0, z0];
-  const hi = [x1, y1, z1];
-  const oo = [o.x, o.y, o.z];
-  const dd = [d.x, d.y, d.z];
-  for (let a = 0; a < 3; a++) {
-    if (Math.abs(dd[a]) < 1e-9) {
-      if (oo[a] < lo[a] || oo[a] > hi[a]) return -1;
-      continue;
-    }
-    let t1 = (lo[a] - oo[a]) / dd[a];
-    let t2 = (hi[a] - oo[a]) / dd[a];
-    if (t1 > t2) [t1, t2] = [t2, t1];
-    if (t1 > tmin) tmin = t1;
-    if (t2 < tmax) tmax = t2;
-    if (tmin > tmax) return -1;
-  }
-  return tmin;
-}
-
-class Mob {
-  // remote = true for a copy that mirrors a mob simulated by the host.
-  constructor(mobs, type, x, y, z, mul, id, remote = false) {
-    this.mobs = mobs;
-    this.game = mobs.game;
-    this.id = id;
-    this.remote = remote;
-    this.type = type;
-    this.def = MOB_TYPES[type];
-    this.pos = new THREE.Vector3(x, y, z);
-    this.vel = new THREE.Vector3();
-    this.net = { x, y, z, yaw: 0, ground: true, flags: 0, spawn: 0, hp: 1 };
-    this.hw = this.def.hw;
-    this.h = this.def.h;
-    this.maxHp = this.def.hp * mul.hp;
-    this.hp = this.maxHp;
-    this.speed = this.def.speed * mul.speed;
-    this.state = 'spawn';
-    this.spawnT = 0;
-    this.deathT = 0;
-    this.gone = false;
-    this.yaw = Math.random() * Math.PI * 2;
-    this.t = Math.random() * 10;
-    this.attackCd = 1 + Math.random();
-    this.attackT = -1;
-    this.hurtT = 0;
-    this.drawT = 0;
-    this.fired = 0;
-    this.wobble = 0;
-    this.aiming = false;
-    this.losT = 0;
-    this.los = false;
-    this.jumpCd = 0;
-    this.hopCd = 0.5 + Math.random() * 0.5;
-    this.stuck = 0;
-    this.progressT = 0;
-    this.lastX = x;
-    this.lastZ = z;
-    this.digT = 0;
-    this.side = Math.random() < 0.5 ? 1 : -1;
-    this.strafeT = 1;
-    this.onGround = true;
-    this.target = null;
-    this.targetT = 0;
-    this.hitDir = new THREE.Vector3(0, 0, 1);
-    this.debris = null;
-    this.burnT = 0;
-    this.burnDps = 0;
-    this.burnBy = 0;
-    this.burnTick = 0.5;
-    this.slowT = 0;
-    this.slowAmt = 0;
-    const tex = mobs.tex[type];
-    this.model = type === 'gloop' ? buildGloop(tex) : buildHumanoid(tex, { limb: type === 'bone' ? 2 : 0 });
-    this.rig = type === 'gloop' ? null : new Rig(this.model);
-    if (type === 'bone') this.addBow();
-    this.game.scene.add(this.model.root);
-    this.emissives = this.model.materials.filter((m) => m.emissive);
-    this.sync(0);
-  }
-
-  addBow() {
-    const arm = this.model.parts.armR;
-    const bow = new THREE.Mesh(this.mobs.bowGeo, this.mobs.bowMat);
-    bow.position.set(0, -10.5 * PX, 0);
-    arm.add(bow);
-    this.shard = new THREE.Mesh(this.mobs.shardGeo, this.mobs.boltMat);
-    this.shard.position.set(0, -12.5 * PX, 0);
-    this.shard.visible = false;
-    arm.add(this.shard);
-  }
-
-  vol() {
-    const p = this.game.player.pos;
-    return Math.max(0, 1 - Math.hypot(p.x - this.pos.x, p.y - this.pos.y, p.z - this.pos.z) / 40);
-  }
-
-  yOffset() {
-    if (this.state === 'spawn') return -(1 - ease(this.spawnT)) * this.h;
-    if (this.state === 'dying' && this.type === 'moss' && this.deathT > 0.65) return -((this.deathT - 0.65) / 0.55) * 0.7;
-    return 0;
-  }
-
-  tickTimers(dt) {
-    this.t += dt;
-    this.hurtT = Math.max(0, this.hurtT - dt);
-    this.fired = Math.max(0, this.fired - dt * 3);
-    this.wobble = Math.max(0, this.wobble - dt * 3);
-    this.attackCd -= dt;
-    this.jumpCd -= dt;
-    if (this.attackT >= 0) {
-      this.attackT += dt / ATTACK_TIME;
-      if (this.attackT >= 1) this.attackT = -1;
-    }
-    this.burnT = Math.max(0, this.burnT - dt);
-    this.slowT = Math.max(0, this.slowT - dt);
-    if (this.state !== 'dying') this.statusFx(dt);
-  }
-
-  get burning() {
-    return this.remote ? !!(this.net.flags & 32) : this.burnT > 0;
-  }
-
-  get slowed() {
-    return this.remote ? !!(this.net.flags & 64) : this.slowT > 0;
-  }
-
-  // Flames and frost you can see on a mob that is burning or slowed.
-  statusFx(dt) {
-    const g = this.game;
-    const r = () => (Math.random() - 0.5) * this.hw * 2;
-    if (this.burning && Math.random() < dt * 22) {
-      g.fx.burst(this.pos.x + r(), this.pos.y + Math.random() * this.h, this.pos.z + r(), FIRE_COLORS, 1, {
-        speed: 0.5,
-        size: 0.1,
-        up: 2.4,
-        life: 0.45,
-        spread: 0.05,
-        grav: -3,
-      });
-    }
-    if (this.slowed && Math.random() < dt * 12) {
-      g.fx.burst(this.pos.x + r(), this.pos.y + Math.random() * this.h, this.pos.z + r(), FROST_COLORS, 1, {
-        speed: 0.3,
-        size: 0.07,
-        up: 0.2,
-        life: 0.8,
-        spread: 0.05,
-        grav: 2,
-      });
-    }
-  }
-
-  slowMul() {
-    return this.slowT > 0 ? 1 - this.slowAmt : 1;
-  }
-
-  // Fire and frost from gun cores. Only the computer running the mob keeps
-  // track of them.
-  applyFx(fx, byId) {
-    if (!fx) return;
-    if (fx.burn > 0) {
-      this.burnDps = this.burnT > 0 ? Math.max(this.burnDps, fx.burn) : fx.burn;
-      this.burnT = 3;
-      this.burnBy = byId;
-    }
-    if (fx.slow > 0) {
-      this.slowAmt = this.slowT > 0 ? Math.max(this.slowAmt, fx.slow) : fx.slow;
-      this.slowT = 2.5;
-    }
-  }
-
-  // Runs the mob's brain. Only the host (or single player) does this.
-  update(dt) {
-    const g = this.game;
-    const w = g.world;
-    this.tickTimers(dt);
-
-    if (this.state === 'spawn') {
-      this.spawnT += dt / 0.9;
-      this.spawnDust();
-      if (this.spawnT >= 1) {
-        this.spawnT = 1;
-        this.state = 'live';
-      }
-      this.sync(dt);
-      return;
-    }
-    if (this.state === 'dying') {
-      this.updateDeath(dt);
-      return;
-    }
-    if (this.burnT > 0) {
-      this.burnTick -= dt;
-      if (this.burnTick <= 0) {
-        this.burnTick = 0.5;
-        this.hp -= this.burnDps * 0.5;
-        this.hurtT = Math.max(this.hurtT, 0.08);
-        if (this.hp <= 0) {
-          this.startDeath(true);
-          g.onKill(this, false, this.burnBy);
-          return;
+// Everything mobs throw or shoot. Bosses add their own kinds.
+// boom: explodes in this radius on impact. breaks: the blast digs blocks.
+export const BOLTS = {
+  bolt: { color: 0xbff3ff, grav: 5, dmg: 3, colors: cols('#bff3ff', '#6fd6f0') },
+  'bolt:frost': { color: 0x9fe8ff, grav: 5, dmg: 3, fx: { slow: 0.45 }, colors: cols('#ffffff', '#9fe8ff') },
+  'bolt:blaze': { color: 0xff7a2f, grav: 5, dmg: 3, fx: { burn: 1 }, colors: cols('#ffd36b', '#ff6a20') },
+  'bolt:toxic': { color: 0x9be070, grav: 5, dmg: 3, fx: { poison: 1 }, colors: cols('#c8f25a', '#7bc62a') },
+  'bolt:shock': { color: 0xc8a4ff, grav: 5, dmg: 3, fx: { shock: 2 }, colors: cols('#fff6a0', '#c8a4ff') },
+  'bolt:golden': { color: 0xffd84a, grav: 5, dmg: 3, colors: cols('#fff6c8', '#ffd84a') },
+  'bolt:shadow': { color: 0xd27bff, grav: 5, dmg: 3, colors: cols('#d27bff', '#3a3050') },
+  fire: { color: 0xff7a2f, cube: 0.24, grav: 12, dmg: 3, boom: 1.5, fx: { burn: 1 }, life: 4, trail: cols('#ffd36b', '#ff6a20', '#3a3030'), colors: cols('#fff2b0', '#ff9a3c', '#ff6a20') },
+  // Boss ammo.
+  bone: { color: 0xe8e2cc, cube: 0.26, grav: 5, dmg: 4, colors: cols('#e8e2cc', '#c4bca6') },
+  ice: { color: 0xc9ecff, grav: 4, dmg: 3, fx: { slow: 0.5 }, colors: cols('#ffffff', '#9fe8ff') },
+  storm: { color: 0xfff6a0, grav: 4, dmg: 3, fx: { shock: 2 }, colors: cols('#fff6a0', '#c8a4ff') },
+  shade: { color: 0xb46cff, cube: 0.22, grav: 3, dmg: 4, colors: cols('#d27bff', '#3a3050'), trail: cols('#2a2236', '#5a4a78') },
+  gold: { color: 0xffd84a, cube: 0.22, grav: 5, dmg: 4, colors: cols('#fff6c8', '#ffd84a') },
+  lava: { color: 0xff5a1a, cube: 0.75, grav: 14, dmg: 7, boom: 2.8, breaks: true, fx: { burn: 1 }, life: 6, trail: cols('#ffd36b', '#ff6a20', '#2a1a14'), colors: cols('#ff9a3c', '#ff6a20') },
+  rock: {
+    color: 0x7a7a7a,
+    cube: 0.8,
+    grav: 14,
+    dmg: 7,
+    boom: 2.2,
+    life: 6,
+    trail: cols('#8a8a8a', '#5e5e5e'),
+    colors: cols('#8a8a8a', '#5e5e5e'),
+    // The boulder breaks into a pile of cobblestone.
+    onBoom(g, b) {
+      if (!g.authority) return;
+      const w = g.world;
+      const x0 = Math.floor(b.pos.x);
+      const z0 = Math.floor(b.pos.z);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          if (Math.abs(dx) + Math.abs(dz) > 1 && Math.random() < 0.5) continue;
+          const y = g.mobs.groundAt(x0 + dx + 0.5, z0 + dz + 0.5);
+          if (y <= SEA || g.combat.occupied(x0 + dx, y, z0 + dz)) continue;
+          w.set(x0 + dx, y, z0 + dz, B.COBBLE);
         }
       }
-    }
-    this.targetT -= dt;
-    if (this.targetT <= 0 || !this.target || this.target.dead) {
-      this.target = this.mobs.pickTarget(this.pos);
-      this.targetT = 0.5;
-    }
-    const p = this.target;
-    let wx = 0;
-    let wz = 0;
-    let nextStand = -1;
-    let dist = 99;
-    let dx = 0;
-    let dz = 0;
-    let dy = 0;
-    this.aiming = false;
-    if (!p) {
-      wx = Math.sin(this.t * 0.4 + this.side) * 0.4;
-      wz = Math.cos(this.t * 0.3) * 0.4;
-    } else {
-      dx = p.pos.x - this.pos.x;
-      dz = p.pos.z - this.pos.z;
-      dist = Math.hypot(dx, dz) || 1e-3;
-      dy = p.pos.y - this.pos.y;
-      const toward = () => {
-        wx = dx / dist;
-        wz = dz / dist;
-      };
-      const follow = () => {
-        const s = this.pathStep();
-        if (s) {
-          wx = s.x;
-          wz = s.z;
-          nextStand = s.stand;
-        } else toward();
-      };
-      if (this.type === 'bone') {
-        this.losT -= dt;
-        if (this.losT <= 0) {
-          this.losT = 0.2;
-          this.los = dist < 26 && this.canSee(p);
-        }
-        this.aiming = this.los && dist < 22;
-        if (!this.los || dist > 15) follow();
-        else if (dist < 7) {
-          wx = -dx / dist;
-          wz = -dz / dist;
-        } else {
-          this.strafeT -= dt;
-          if (this.strafeT <= 0) {
-            this.side = -this.side;
-            this.strafeT = 1.2 + Math.random() * 2;
-          }
-          wx = (-dz / dist) * this.side * 0.6;
-          wz = (dx / dist) * this.side * 0.6;
-        }
-        if (this.aiming && this.attackCd <= 0) {
-          if (this.drawT === 0) g.sound.charge(this.vol());
-          this.drawT += dt;
-          if (this.drawT > 0.6) {
-            this.shoot(p);
-            this.drawT = 0;
-            this.attackCd = 2 + Math.random() * 0.9;
-          }
-        } else {
-          this.drawT = Math.max(0, this.drawT - dt * 2);
-        }
-      } else if (dist < 2 && Math.abs(dy) < 1.8) {
-        toward();
-      } else {
-        follow();
-      }
-    }
-
-    if (this.type === 'gloop') this.hop(dt, wx, wz);
-    else this.walk(dt, wx, wz, nextStand);
-
-    this.progressT += dt;
-    if (this.progressT > 0.8) {
-      const moved = Math.hypot(this.pos.x - this.lastX, this.pos.z - this.lastZ);
-      this.stuck = (wx || wz) && moved < 0.3 && dist > 1.2 ? this.stuck + 1 : 0;
-      this.lastX = this.pos.x;
-      this.lastZ = this.pos.z;
-      this.progressT = 0;
-    }
-    if (p && this.stuck >= 2 && this.def.digs) this.dig(dt, dx / dist, dz / dist);
-
-    if (p) {
-      // Mossheads wind up, then slam. Step back in time and it misses.
-      if (this.type === 'moss') {
-        if (this.attackT < 0 && dist < 1.4 && dy > -1.2 && dy < 1.6 && this.attackCd <= 0) {
-          this.attackT = 0;
-          this.attackCd = 1.1;
-          this.dealt = false;
-        }
-        if (this.attackT >= 0.45 && !this.dealt) {
-          this.dealt = true;
-          if (dist < 1.9 && dy > -1.2 && dy < 1.8) p.hurt(this.def.dmg, this.pos, 'moss');
-        }
-        if (Math.random() < dt * 0.3) g.sound.groan(this.vol());
-      }
-      if (this.type === 'gloop' && this.attackCd <= 0) {
-        const cy = this.pos.y + 0.45;
-        const py = p.pos.y + 0.9;
-        if (dist < this.hw + p.hw + 0.25 && Math.abs(cy - py) < 1.3) {
-          p.hurt(this.def.dmg, this.pos, 'gloop');
-          this.attackCd = 0.9;
-        }
-      }
-    }
-
-    const faceTarget = p && (this.type === 'bone' ? this.aiming : dist < 5);
-    const hs = Math.hypot(this.vel.x, this.vel.z);
-    const targetYaw = faceTarget ? Math.atan2(dx, dz) : hs > 0.3 ? Math.atan2(this.vel.x, this.vel.z) : this.yaw;
-    this.yaw += wrapAngle(targetYaw - this.yaw) * Math.min(1, dt * 8);
-    this.sync(dt);
-  }
-
-  spawnDust() {
-    const g = this.game;
-    if (Math.random() > 0.5) return;
-    const below = g.world.get(Math.floor(this.pos.x), Math.floor(this.pos.y) - 1, Math.floor(this.pos.z));
-    if (!below) return;
-    g.fx.burst(this.pos.x, this.pos.y + 0.1, this.pos.z, g.atlas.colors[BLOCKS[below].top], 1, {
-      speed: 1.5,
-      size: 0.09,
-      up: 3,
-      life: 0.5,
-      spread: 0.35,
-    });
-  }
-
-  // Mirrors the host's copy of this mob: glide toward where it says the mob
-  // is and play the same animations.
-  updatePuppet(dt) {
-    this.tickTimers(dt);
-    if (this.state === 'dying') {
-      this.updateDeath(dt);
-      return;
-    }
-    const n = this.net;
-    const k = 1 - Math.exp(-12 * dt);
-    const ox = this.pos.x;
-    const oz = this.pos.z;
-    if (Math.hypot(n.x - this.pos.x, n.y - this.pos.y, n.z - this.pos.z) > 5) this.pos.set(n.x, n.y, n.z);
-    else {
-      this.pos.x += (n.x - this.pos.x) * k;
-      this.pos.y += (n.y - this.pos.y) * k;
-      this.pos.z += (n.z - this.pos.z) * k;
-    }
-    if (dt > 0) this.vel.set((this.pos.x - ox) / dt, 0, (this.pos.z - oz) / dt);
-    this.yaw += wrapAngle(n.yaw - this.yaw) * k;
-    this.spawnT = this.state === 'spawn' ? n.spawn : 1;
-    if (this.state === 'spawn') this.spawnDust();
-    if (this.type === 'gloop' && this.onGround && !n.ground) this.game.sound.hop(this.vol());
-    this.onGround = n.ground;
-    this.aiming = !!(n.flags & 1);
-    this.drawT = n.flags & 2 ? Math.min(0.6, this.drawT + dt) : Math.max(0, this.drawT - dt * 2);
-    if (this.type === 'moss' && Math.random() < dt * 0.3) this.game.sound.groan(this.vol());
-    this.sync(dt);
-  }
-
-  applyNet(e) {
-    const n = this.net;
-    n.x = e[2];
-    n.y = e[3];
-    n.z = e[4];
-    n.yaw = e[5];
-    const flags = e[7];
-    if (flags & 4 && !(n.flags & 4)) this.attackT = 0;
-    if (flags & 8 && !(n.flags & 8) && this.hurtT <= 0) this.hurtT = 0.2;
-    n.flags = flags;
-    n.ground = !!(flags & 16);
-    n.spawn = e[8];
-    n.hp = e[9];
-    const st = e[6];
-    if (st === 1 && this.state === 'spawn') this.state = 'live';
-    if (st === 2 && this.state !== 'dying') this.startDeath(false);
-  }
-
-  pathStep() {
-    const f = this.mobs.flow;
-    const cx = Math.floor(this.pos.x);
-    const cz = Math.floor(this.pos.z);
-    const d0 = f.at(cx, cz);
-    if (!isFinite(d0)) return null;
-    let best = d0;
-    let bx = 0;
-    let bz = 0;
-    for (const [ox, oz] of DIRS8) {
-      const d = f.at(cx + ox, cz + oz);
-      if (d < best - 1e-3) {
-        best = d;
-        bx = ox;
-        bz = oz;
-      }
-    }
-    if (bx === 0 && bz === 0) return null;
-    const tx = cx + bx + 0.5 - this.pos.x;
-    const tz = cz + bz + 0.5 - this.pos.z;
-    const l = Math.hypot(tx, tz) || 1;
-    return { x: tx / l, z: tz / l, stand: f.standAt(cx + bx, cz + bz) };
-  }
-
-  walk(dt, wx, wz, nextStand) {
-    const slow = (this.stuck >= 2 ? 0.4 : 1) * (this.drawT > 0 ? 0.4 : 1) * (this.attackT >= 0 ? 0.3 : 1) * this.slowMul();
-    const sp = this.speed * slow;
-    const k = Math.min(1, (this.onGround ? 12 : 3) * dt);
-    this.vel.x += (wx * sp - this.vel.x) * k;
-    this.vel.z += (wz * sp - this.vel.z) * k;
-    const inWater = this.pos.y < SEA - 0.4;
-    this.vel.y = Math.max(this.vel.y - (inWater ? 12 : 30) * dt, inWater ? -2.5 : -40);
-    if (inWater && (wx || wz)) this.vel.y = Math.min(this.vel.y + 26 * dt, 3);
-    moveEntity(this.game.world, this, dt);
-    const wantsUp = nextStand > Math.floor(this.pos.y + 0.01);
-    if ((this.onGround || inWater) && this.jumpCd <= 0 && (wx || wz) && (this.hitX || this.hitZ || wantsUp)) {
-      this.vel.y = 8.8;
-      this.jumpCd = 0.4;
-    }
-  }
-
-  // Gloops travel in big bouncy hops that clear two-block walls.
-  hop(dt, wx, wz) {
-    if (this.onGround) {
-      const f = Math.max(0, 1 - dt * 10);
-      this.vel.x *= f;
-      this.vel.z *= f;
-      this.hopCd -= dt;
-      if (this.hopCd <= 0 && (wx || wz)) {
-        this.vel.y = 11;
-        this.vel.x = wx * this.speed * this.slowMul();
-        this.vel.z = wz * this.speed * this.slowMul();
-        this.hopCd = (0.55 + Math.random() * 0.45) / this.slowMul();
-        this.game.sound.hop(this.vol());
-      }
-    }
-    const inWater = this.pos.y < SEA - 0.4;
-    this.vel.y = Math.max(this.vel.y - (inWater ? 12 : 28) * dt, inWater ? -2.5 : -40);
-    if (inWater) this.vel.y = Math.min(this.vel.y + 24 * dt, 3);
-    moveEntity(this.game.world, this, dt);
-  }
-
-  // When a wall is in the way for too long, chew through it.
-  dig(dt, dx, dz) {
-    this.digT -= dt;
-    if (this.digT > 0) return;
-    this.digT = 0.8;
-    const g = this.game;
-    const w = g.world;
-    const fx = Math.floor(this.pos.x + dx * (this.hw + 0.55));
-    const fz = Math.floor(this.pos.z + dz * (this.hw + 0.55));
-    const fy = Math.floor(this.pos.y + 0.01);
-    const ys = this.type === 'gloop' ? [fy, fy + 1] : [fy + 1, fy];
-    for (const y of ys) {
-      const id = w.get(fx, y, fz);
-      if (!id || id === B.BEDROCK) continue;
-      const res = w.hitBlock(fx, y, fz, 1);
-      if (!res) continue;
-      const c = g.atlas.colors[res.info.side];
-      g.fx.burst(fx + 0.5, y + 0.5, fz + 0.5, c, res.broken ? 14 : 4, { speed: 2, size: 0.1, life: 0.6, spread: 0.4 });
-      if (this.vol() > 0.2) {
-        if (res.broken) g.sound.blockBreak(res.info.sound);
-        else g.sound.blockHit(res.info.sound);
-      }
-      if (this.type === 'moss' && this.attackT < 0) this.attackT = 0.3;
-      else this.wobble = 1;
-      return;
-    }
-  }
-
-  canSee(p) {
-    const ox = this.pos.x;
-    const oy = this.pos.y + 1.5;
-    const oz = this.pos.z;
-    const tx = p.pos.x - ox;
-    const ty = p.pos.y + 1.5 - oy;
-    const tz = p.pos.z - oz;
-    const len = Math.hypot(tx, ty, tz) || 1;
-    return !this.game.world.raycast(ox, oy, oz, tx / len, ty / len, tz / len, len);
-  }
-
-  shoot(p) {
-    const o = new THREE.Vector3(this.pos.x, this.pos.y + 1.45, this.pos.z);
-    const speed = 20;
-    const target = vA.set(p.pos.x, p.pos.y + 1.1, p.pos.z);
-    const t = o.distanceTo(target) / speed;
-    target.addScaledVector(p.vel, t * 0.5);
-    target.y += 0.5 * 5 * t * t;
-    const dir = target.sub(o).normalize();
-    dir.x += (Math.random() - 0.5) * 0.05;
-    dir.y += (Math.random() - 0.5) * 0.03;
-    dir.z += (Math.random() - 0.5) * 0.05;
-    dir.normalize();
-    this.fired = 1;
-    this.mobs.spawnBolt(o, dir.multiplyScalar(speed), this.id);
-    this.game.sound.bolt(this.vol());
-  }
-
-  hitTest(o, d, maxT) {
-    const x = this.pos.x;
-    const y = this.pos.y + this.yOffset();
-    const z = this.pos.z;
-    if (this.type === 'gloop') {
-      const t = rayBox(o, d, x - 0.47, y, z - 0.47, x + 0.47, y + 0.92, z + 0.47);
-      return t >= 0 && t < maxT ? { t, head: false } : null;
-    }
-    const tb = rayBox(o, d, x - 0.36, y, z - 0.36, x + 0.36, y + 1.36, z + 0.36);
-    const th = rayBox(o, d, x - 0.3, y + 1.36, z - 0.3, x + 0.3, y + 1.92, z + 0.3);
-    const okB = tb >= 0 && tb < maxT;
-    const okH = th >= 0 && th < maxT;
-    if (okH && (!okB || th <= tb)) return { t: th, head: true };
-    if (okB) return { t: tb, head: false };
-    return null;
-  }
-
-  // fx carries burn / slow from the shooter's gun core.
-  damage(amount, dir, head, at, byId, fx) {
-    if (this.state === 'dying' || this.gone) return;
-    const g = this.game;
-    this.hurtT = 0.2;
-    this.wobble = 1;
-    this.hitDir.set(dir.x, 0, dir.z).normalize();
-    if (at) g.fx.burst(at.x, at.y, at.z, this.def.colorObjs, 6, { speed: 2.5, size: 0.08, up: 1.5, life: 0.5, spread: 0.1 });
-    if (this.remote) {
-      // The host decides what the hit does; we just show it landed.
-      if (g.mp) g.mp.sendHitMob(this, amount, head, dir, fx);
-      g.sound.mobHurt(this.type, 1);
-      return;
-    }
-    this.applyFx(fx, byId);
-    this.hp -= amount;
-    this.vel.x += dir.x * 3.5;
-    this.vel.z += dir.z * 3.5;
-    if (this.onGround) this.vel.y = Math.max(this.vel.y, 3);
-    if (this.hp <= 0) {
-      this.startDeath(true);
-      g.onKill(this, head, byId);
-    } else {
-      g.sound.mobHurt(this.type, 1);
-    }
-  }
-
-  startDeath(loud) {
-    this.state = 'dying';
-    this.deathT = 0;
-    this.hurtT = 0.2;
-    this.aiming = false;
-    this.attackT = -1;
-    if (this.shard) this.shard.visible = false;
-    this.game.sound.mobDie(this.type, loud ? 1 : this.vol());
-    if (this.type === 'bone') this.breakApart();
-  }
-
-  // Boneheads rattle apart: every limb flies off and tumbles.
-  breakApart() {
-    const scene = this.game.scene;
-    this.model.root.updateMatrixWorld(true);
-    this.debris = [];
-    for (const name of ['head', 'body', 'armR', 'armL', 'legR', 'legL']) {
-      const obj = this.model.parts[name];
-      scene.attach(obj);
-      const v = new THREE.Vector3(
-        (Math.random() - 0.5) * 3 + this.hitDir.x * 2.5,
-        2 + Math.random() * 3.5,
-        (Math.random() - 0.5) * 3 + this.hitDir.z * 2.5,
-      );
-      const spin = new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
-      this.debris.push({ obj, v, spin });
-    }
-  }
-
-  updateDeath(dt) {
-    this.deathT += dt;
-    const w = this.game.world;
-    if (this.debris) {
-      for (const d of this.debris) {
-        d.v.y -= 22 * dt;
-        const o = d.obj.position;
-        o.addScaledVector(d.v, dt);
-        const fy = Math.floor(o.y - 0.08);
-        if (w.solid(Math.floor(o.x), fy, Math.floor(o.z))) {
-          o.y = fy + 1.08;
-          if (d.v.y < 0) d.v.y *= -0.35;
-          d.v.x *= 0.7;
-          d.v.z *= 0.7;
-          d.spin.multiplyScalar(0.7);
-        }
-        d.obj.rotation.x += d.spin.x * dt;
-        d.obj.rotation.y += d.spin.y * dt;
-        d.obj.rotation.z += d.spin.z * dt;
-      }
-    } else if (!this.remote) {
-      this.vel.x *= 0.9;
-      this.vel.z *= 0.9;
-      this.vel.y = Math.max(this.vel.y - 30 * dt, -40);
-      moveEntity(w, this, dt);
-    }
-    if (this.deathT > this.def.death) this.remove(true);
-    else this.sync(dt);
-  }
-
-  remove(withPuff) {
-    if (this.gone) return;
-    this.gone = true;
-    const g = this.game;
-    if (withPuff) {
-      if (this.debris) {
-        for (const d of this.debris) {
-          const o = d.obj.position;
-          g.fx.burst(o.x, o.y, o.z, this.def.colorObjs, 5, { speed: 2, size: 0.1, up: 1.5, life: 0.6, spread: 0.2 });
-        }
-      } else {
-        g.fx.burst(this.pos.x, this.pos.y + this.h * 0.5, this.pos.z, this.def.colorObjs, 22, {
-          speed: 3,
-          size: 0.12,
-          up: 2,
-          life: 0.9,
-          spread: 0.4,
-        });
-      }
-    }
-    if (this.debris) for (const d of this.debris) g.scene.remove(d.obj);
-    g.scene.remove(this.model.root);
-    this.model.dispose();
-  }
-
-  // Who to turn our head toward: our target, or the nearest player we know.
-  lookTarget() {
-    if (this.target && !this.target.dead) return this.target;
-    return this.mobs.pickTarget(this.pos);
-  }
-
-  sync(dt) {
-    const m = this.model;
-    const jitter = this.state === 'spawn' ? (Math.random() - 0.5) * 0.05 : 0;
-    m.root.position.set(this.pos.x + jitter, this.pos.y + this.yOffset(), this.pos.z);
-    m.root.rotation.y = this.yaw;
-    const flash = this.hurtT > 0 ? Math.min(1, this.hurtT / 0.2) : 0;
-    const fire = this.burning ? 0.22 + Math.sin(this.t * 17) * 0.08 : 0;
-    const ice = this.slowed ? 1 : 0;
-    for (const mat of this.emissives) {
-      mat.emissive.setRGB(0.55 * flash + fire, 0.05 * flash + fire * 0.35 + ice * 0.1, 0.03 * flash + ice * 0.25);
-    }
-
-    if (this.type === 'gloop') {
-      let sx = 1;
-      let sy = 1;
-      if (this.state === 'dying') {
-        const k = Math.min(1, this.deathT / 0.5);
-        sy = 1 - ease(k) * 0.75;
-        sx = 1 + ease(k) * 0.45;
-      } else if (!this.onGround && this.state === 'live') {
-        const vy = this.remote ? 4 : this.vel.y;
-        sy = 1 + clamp(vy * 0.03, -0.2, 0.25);
-        sx = 1 - (sy - 1) * 0.6;
-      } else if (!this.remote && this.hopCd < 0.18) {
-        const q = ((0.18 - Math.max(0, this.hopCd)) / 0.18) * 0.25;
-        sy = 1 - q;
-        sx = 1 + q * 0.6;
-      }
-      const wob = this.wobble * Math.sin(this.t * 38) * 0.16;
-      m.body.scale.set(sx + wob, sy - wob, sx + wob);
-      return;
-    }
-
-    if (this.debris) return;
-    const tgt = this.lookTarget();
-    let lookYaw = 0;
-    let lookPitch = 0;
-    if (tgt) {
-      const dx = tgt.pos.x - this.pos.x;
-      const dz = tgt.pos.z - this.pos.z;
-      lookYaw = wrapAngle(Math.atan2(dx, dz) - this.yaw);
-      lookPitch = Math.atan2(tgt.pos.y + 1.4 - (this.pos.y + 1.6), Math.hypot(dx, dz) || 1);
-    }
-    const s = {
-      speed: Math.hypot(this.vel.x, this.vel.z),
-      attack: this.attackT,
-      hurt: this.hurtT / 0.2,
-      spawn: this.state === 'spawn' ? this.spawnT : 1,
-      dead: this.state === 'dying',
-      deadT: this.deathT,
-      lookYaw,
-      lookPitch,
-      aiming: this.aiming,
-      draw: Math.min(1, this.drawT / 0.6),
-      fired: this.fired,
-    };
-    if (this.type === 'moss') poseMoss(this.rig, s, dt);
-    else poseBone(this.rig, s, dt);
-    if (this.shard) this.shard.visible = this.drawT > 0.05;
-  }
-}
+    },
+  },
+  toxic: {
+    color: 0x7bc62a,
+    cube: 0.4,
+    grav: 14,
+    dmg: 3,
+    boom: 1.6,
+    fx: { poison: 1 },
+    life: 6,
+    trail: cols('#c8f25a', '#3f6b12'),
+    colors: cols('#c8f25a', '#7bc62a'),
+    onBoom(g, b) {
+      if (g.authority) g.mobs.bossFx({ k: 'cloud', p: [b.pos.x, b.pos.y, b.pos.z], r: 2.4, dur: 6 });
+    },
+  },
+};
 
 export class Mobs {
   constructor(game) {
@@ -781,14 +92,12 @@ export class Mobs {
     this.flowKey = '';
     this.nextId = 1;
     this.nextPickup = 1;
-    this.tex = {};
-    for (const [k, paint] of Object.entries({ moss: paintMoss, bone: paintBone, gloop: paintGloop })) {
-      const c = document.createElement('canvas');
-      c.width = c.height = 64;
-      paint(c);
-      this.tex[k] = makeSkinTexture(c);
-    }
     this.boltGeo = new THREE.BoxGeometry(0.08, 0.08, 0.5);
+    this.cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+    this.boltMats = new Map();
+    this.effects = [];
+    this.ringGeo = new THREE.RingGeometry(0.82, 1, 48);
+    this.discGeo = new THREE.CircleGeometry(1, 24);
     this.boltMat = new THREE.MeshBasicMaterial({ color: 0xbff3ff });
     this.shardGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
     this.bowGeo = new THREE.BoxGeometry(0.05, 0.05, 0.62);
@@ -933,9 +242,11 @@ export class Mobs {
     for (const m of this.list) m.remove(false);
     for (const b of this.bolts) this.game.scene.remove(b.mesh);
     for (const pk of this.pickups) this.game.scene.remove(pk.mesh);
+    for (const e of this.effects) if (e.mesh) this.game.scene.remove(e.mesh);
     this.list = [];
     this.bolts = [];
     this.pickups = [];
+    this.effects = [];
     this.flowKey = '';
   }
 
@@ -990,25 +301,199 @@ export class Mobs {
 
   spawn(type, mul) {
     const at = this.findSpawn();
-    if (!at) return false;
-    this.list.push(new Mob(this, type, at.x, at.y, at.z, mul, this.nextId++));
-    return true;
+    if (!at) return null;
+    const m = new Mob(this, MOB_TYPES[type] ? type : 'moss', at.x, at.y, at.z, mul, this.nextId++);
+    this.list.push(m);
+    return m;
   }
 
-  spawnBolt(o, v, mobId, fromNet = false) {
-    const mesh = new THREE.Mesh(this.boltGeo, this.boltMat);
+  // Put a mob at a spot (bosses summon their friends this way).
+  spawnAt(type, x, z, mul) {
+    const y = this.groundAt(x, z);
+    if (y <= SEA) return null;
+    const m = new Mob(this, MOB_TYPES[type] ? type : 'moss', Math.floor(x) + 0.5, y, Math.floor(z) + 0.5, mul, this.nextId++);
+    this.list.push(m);
+    return m;
+  }
+
+  spawnBoss(index, mul, boost = 1) {
+    const b = BOSSES[index % BOSSES.length];
+    const at = this.findSpawn();
+    if (!at) return null;
+    const boss = new Boss(this, b.type, at.x, at.y, at.z, mul, this.nextId++);
+    boss.hpBoost = boost;
+    boss.maxHp *= boost;
+    boss.hp = boss.maxHp;
+    boss.clearAround();
+    this.list.push(boss);
+    return boss;
+  }
+
+  // Boss effects everyone sees: shockwaves, lightning, breath, clouds.
+  // The host starts them; each player checks whether they got caught.
+  bossFx(ev) {
+    this.applyBossFx(ev);
+    const g = this.game;
+    if (g.mp && g.authority) g.mp.sendBossFx(ev);
+  }
+
+  applyBossFx(ev) {
+    const g = this.game;
+    const at = new THREE.Vector3(ev.p ? ev.p[0] : 0, ev.p ? ev.p[1] : 0, ev.p ? ev.p[2] : 0);
+    const scene = g.scene;
+    if (ev.k === 'ring') {
+      const mesh = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(at.x, at.y + 0.08, at.z);
+      scene.add(mesh);
+      this.effects.push({ k: 'ring', at, mesh, r: 0.6, max: Math.min(10, ev.r || 7), d: ev.d | 0, hit: false });
+      g.sound.landThud(1);
+      g.sound.explosion(0.6, false);
+      const p = g.player;
+      p.shake = Math.max(p.shake, 0.35 * Math.max(0, 1 - p.pos.distanceTo(at) / 25));
+    } else if (ev.k === 'strike') {
+      const mesh = new THREE.Mesh(this.discGeo, new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.35, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(at.x, at.y + 0.06, at.z);
+      scene.add(mesh);
+      this.effects.push({ k: 'strike', at, mesh, t: Math.min(3, ev.delay || 1), d: ev.d | 0 });
+    } else if (ev.k === 'breath') {
+      this.effects.push({ k: 'breath', id: ev.id, t: Math.min(3, ev.dur || 1.6), d: ev.d | 0, tick: 0 });
+    } else if (ev.k === 'cloud') {
+      this.effects.push({ k: 'cloud', at, r: Math.min(4, ev.r || 2.4), t: Math.min(8, ev.dur || 6), tick: 0 });
+    } else if (ev.k === 'puff') {
+      g.fx.burst(at.x, at.y, at.z, SHADOW_PUFF, 40, { speed: 4, size: 0.22, up: 1.5, life: 0.9, spread: 0.8, grav: -2 });
+      g.sound.explosion(0.3, true);
+    }
+  }
+
+  updateEffects(dt) {
+    const g = this.game;
+    const p = g.player;
+    const alive = !p.dead && g.inGame;
+    for (const e of this.effects) {
+      if (e.k === 'ring') {
+        const speed = 9;
+        e.r += speed * dt;
+        const k = e.r / e.max;
+        e.mesh.scale.setScalar(e.r);
+        e.mesh.material.opacity = Math.max(0, 0.85 * (1 - k));
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2;
+          g.fx.burst(e.at.x + Math.cos(a) * e.r, e.at.y + 0.1, e.at.z + Math.sin(a) * e.r, DUST, 1, { speed: 1.5, size: 0.12, up: 2.5, life: 0.4, spread: 0.1 });
+        }
+        // Jump over the wave to dodge it.
+        if (alive && !e.hit) {
+          const d = Math.hypot(p.pos.x - e.at.x, p.pos.z - e.at.z);
+          if (Math.abs(d - e.r) < 0.8 && p.pos.y - e.at.y < 0.9 && p.pos.y - e.at.y > -1.5) {
+            e.hit = true;
+            p.hurt(e.d, e.at, 'boss', { knock: 1.4 });
+          }
+        }
+        if (k >= 1) e.done = true;
+      } else if (e.k === 'strike') {
+        e.t -= dt;
+        e.mesh.material.opacity = 0.25 + (Math.sin(e.t * 25) > 0 ? 0.3 : 0);
+        e.mesh.scale.setScalar(1.7 * (1.1 - Math.min(1, e.t) * 0.1));
+        if (e.t <= 0) {
+          // Lightning from the sky.
+          let last = new THREE.Vector3(e.at.x, e.at.y + 26, e.at.z);
+          for (let i = 1; i <= 8; i++) {
+            const next = new THREE.Vector3(e.at.x + (Math.random() - 0.5) * (i < 8 ? 1.2 : 0), e.at.y + 26 - (26 * i) / 8, e.at.z + (Math.random() - 0.5) * (i < 8 ? 1.2 : 0));
+            g.tracers.fire(last, next, 0xfff6a0, 0.09);
+            last = next;
+          }
+          g.combat.explode(new THREE.Vector3(e.at.x, e.at.y + 0.3, e.at.z), 1.8, 0, { small: true });
+          g.sound.zap(1);
+          if (alive && Math.hypot(p.pos.x - e.at.x, p.pos.z - e.at.z) < 1.8 && Math.abs(p.pos.y - e.at.y) < 2.5) p.hurt(e.d, e.at, 'boss', { shock: 2 });
+          e.done = true;
+        }
+      } else if (e.k === 'breath') {
+        e.t -= dt;
+        const boss = this.list.find((m) => m.id === e.id);
+        if (!boss || boss.state === 'dying') e.done = true;
+        else {
+          const fx = Math.sin(boss.yaw);
+          const fz = Math.cos(boss.yaw);
+          const hy = boss.pos.y + 2.75 * boss.def.scale;
+          for (let i = 0; i < 4; i++) {
+            const s = 4 + Math.random() * 6;
+            const spread = (Math.random() - 0.5) * 0.7;
+            g.fx.emit(boss.pos.x + fx * 0.8, hy, boss.pos.z + fz * 0.8, (fx + spread * fz) * s, -1 + Math.random() * 1.2, (fz - spread * fx) * s, FROST[i % 3], 0.8, 0.14, 0);
+          }
+          e.tick -= dt;
+          if (alive && e.tick <= 0) {
+            e.tick = 0.3;
+            const dx = p.pos.x - boss.pos.x;
+            const dz = p.pos.z - boss.pos.z;
+            const d = Math.hypot(dx, dz);
+            const dot = (dx * fx + dz * fz) / (d || 1);
+            if (d < 8.5 && dot > 0.8 && Math.abs(p.pos.y + 1 - hy) < 3) p.hurt(e.d, boss.pos, 'boss', { slow: 0.55 });
+          }
+        }
+        if (e.t <= 0) e.done = true;
+      } else if (e.k === 'cloud') {
+        e.t -= dt;
+        for (let i = 0; i < 2; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * e.r;
+          g.fx.emit(e.at.x + Math.cos(a) * r, e.at.y + Math.random() * 0.8, e.at.z + Math.sin(a) * r, 0, 0.6, 0, TOXIC[i], 1, 0.3, -0.5);
+        }
+        e.tick -= dt;
+        if (alive && e.tick <= 0) {
+          e.tick = 0.5;
+          const d = vA.set(p.pos.x, p.pos.y + 0.5, p.pos.z).distanceTo(e.at);
+          if (d < e.r + 0.4) p.applyStatus({ poison: 1 }, 'boss');
+        }
+        if (e.t <= 0) e.done = true;
+      }
+      if (e.done && e.mesh) {
+        g.scene.remove(e.mesh);
+        e.mesh.material.dispose();
+      }
+    }
+    this.effects = this.effects.filter((e) => !e.done);
+  }
+
+  boltMaterial(kind) {
+    if (!this.boltMats.has(kind)) this.boltMats.set(kind, new THREE.MeshBasicMaterial({ color: (BOLTS[kind] || BOLTS.bolt).color }));
+    return this.boltMats.get(kind);
+  }
+
+  spawnBolt(o, v, mobId, fromNet = false, kind = 'bolt') {
+    const cfg = BOLTS[kind] || BOLTS.bolt;
+    const mesh = new THREE.Mesh(cfg.cube ? this.cubeGeo : this.boltGeo, this.boltMaterial(kind));
+    if (cfg.cube) mesh.scale.setScalar(cfg.cube);
     mesh.position.copy(o);
     this.game.scene.add(mesh);
-    this.bolts.push({ pos: o.clone(), vel: v.clone(), life: 3, mesh });
+    const m = this.list.find((x) => x.id === mobId);
+    this.bolts.push({ pos: o.clone(), vel: v.clone(), life: cfg.life || 3, mesh, cfg, src: m ? m.family : 'bone' });
     if (fromNet) {
-      const m = this.list.find((x) => x.id === mobId);
       if (m) {
         m.fired = 1;
         this.game.sound.bolt(m.vol());
       }
     } else if (this.game.mp) {
-      this.game.mp.sendBolt(o, v, mobId);
+      this.game.mp.sendBolt(o, v, mobId, kind);
     }
+  }
+
+  // A mob explosion. The host decides it happened; every player draws it
+  // and checks whether it caught them.
+  blast(at, r, dmg, opts = {}) {
+    this.applyBlast(at, r, dmg, opts);
+    const g = this.game;
+    if (opts.breaks && g.authority) g.combat.breakBlocks(at, r);
+    if (g.mp && g.authority) g.mp.sendMobBoom(at, r, dmg, opts);
+  }
+
+  applyBlast(at, r, dmg, { source = 'fuse', fx = null } = {}) {
+    const g = this.game;
+    g.combat.explode(at, r, 0, { small: r < 2 });
+    const p = g.player;
+    if (p.dead || !g.inGame) return;
+    const d = vA.set(p.pos.x, p.pos.y + 0.9, p.pos.z).distanceTo(at);
+    if (d < r) p.hurt(Math.max(1, Math.round(dmg * (1 - (d / r) * 0.6))), at, source, fx);
   }
 
   // y is the ground height the pickup rests on.
@@ -1088,6 +573,7 @@ export class Mobs {
     this.list = this.list.filter((m) => !m.gone);
     this.updateBolts(dt);
     this.updatePickups(dt);
+    this.updateEffects(dt);
   }
 
   // Joined players: mobs are copies of the host's.
@@ -1096,23 +582,28 @@ export class Mobs {
     this.list = this.list.filter((m) => !m.gone);
     this.updateBolts(dt);
     this.updatePickups(dt);
+    this.updateEffects(dt);
   }
 
   snapshot() {
     return this.list
       .filter((m) => !m.gone)
-      .map((m) => [
-        m.id,
-        TYPE_LIST.indexOf(m.type),
-        r2(m.pos.x),
-        r2(m.pos.y),
-        r2(m.pos.z),
-        r2(m.yaw),
-        m.state === 'spawn' ? 0 : m.state === 'live' ? 1 : 2,
-        (m.aiming ? 1 : 0) | (m.drawT > 0.05 ? 2 : 0) | (m.attackT >= 0 ? 4 : 0) | (m.hurtT > 0 ? 8 : 0) | (m.onGround ? 16 : 0) | (m.burnT > 0 ? 32 : 0) | (m.slowT > 0 ? 64 : 0),
-        r2(m.spawnT),
-        r2(Math.max(0, m.hp / m.maxHp)),
-      ]);
+      .map((m) => {
+        const e = [
+          m.id,
+          m.netType !== undefined ? m.netType : TYPE_INDEX.get(m.type),
+          r2(m.pos.x),
+          r2(m.pos.y),
+          r2(m.pos.z),
+          r2(m.yaw),
+          m.state === 'spawn' ? 0 : m.state === 'live' ? 1 : 2,
+          m.flags(),
+          r2(m.spawnT),
+          r2(Math.max(0, m.hp / m.maxHp)),
+        ];
+        if (m.netExtra) e.push(...m.netExtra());
+        return e;
+      });
   }
 
   applySnapshot(entries) {
@@ -1123,7 +614,8 @@ export class Mobs {
       let m = this.list.find((x) => x.id === id);
       if (!m) {
         if (e[6] === 2) continue;
-        m = new Mob(this, TYPE_LIST[e[1]] || 'moss', e[2], e[3], e[4], { hp: 1, speed: 1 }, id, true);
+        m = this.makePuppet(e);
+        if (!m) continue;
         m.yaw = e[5];
         this.list.push(m);
       }
@@ -1134,12 +626,19 @@ export class Mobs {
     this.list = this.list.filter((m) => !m.gone);
   }
 
+  makePuppet(e) {
+    const type = TYPE_LIST[e[1]] || 'moss';
+    this.game.profile.markSeen(type);
+    const Kind = MOB_TYPES[type].boss ? Boss : Mob;
+    return new Kind(this, type, e[2], e[3], e[4], { hp: 1, speed: 1 }, e[0], true);
+  }
+
   // We just became the host: take over every mob from where it stands.
   promote(mul) {
     for (const m of this.list) {
       if (!m.remote) continue;
       m.remote = false;
-      m.maxHp = m.def.hp * mul.hp;
+      m.maxHp = m.def.hp * mul.hp * (m.hpBoost || 1);
       m.hp = Math.max(1, m.maxHp * m.net.hp);
       m.speed = m.def.speed * mul.speed;
       m.pos.set(m.net.x, m.net.y, m.net.z);
@@ -1179,26 +678,44 @@ export class Mobs {
     const p = g.player;
     const w = g.world;
     for (const b of this.bolts) {
-      b.vel.y -= 5 * dt;
+      const cfg = b.cfg;
+      b.vel.y -= cfg.grav * dt;
       b.pos.addScaledVector(b.vel, dt);
       b.life -= dt;
       b.mesh.position.copy(b.pos);
-      b.mesh.lookAt(vB.copy(b.pos).add(b.vel));
+      if (cfg.cube) b.mesh.rotation.set(b.life * 7, b.life * 5, 0);
+      else b.mesh.lookAt(vB.copy(b.pos).add(b.vel));
+      if (cfg.trail && Math.random() < dt * 30) g.fx.burst(b.pos.x, b.pos.y, b.pos.z, cfg.trail, 1, { speed: 0.4, size: cfg.cube * 0.5, up: 0.5, life: 0.35, spread: 0.05, grav: -2 });
+      const pad = cfg.cube ? cfg.cube * 0.5 : 0.12;
       const inPlayer =
         !p.dead &&
         g.state !== 'menu' &&
-        Math.abs(b.pos.x - p.pos.x) < p.hw + 0.12 &&
-        Math.abs(b.pos.z - p.pos.z) < p.hw + 0.12 &&
-        b.pos.y > p.pos.y &&
+        g.inGame &&
+        Math.abs(b.pos.x - p.pos.x) < p.hw + pad &&
+        Math.abs(b.pos.z - p.pos.z) < p.hw + pad &&
+        b.pos.y > p.pos.y - pad &&
         b.pos.y < p.pos.y + p.h + 0.1;
+      let direct = false;
       if (inPlayer) {
-        p.hurt(3, vA.copy(b.pos).addScaledVector(b.vel, -0.1), 'bone');
+        p.hurt(cfg.dmg, vA.copy(b.pos).addScaledVector(b.vel, -0.1), b.src, cfg.fx || null);
         b.life = 0;
+        direct = true;
       } else if (w.solid(Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z))) {
         b.life = 0;
+        b.pos.addScaledVector(b.vel, -dt * 0.5);
       }
       if (b.life <= 0) {
-        g.fx.burst(b.pos.x, b.pos.y, b.pos.z, BOLT_COLORS, 6, { speed: 2, size: 0.06, up: 1, life: 0.35, spread: 0.05 });
+        if (cfg.boom) {
+          g.combat.explode(b.pos, cfg.boom, 0, { small: cfg.boom < 2.2 });
+          if (!direct && !p.dead && g.inGame) {
+            const d = vA.set(p.pos.x, p.pos.y + 0.9, p.pos.z).distanceTo(b.pos);
+            if (d < cfg.boom) p.hurt(Math.max(1, Math.round(cfg.dmg * (1 - d / cfg.boom))), b.pos, b.src, cfg.fx || null);
+          }
+          if (cfg.breaks && g.authority) g.combat.breakBlocks(b.pos, cfg.boom);
+          if (cfg.onBoom) cfg.onBoom(g, b);
+        } else {
+          g.fx.burst(b.pos.x, b.pos.y, b.pos.z, cfg.colors, 6, { speed: 2, size: 0.06, up: 1, life: 0.35, spread: 0.05 });
+        }
         g.scene.remove(b.mesh);
       }
     }
