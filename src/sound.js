@@ -84,6 +84,12 @@ export class Sound {
     this.tone({ type: 'sine', f0: 130, f1: 45, dur: 0.13, vol: 0.32 });
   }
 
+  remoteShot(vol) {
+    if (!this.ready('rshot', 40) || vol <= 0.05) return;
+    this.noise({ dur: 0.08, vol: 0.35 * vol, type: 'bandpass', f0: 2000, f1: 500, q: 0.8 });
+    this.tone({ type: 'sine', f0: 120, f1: 50, dur: 0.1, vol: 0.2 * vol });
+  }
+
   empty() {
     if (!this.ready('empty', 120)) return;
     this.tone({ f0: 1300, dur: 0.02, vol: 0.07 });

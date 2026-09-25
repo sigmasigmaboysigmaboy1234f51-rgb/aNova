@@ -28,6 +28,8 @@ export function setBoxUV(geo, u, v, w, h, d, tw = 64, th = 64) {
   uv.needsUpdate = true;
 }
 
+// Body parts hang off a hips joint so the whole upper body can lean
+// (crouching, sprinting, getting hit) while the legs stay planted.
 export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
   const armW = limb || (slim ? 3 : 4);
   const legW = limb || 4;
@@ -36,11 +38,15 @@ export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
   const outer = new THREE.MeshLambertMaterial({ map: texture, alphaTest: 0.5, side: THREE.DoubleSide });
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';
-  const parts = {};
+  const hips = new THREE.Group();
+  hips.rotation.order = 'YXZ';
+  hips.position.set(0, 12 * PX, 0);
+  root.add(hips);
+  const parts = { hips };
   const baseMeshes = [];
   const outerMeshes = [];
 
-  const add = (name, w, h, d, px, py, offsetY, inflate) => {
+  const add = (parent, name, w, h, d, px, py, offsetY, inflate) => {
     const g = new THREE.Group();
     g.rotation.order = 'YXZ';
     g.position.set(px * PX, py * PX, 0);
@@ -56,18 +62,19 @@ export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
     const m2 = new THREE.Mesh(geo2, outer);
     m2.position.y = offsetY * PX;
     g.add(m, m2);
-    root.add(g);
+    parent.add(g);
     parts[name] = g;
     baseMeshes.push(m);
     outerMeshes.push(m2);
   };
 
-  add('head', 8, 8, 8, 0, 24, 4, 0.5);
-  add('body', 8, 12, 4, 0, 18, 0, 0.25);
-  add('armR', armW, 12, depth, -(4 + armW / 2), 22, -4, 0.25);
-  add('armL', armW, 12, depth, 4 + armW / 2, 22, -4, 0.25);
-  add('legR', legW, 12, depth, -2, 12, -6, 0.25);
-  add('legL', legW, 12, depth, 2, 12, -6, 0.25);
+  // Upper body positions are relative to the hips (12 px off the ground).
+  add(hips, 'body', 8, 12, 4, 0, 6, 0, 0.25);
+  add(hips, 'head', 8, 8, 8, 0, 12, 4, 0.5);
+  add(hips, 'armR', armW, 12, depth, -(4 + armW / 2), 10, -4, 0.25);
+  add(hips, 'armL', armW, 12, depth, 4 + armW / 2, 10, -4, 0.25);
+  add(root, 'legR', legW, 12, depth, -2, 12, -6, 0.25);
+  add(root, 'legL', legW, 12, depth, 2, 12, -6, 0.25);
 
   return {
     root,
@@ -134,12 +141,13 @@ export function buildBlaster() {
   box(0.03, 0.04, 0.03, 0, 0.105, -0.17, '#ffb13b', 0, '#7a4a00');
   box(0.065, 0.065, 0.2, 0, 0.01, -0.35, '#5b6068');
   box(0.08, 0.08, 0.04, 0, 0.01, -0.46, '#2b2e33');
-  box(0.108, 0.05, 0.16, 0, -0.005, 0.02, '#ff8a2a', 0, '#8a3200');
+  const cell = box(0.108, 0.05, 0.16, 0, -0.005, 0.02, '#ff8a2a', 0, '#8a3200');
   box(0.07, 0.16, 0.08, 0, -0.12, 0.09, '#2a2c31', 0.3);
   box(0.06, 0.1, 0.07, 0, -0.09, -0.13, '#4a4f57');
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.01, -0.5);
   g.add(muzzle);
   g.userData.muzzle = muzzle;
+  g.userData.cell = cell;
   return g;
 }

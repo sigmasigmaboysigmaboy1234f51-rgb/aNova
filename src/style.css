@@ -1,5 +1,19 @@
 /* Blockfire is one deliberate look (a dark stone-and-ember game UI over the
    bright 3D world), so it keeps a single palette in both light and dark mode. */
+/* Pixel fonts, bundled so the game looks right offline (SIL Open Font License,
+   see src/fonts). */
+@font-face {
+  font-family: 'Jersey 10';
+  src: url(fonts/jersey10-latin.woff2) format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url(fonts/pixelifysans-latin.woff2) format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   --ground: #0f0e0b;
@@ -105,9 +119,20 @@ body[data-state="dead"] #crosshair, body[data-state="paused"] #crosshair { displ
   grid-template-columns: minmax(0, 470px) minmax(0, 400px);
   justify-content: center;
   align-content: center;
+  align-content: safe center;
   align-items: center;
   gap: 28px 64px;
 }
+.controls-wrap summary {
+  cursor: pointer;
+  font: 600 13px/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.controls-wrap summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+.controls-wrap[open] summary { margin-bottom: 10px; }
 .menu-col { display: grid; gap: 22px; }
 .logo-wrap { position: relative; }
 .logo {
@@ -330,11 +355,50 @@ body[data-state="dead"] #crosshair, body[data-state="paused"] #crosshair { displ
 .lowhp.on { animation: lowpulse 1s ease-in-out infinite alternate; }
 @keyframes lowpulse { from { opacity: 0.35; } to { opacity: 0.9; } }
 
+/* ---- Multiplayer ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.btn-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
+body:not(.desktop) .app-only { display: none; }
+.overlay-panel.mp-panel { width: min(520px, 100%); }
+.overlay { align-content: safe center; }
+.mp-box { display: grid; gap: 10px; padding: 14px; background: rgba(0, 0, 0, 0.25); border: 2px solid var(--edge); }
+.mp-box h3 { margin: 0; font: 600 13px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.mp-box p { margin: 0; font-size: 14px; color: var(--muted); }
+.mp-note { margin: 0; font-size: 13px; color: var(--dim); }
+.mp-note code { font-family: inherit; color: var(--paper); }
+.field { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+.field input, .chat-form input {
+  font: 18px/1.2 var(--font-ui);
+  color: var(--paper);
+  background: #12110e;
+  border: 2px solid var(--edge);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5);
+  padding: 9px 10px;
+  width: 100%;
+  min-width: 0;
+}
+.pause-mp { margin: 0; color: var(--paper); font-size: 15px; }
+.chat { position: absolute; left: 16px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100% - 32px)); display: grid; gap: 6px; }
+.chat-log { display: grid; gap: 2px; max-height: 40vh; overflow: hidden; align-content: end; }
+.chat-line { font-size: 15px; color: var(--paper); background: rgba(0, 0, 0, 0.45); padding: 3px 8px; justify-self: start; transition: opacity 0.6s; text-shadow: 1px 1px 0 #000; overflow-wrap: anywhere; }
+.chat-line b { font-weight: 600; color: var(--gold); }
+.chat-line.sys { color: #ffe9a8; }
+.chat-line.old { opacity: 0; }
+.chat-form { pointer-events: auto; }
+.tablist { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 32px)); padding: 12px 16px; }
+.tablist table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tablist th { text-align: left; font: 600 12px/1 var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-bottom: 8px; }
+.tablist th + th, .tablist td + td { text-align: right; }
+.tablist td { padding: 5px 0; border-top: 2px solid rgba(255, 255, 255, 0.06); }
+.tablist tr.dead td { color: var(--dim); }
+.tablist .tag { font-size: 11px; color: var(--ground); background: var(--gold); padding: 1px 5px; margin-left: 4px; }
+.is-dead #crosshair { display: none; }
+
 /* ---- Pause and game over ---- */
 .overlay { display: grid; place-items: center; background: rgba(10, 9, 7, 0.55); }
 .overlay.dead { background: rgba(96, 10, 6, 0.5); }
 .overlay-panel { width: min(460px, 100%); display: grid; gap: 16px; }
-.overlay-title { margin: 0; font: 400 68px/0.85 var(--font-display); text-shadow: 4px 4px 0 #000; text-wrap: balance; }
+.overlay-title { margin: 0; font: 400 68px/0.85 var(--font-display); text-shadow: 4px 4px 0 #000; text-wrap: balance; overflow-wrap: anywhere; }
 .go-line { margin: 0; color: var(--muted); }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 0; }
 .stats div { background: rgba(0, 0, 0, 0.3); border: 2px solid var(--edge); padding: 8px 10px; }

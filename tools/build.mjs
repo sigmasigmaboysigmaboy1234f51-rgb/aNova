@@ -20,7 +20,12 @@ const result = await build({
   write: false,
 });
 const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
-const css = await readFile('src/style.css', 'utf8');
+// Fonts are inlined as data URIs so the page is one self-contained file.
+let css = await readFile('src/style.css', 'utf8');
+for (const [, file] of [...css.matchAll(/url\((fonts\/[\w.-]+\.woff2)\)/g)]) {
+  const data = (await readFile('src/' + file)).toString('base64');
+  css = css.replace(`url(${file})`, `url(data:font/woff2;base64,${data})`);
+}
 const template = await readFile('src/index.html', 'utf8');
 const inline = (html) => html.replace('/*STYLE*/', () => css).replace('/*SCRIPT*/', () => js);
 

@@ -125,10 +125,14 @@ export class World {
     return x >= 0 && z >= 0 && y >= 0 && x < SX && z < SZ && y < SY;
   }
 
-  set(x, y, z, id) {
+  // silent = true for edits that came from another player, so they are not
+  // sent back out again.
+  set(x, y, z, id, silent = false) {
     if (!this.inBounds(x, y, z)) return;
     const k = this.idx(x, y, z);
+    if (this.data[k] === id) return;
     this.data[k] = id;
+    if (!silent && this.onEdit) this.onEdit(x, y, z, id);
     this.clearDamage(k);
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {

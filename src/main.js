@@ -10,7 +10,9 @@ import { Mobs } from './mobs.js';
 import { Hud } from './hud.js';
 import { SkinPreview } from './preview.js';
 import { SkinEditor } from './editor.js';
-import { $, store } from './util.js';
+import { Multiplayer } from './multiplayer.js';
+import { parseAddress, DEFAULT_PORT } from './net.js';
+import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
 
 const SKY = new THREE.Color('#8fc6ea');
@@ -26,6 +28,8 @@ const SPLASHES = [
   'Walls are temporary.',
   'Mossheads cannot read.',
   'Built one pixel at a time!',
+  'Crouch to stay on ledges!',
+  'Bring a friend!',
 ];
 
 const WAVE_TIPS = {
@@ -70,6 +74,9 @@ class Game {
     vsun.position.set(-1, 2, 1.5);
     this.viewScene.add(vsun);
 
+    this.desktop = !!window.blockfireDesktop;
+    this.mp = null;
+    this.inGame = false;
     this.atlas = buildAtlas();
     this.atlas.cracks = buildCrackTextures();
     this.world = new World(this.scene, this.atlas);
@@ -105,6 +112,10 @@ class Game {
     this.noLock = false;
     this.lastUnlock = 0;
     this.wave = 0;
+    this.waveState = 'rest';
+    this.queue = [];
+    this.netLeft = null;
+    this.lastWaveMsg = null;
 
     this.setupUI();
     this.resize();
@@ -115,6 +126,24 @@ class Game {
     requestAnimationFrame((t) => this.frame(t));
     // Handy for tinkering from the browser console.
     window.blockfire = this;
+  }
+
+  // Does this computer run the mobs and waves? True in single player and
+  // for the multiplayer host.
+  get authority() {
+    return !this.mp || this.mp.isHost;
+  }
+
+  get myId() {
+    return this.mp ? this.mp.id : 0;
+  }
+
+  // Everyone the mobs can go after.
+  targets() {
+    const out = [];
+    if (this.inGame && !this.player.dead) out.push(this.player);
+    if (this.mp) for (const r of this.mp.remotes.list()) if (r.hasState && !r.dead) out.push(r);
+    return out;
   }
 
   buildEnvironment() {
@@ -183,6 +212,7 @@ class Game {
 
   setupUI() {
     $('#btn-play').addEventListener('click', () => this.play());
+    $('#btn-mp').addEventListener('click', () => this.openMp());
     $('#btn-skin').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-sound').addEventListener('click', () => this.toggleSound());
@@ -192,6 +222,24 @@ class Game {
     $('#btn-again').addEventListener('click', () => this.play());
     $('#btn-title').addEventListener('click', () => this.toMenu());
     $('#ed-done').addEventListener('click', () => this.closeEditor());
+    $('#mp-back').addEventListener('click', () => {
+      if (this.mp && !this.inGame) this.leaveMp();
+      this.setState('menu');
+    });
+    $('#mp-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.joinFromForm();
+    });
+    $('#mp-host').addEventListener('click', () => this.hostGame());
+    const quitApp = $('#btn-quit-app');
+    quitApp.hidden = !this.desktop;
+    quitApp.addEventListener('click', () => window.blockfireDesktop.quit());
+
+    const name = $('#mp-name');
+    name.value = store.get('name', '') || `Player${100 + Math.floor(Math.random() * 900)}`;
+    name.addEventListener('change', () => store.set('name', this.mpName()));
+    $('#mp-addr').value = store.get('addr', '');
+
     const sens = $('#sens');
     sens.value = String(this.settings.sens);
     sens.addEventListener('input', () => {
@@ -205,6 +253,7 @@ class Game {
       });
     }
     this.syncSoundButton();
+    document.body.classList.toggle('desktop', this.desktop);
 
     const coarse = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
     $('#touch-note').hidden = !coarse;
@@ -265,12 +314,16 @@ class Game {
     this.state = s;
     document.body.dataset.state = s;
     $('#menu').hidden = s !== 'menu';
+    $('#mp').hidden = s !== 'mp';
     $('#editor').hidden = s !== 'editor';
     $('#pause').hidden = s !== 'paused';
     $('#gameover').hidden = !(s === 'dead' && this.gameOverShown);
     this.hud.show(s === 'playing' || s === 'paused' || s === 'dead');
     this.input.active = s === 'playing';
-    if (s !== 'playing') this.input.releaseAll();
+    if (s !== 'playing') {
+      this.input.releaseAll();
+      if (this.mp) this.mp.closeChat();
+    }
     if (s === 'menu') {
       $('#splash').textContent = SPLASHES[Math.floor(Math.random() * SPLASHES.length)];
       this.renderBest();
@@ -287,25 +340,27 @@ class Game {
 
   renderBest() {
     const b = this.best;
-    $('#best').textContent = b ? `Best run: wave ${b.wave}, ${b.score.toLocaleString('en-US')} points` : 'No runs yet. Survive as many waves as you can.';
+    $('#best').textContent = b
+      ? `Best run: wave ${b.wave}, ${b.score.toLocaleString('en-US')} points`
+      : 'No runs yet. Survive as many waves as you can.';
   }
 
-  // --- Flow between screens -------------------------------------------
+  // --- Single player ----------------------------------------------------
 
   play() {
     this.sound.unlock();
+    if (this.mp) this.leaveMp();
     this.startGame();
     this.setState('playing');
+    this.lockMouse();
+  }
+
+  lockMouse() {
     if (!this.noLock) this.input.requestLock();
     else this.input.free = true;
   }
 
-  startGame() {
-    if (this.worldUsed) {
-      this.world.generate(randomSeed());
-      this.world.flush();
-    }
-    this.worldUsed = true;
+  resetRun() {
     this.mobs.clear();
     this.fx.clear();
     this.player.reset(this.world.spawnPoint());
@@ -315,9 +370,22 @@ class Game {
     this.waveState = 'rest';
     this.waveTimer = 3;
     this.queue = [];
+    this.netLeft = null;
+    this.lastWaveMsg = null;
     this.gameOverShown = false;
     this.deadT = 0;
+    this.respawnT = 0;
     this.hud.reset();
+    this.inGame = true;
+  }
+
+  startGame() {
+    if (this.worldUsed) {
+      this.world.generate(randomSeed());
+      this.world.flush();
+    }
+    this.worldUsed = true;
+    this.resetRun();
     this.mobs.refreshFlow(true);
     this.hud.showBanner('Get ready', 'Build walls with right click. Shoot with left.', 3);
   }
@@ -325,6 +393,11 @@ class Game {
   pause(msg = '') {
     $('#pause-msg').textContent = msg;
     $('#pause-msg').hidden = !msg;
+    const info = $('#pause-mp');
+    info.hidden = !this.mp;
+    if (this.mp) info.textContent = this.mp.hosting ? this.mp.inviteText() : 'The game keeps going while you are paused.';
+    $('#btn-quit').textContent = this.mp ? 'Leave game' : 'Quit to title';
+    this.input.exitLock();
     this.setState('paused');
   }
 
@@ -335,6 +408,8 @@ class Game {
 
   toMenu() {
     this.input.exitLock();
+    if (this.mp) this.leaveMp();
+    this.inGame = false;
     this.mobs.clear();
     this.gameOverShown = false;
     this.setState('menu');
@@ -350,25 +425,138 @@ class Game {
     this.setState(this.editorReturn || 'menu');
   }
 
+  // --- Multiplayer ------------------------------------------------------
+
+  mpName() {
+    return $('#mp-name').value.replace(/[^\w .\-]/g, '').trim().slice(0, 16) || 'Player';
+  }
+
+  mpStatus(text) {
+    $('#mp-status').textContent = text;
+  }
+
+  openMp() {
+    $('#mp-host-box').hidden = !this.desktop;
+    $('#mp-web-note').hidden = this.desktop;
+    $('#mp-artifact-note').hidden = !inArtifactViewer();
+    this.mpStatus('');
+    this.setState('mp');
+  }
+
+  async hostGame() {
+    this.sound.unlock();
+    store.set('name', this.mpName());
+    this.mpStatus('Starting a server on this computer…');
+    const res = await window.blockfireDesktop.host(DEFAULT_PORT);
+    if (!res.ok) {
+      this.mpStatus(res.error);
+      return;
+    }
+    this.connect(`ws://127.0.0.1:${res.port}`, { hosting: true, addresses: res.addresses, port: res.port });
+  }
+
+  joinFromForm() {
+    const raw = $('#mp-addr').value;
+    const url = parseAddress(raw);
+    if (!url) {
+      this.mpStatus('Type the address the host gave you, like 192.168.1.23.');
+      return;
+    }
+    store.set('addr', raw.trim());
+    store.set('name', this.mpName());
+    this.connect(url, {});
+  }
+
+  connect(url, opts) {
+    this.sound.unlock();
+    if (this.mp) this.leaveMp(false);
+    this.mpStatus('Connecting…');
+    this.mp = new Multiplayer(this, url, { name: this.mpName(), ...opts });
+  }
+
+  waitingForHost() {
+    this.mpStatus('Connected. Waiting for the host to start the game…');
+  }
+
+  startMultiplayer(seed, edits, asHost) {
+    this.world.generate(seed);
+    for (const [x, y, z, b] of edits) this.world.set(x, y, z, b, true);
+    this.world.flush();
+    this.worldUsed = true;
+    this.resetRun();
+    if (asHost) {
+      this.mobs.refreshFlow(true);
+      this.hud.showBanner('Get ready', 'You are hosting. Friends can join any time.', 3);
+    } else {
+      this.hud.showBanner('Joined', 'Press T to chat. Hold Tab to see players.', 3);
+    }
+    this.setState('playing');
+    this.lockMouse();
+  }
+
+  becomeHost() {
+    const m = this.lastWaveMsg;
+    this.wave = m ? m.n : 0;
+    this.mul = this.waveMul(Math.max(1, this.wave));
+    this.mobs.promote(this.mul);
+    const left = m && m.left != null ? Math.max(0, m.left - this.mobs.alive()) : 0;
+    this.queue = Array(left).fill('moss');
+    this.waveState = m && !m.rest ? 'fight' : 'rest';
+    this.waveTimer = 5;
+    this.spawnTimer = 1;
+  }
+
+  leaveMp(stopServer = true) {
+    const mp = this.mp;
+    this.mp = null;
+    if (mp) {
+      mp.close();
+      if (stopServer && mp.hosting && this.desktop) window.blockfireDesktop.stopHost();
+    }
+    this.inGame = false;
+    this.mobs.clear();
+    this.input.exitLock();
+    document.body.classList.remove('is-dead');
+  }
+
+  onDisconnected(reason, msg) {
+    const hosting = this.mp && this.mp.hosting;
+    this.leaveMp(hosting);
+    let text = msg;
+    if (!text && reason === 'unreachable') {
+      text = inArtifactViewer()
+        ? 'This page is not allowed to connect to game servers. Use the Blockfire app or the downloaded game to play online.'
+        : "Could not reach that server. Check the address, and that the host's firewall lets Blockfire through.";
+    }
+    this.openMp();
+    this.mpStatus(text || 'Lost connection to the server.');
+  }
+
   // --- Waves ----------------------------------------------------------
+
+  waveMul(n) {
+    return { hp: 1 + (n - 1) * 0.08, speed: 1 + Math.min(0.3, (n - 1) * 0.03) };
+  }
 
   beginWave(n) {
     this.wave = n;
-    const moss = 3 + n;
-    const bone = n >= 2 ? Math.floor(n / 2) + (n >= 5 ? 1 : 0) : 0;
-    const gloop = n >= 3 ? n - 2 : 0;
+    const crowd = 1 + (this.mp ? this.mp.remotes.list().length * 0.5 : 0);
+    const moss = Math.round((3 + n) * crowd);
+    const bone = Math.round((n >= 2 ? Math.floor(n / 2) + (n >= 5 ? 1 : 0) : 0) * crowd);
+    const gloop = Math.round((n >= 3 ? n - 2 : 0) * crowd);
     const q = [...Array(moss).fill('moss'), ...Array(bone).fill('bone'), ...Array(gloop).fill('gloop')];
     for (let i = q.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [q[i], q[j]] = [q[j], q[i]];
     }
     this.queue = q;
-    this.mul = { hp: 1 + (n - 1) * 0.08, speed: 1 + Math.min(0.3, (n - 1) * 0.03) };
+    this.mul = this.waveMul(n);
     this.spawnTimer = 0.5;
     this.waveState = 'fight';
     const tip = WAVE_TIPS[n] || LATE_TIPS[n % LATE_TIPS.length];
     this.hud.showBanner(`Wave ${n}`, tip);
     this.sound.wave();
+    if (this.mp) this.mp.sendBanner(`Wave ${n}`, tip, 'wave');
   }
 
   updateWaves(dt) {
@@ -378,39 +566,66 @@ class Game {
       return;
     }
     this.spawnTimer -= dt;
-    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < 18) {
+    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < 18 + (this.mp ? 6 : 0)) {
       if (this.mobs.spawn(this.queue[this.queue.length - 1], this.mul)) this.queue.pop();
       this.spawnTimer = Math.max(0.35, 1.1 - this.wave * 0.06);
     }
     if (!this.queue.length && this.mobs.alive() === 0) {
       const bonus = 250 * this.wave;
-      this.stats.score += bonus;
-      this.player.heal(4);
-      this.player.blocks = Math.min(99, this.player.blocks + 8);
-      this.hud.showBanner(`Wave ${this.wave} cleared`, `+${bonus} points, +2 hearts, +8 blocks`);
-      this.sound.cleared();
+      this.onWaveCleared(this.wave, bonus);
+      if (this.mp) this.mp.sendCleared(this.wave, bonus);
       this.waveState = 'rest';
       this.waveTimer = 6;
     }
   }
 
-  onKill(mob, head) {
-    const g = this;
-    g.stats.kills++;
-    if (head) g.stats.heads++;
-    const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (g.wave - 1) * 0.1));
-    g.stats.score += pts;
-    g.hud.popup(head ? `Headshot +${pts}` : `+${pts}`, head ? 'head' : '');
-    const p = g.player;
+  onWaveCleared(n, bonus) {
+    this.stats.score += bonus;
+    if (!this.player.dead) {
+      this.player.heal(4);
+      this.player.blocks = Math.min(99, this.player.blocks + 8);
+    }
+    this.hud.showBanner(`Wave ${n} cleared`, `+${bonus} points, +2 hearts, +8 blocks`);
+    this.sound.cleared();
+  }
+
+  onKill(mob, head, byId) {
+    const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (this.wave - 1) * 0.1));
+    if (!byId || byId === this.myId) this.creditKill(pts, head);
+    else if (this.mp) this.mp.sendKill(byId, pts, head);
     const r = Math.random();
-    if (r < 0.2 && p.hp < p.maxHp) g.mobs.spawnPickup('heart', mob.pos.x, mob.pos.y, mob.pos.z);
-    else if (r < 0.42) g.mobs.spawnPickup('blocks', mob.pos.x, mob.pos.y, mob.pos.z);
+    let pk = null;
+    if (r < 0.2) pk = this.mobs.spawnPickup('heart', mob.pos.x, mob.pos.y, mob.pos.z);
+    else if (r < 0.42) pk = this.mobs.spawnPickup('blocks', mob.pos.x, mob.pos.y, mob.pos.z);
+    if (pk && this.mp) this.mp.pickupAdded(pk);
+  }
+
+  creditKill(pts, head) {
+    this.stats.kills++;
+    if (head) this.stats.heads++;
+    this.stats.score += pts;
+    this.hud.popup(head ? `Headshot +${pts}` : `+${pts}`, head ? 'head' : '');
   }
 
   onPlayerDeath() {
     this.hud.banner.hidden = true;
+    if (this.mp) {
+      this.mp.sendDied(this.player.killer);
+      this.respawnT = 5;
+      this.hud.showBanner('You died', 'Back in 5', 5.5);
+      return;
+    }
     this.setState('dead');
     this.deadT = 0;
+  }
+
+  respawn() {
+    const s = this.world.spawnPoint();
+    const third = this.player.thirdPerson;
+    this.player.reset(s);
+    this.player.thirdPerson = third;
+    this.hud.banner.hidden = true;
+    this.fx.burst(s.x, s.y + 1, s.z, this.atlas.colors[T.GRASS_TOP], 16, { speed: 2.5, size: 0.1, up: 3, life: 0.7, spread: 0.4 });
   }
 
   showGameOver() {
@@ -445,8 +660,10 @@ class Game {
     this.time += dt;
     const s = this.state;
 
-    if (s === 'playing' || s === 'dead') this.updatePlay(dt);
-    else if (s === 'menu') this.updateMenu(dt);
+    // Multiplayer never pauses: the world keeps going for everyone else.
+    if (this.inGame && (this.mp || s === 'playing' || s === 'dead')) this.updatePlay(dt);
+    else if (s === 'menu' || s === 'mp') this.updateMenu(dt);
+    if (this.mp && !this.inGame) this.mp.update(dt);
 
     if (s !== 'editor') {
       this.world.flush(4);
@@ -463,18 +680,35 @@ class Game {
   updatePlay(dt) {
     const p = this.player;
     p.update(dt);
-    if (!p.dead) this.updateWaves(dt);
-    this.mobs.update(dt);
-    p.updateCamera(this.camera);
-    p.updateModels();
+    if (this.mp && this.state === 'playing' && (this.input.pressed.has('KeyT') || this.input.pressed.has('Enter'))) {
+      this.mp.openChat();
+    }
+    if (this.authority) {
+      if (!p.dead || this.mp) this.updateWaves(dt);
+      this.mobs.update(dt);
+    } else {
+      this.mobs.updateRemote(dt);
+    }
+    if (this.mp) this.mp.update(dt);
+    p.updateCamera(this.camera, dt);
+    p.updateModels(dt);
+    document.body.classList.toggle('is-dead', p.dead);
     this.hud.setHealth(p.hp);
     this.hud.setAmmo(p.ammo, p.reloadT > 0 ? p.reloadT : 0);
     this.hud.setBlocks(p.blocks, p.slot);
-    this.hud.setWave(this.wave, this.waveState === 'rest' ? null : this.queue.length + this.mobs.alive());
+    const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;
+    this.hud.setWave(this.wave, left);
     this.hud.setScore(this.stats.score);
     if (p.dead) {
-      this.deadT += dt;
-      if (this.deadT > 1.6 && !this.gameOverShown) this.showGameOver();
+      if (this.mp) {
+        const before = Math.ceil(this.respawnT);
+        this.respawnT -= dt;
+        if (Math.ceil(this.respawnT) !== before && this.respawnT > 0) this.hud.showBanner('You died', `Back in ${Math.ceil(this.respawnT)}`, 1.5);
+        if (this.respawnT <= 0) this.respawn();
+      } else {
+        this.deadT += dt;
+        if (this.deadT > 1.6 && !this.gameOverShown) this.showGameOver();
+      }
     }
   }
 
@@ -483,6 +717,10 @@ class Game {
     const a = this.menuAngle;
     this.camera.position.set(SX / 2 + Math.cos(a) * 44, 30, SZ / 2 + Math.sin(a) * 44);
     this.camera.lookAt(SX / 2, 8, SZ / 2);
+    if (this.camera.fov !== 75) {
+      this.camera.fov = 75;
+      this.camera.updateProjectionMatrix();
+    }
     this.camera.updateMatrixWorld();
   }
 
@@ -499,7 +737,7 @@ class Game {
     const r = this.renderer;
     r.clear();
     r.render(this.scene, this.camera);
-    if ((this.state === 'playing' || this.state === 'paused') && !this.player.thirdPerson && !this.player.dead) {
+    if ((this.state === 'playing' || this.state === 'paused') && this.inGame && !this.player.thirdPerson && !this.player.dead) {
       r.clearDepth();
       r.render(this.viewScene, this.viewCam);
     }

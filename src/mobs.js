@@ -5,6 +5,7 @@ import { paintMoss, paintBone, paintGloop, makeSkinTexture } from './skin.js';
 import { FlowField } from './flow.js';
 import { SX, SZ, SEA, B, BLOCKS } from './world.js';
 import { TILE_UV, T } from './textures.js';
+import { Rig, poseMoss, poseBone, ease } from './anim.js';
 import { wrapAngle, clamp } from './util.js';
 
 export const MOB_TYPES = {
@@ -17,6 +18,7 @@ export const MOB_TYPES = {
     dmg: 3,
     score: 100,
     digs: true,
+    death: 1.2,
     colors: ['#6f8c55', '#3d6a6e', '#5a7446', '#4f7d2f'],
   },
   bone: {
@@ -28,6 +30,7 @@ export const MOB_TYPES = {
     dmg: 3,
     score: 150,
     digs: false,
+    death: 1.6,
     colors: ['#dcd6c4', '#c4bca6', '#3b3446'],
   },
   gloop: {
@@ -39,9 +42,11 @@ export const MOB_TYPES = {
     dmg: 3,
     score: 120,
     digs: true,
+    death: 0.6,
     colors: ['#9b5fd1', '#caa6ee', '#6d3aa0'],
   },
 };
+const TYPE_LIST = ['moss', 'bone', 'gloop'];
 for (const t of Object.values(MOB_TYPES)) t.colorObjs = t.colors.map((c) => new THREE.Color(c));
 
 const DIRS8 = [
@@ -54,10 +59,11 @@ const DIRS8 = [
   [-1, 1],
   [-1, -1],
 ];
+const ATTACK_TIME = 0.5;
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
 const BOLT_COLORS = [new THREE.Color('#bff3ff'), new THREE.Color('#6fd6f0')];
-const easeOut = (t) => 1 - (1 - t) * (1 - t);
+const r2 = (v) => Math.round(v * 100) / 100;
 
 function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
   let tmin = 0;
@@ -82,16 +88,21 @@ function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
 }
 
 class Mob {
-  constructor(mobs, type, x, y, z, mul) {
+  // remote = true for a copy that mirrors a mob simulated by the host.
+  constructor(mobs, type, x, y, z, mul, id, remote = false) {
     this.mobs = mobs;
     this.game = mobs.game;
+    this.id = id;
+    this.remote = remote;
     this.type = type;
     this.def = MOB_TYPES[type];
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3();
+    this.net = { x, y, z, yaw: 0, ground: true, flags: 0, spawn: 0, hp: 1 };
     this.hw = this.def.hw;
     this.h = this.def.h;
-    this.hp = this.def.hp * mul.hp;
+    this.maxHp = this.def.hp * mul.hp;
+    this.hp = this.maxHp;
     this.speed = this.def.speed * mul.speed;
     this.state = 'spawn';
     this.spawnT = 0;
@@ -100,13 +111,14 @@ class Mob {
     this.yaw = Math.random() * Math.PI * 2;
     this.t = Math.random() * 10;
     this.attackCd = 1 + Math.random();
+    this.attackT = -1;
     this.hurtT = 0;
-    this.swingT = 0;
     this.drawT = 0;
+    this.fired = 0;
+    this.wobble = 0;
     this.aiming = false;
     this.losT = 0;
     this.los = false;
-    this.walkPhase = 0;
     this.jumpCd = 0;
     this.hopCd = 0.5 + Math.random() * 0.5;
     this.stuck = 0;
@@ -116,13 +128,18 @@ class Mob {
     this.digT = 0;
     this.side = Math.random() < 0.5 ? 1 : -1;
     this.strafeT = 1;
-    this.onGround = false;
+    this.onGround = true;
+    this.target = null;
+    this.targetT = 0;
+    this.hitDir = new THREE.Vector3(0, 0, 1);
+    this.debris = null;
     const tex = mobs.tex[type];
     this.model = type === 'gloop' ? buildGloop(tex) : buildHumanoid(tex, { limb: type === 'bone' ? 2 : 0 });
+    this.rig = type === 'gloop' ? null : new Rig(this.model);
     if (type === 'bone') this.addBow();
     this.game.scene.add(this.model.root);
     this.emissives = this.model.materials.filter((m) => m.emissive);
-    this.sync();
+    this.sync(0);
   }
 
   addBow() {
@@ -136,122 +153,121 @@ class Mob {
     arm.add(this.shard);
   }
 
-  distToPlayer() {
-    const p = this.game.player.pos;
-    return Math.hypot(p.x - this.pos.x, p.y - this.pos.y, p.z - this.pos.z);
-  }
-
   vol() {
-    return Math.max(0, 1 - this.distToPlayer() / 40);
+    const p = this.game.player.pos;
+    return Math.max(0, 1 - Math.hypot(p.x - this.pos.x, p.y - this.pos.y, p.z - this.pos.z) / 40);
   }
 
   yOffset() {
-    return this.state === 'spawn' ? -(1 - easeOut(this.spawnT)) * this.h : 0;
+    if (this.state === 'spawn') return -(1 - ease(this.spawnT)) * this.h;
+    if (this.state === 'dying' && this.type === 'moss' && this.deathT > 0.65) return -((this.deathT - 0.65) / 0.55) * 0.7;
+    return 0;
   }
 
-  update(dt) {
-    const g = this.game;
-    const p = g.player;
-    const w = g.world;
+  tickTimers(dt) {
     this.t += dt;
     this.hurtT = Math.max(0, this.hurtT - dt);
-    this.swingT = Math.max(0, this.swingT - dt);
+    this.fired = Math.max(0, this.fired - dt * 3);
+    this.wobble = Math.max(0, this.wobble - dt * 3);
     this.attackCd -= dt;
     this.jumpCd -= dt;
+    if (this.attackT >= 0) {
+      this.attackT += dt / ATTACK_TIME;
+      if (this.attackT >= 1) this.attackT = -1;
+    }
+  }
+
+  // Runs the mob's brain. Only the host (or single player) does this.
+  update(dt) {
+    const g = this.game;
+    const w = g.world;
+    this.tickTimers(dt);
 
     if (this.state === 'spawn') {
       this.spawnT += dt / 0.9;
-      if (Math.random() < 0.5) {
-        const below = w.get(Math.floor(this.pos.x), Math.floor(this.pos.y) - 1, Math.floor(this.pos.z));
-        if (below) {
-          g.fx.burst(this.pos.x, this.pos.y + 0.1, this.pos.z, g.atlas.colors[BLOCKS[below].top], 1, {
-            speed: 1.5,
-            size: 0.09,
-            up: 3,
-            life: 0.5,
-            spread: 0.35,
-          });
-        }
-      }
+      this.spawnDust();
       if (this.spawnT >= 1) {
         this.spawnT = 1;
         this.state = 'live';
       }
-      this.sync();
+      this.sync(dt);
       return;
     }
-
     if (this.state === 'dying') {
-      this.deathT += dt;
-      this.vel.x *= 0.9;
-      this.vel.z *= 0.9;
-      this.vel.y = Math.max(this.vel.y - 30 * dt, -40);
-      moveEntity(w, this, dt);
-      if (this.deathT > 0.75) this.remove(true);
-      else this.sync();
+      this.updateDeath(dt);
       return;
     }
 
-    const dx = p.pos.x - this.pos.x;
-    const dz = p.pos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz) || 1e-3;
-    const dy = p.pos.y - this.pos.y;
-    const alive = !p.dead;
+    this.targetT -= dt;
+    if (this.targetT <= 0 || !this.target || this.target.dead) {
+      this.target = this.mobs.pickTarget(this.pos);
+      this.targetT = 0.5;
+    }
+    const p = this.target;
     let wx = 0;
     let wz = 0;
     let nextStand = -1;
-    const toward = () => {
-      wx = dx / dist;
-      wz = dz / dist;
-    };
-    const follow = () => {
-      const s = this.pathStep();
-      if (s) {
-        wx = s.x;
-        wz = s.z;
-        nextStand = s.stand;
-      } else toward();
-    };
-
+    let dist = 99;
+    let dx = 0;
+    let dz = 0;
+    let dy = 0;
     this.aiming = false;
-    if (!alive) {
+    if (!p) {
       wx = Math.sin(this.t * 0.4 + this.side) * 0.4;
       wz = Math.cos(this.t * 0.3) * 0.4;
-    } else if (this.type === 'bone') {
-      this.losT -= dt;
-      if (this.losT <= 0) {
-        this.losT = 0.2;
-        this.los = dist < 26 && this.canSee(p);
-      }
-      this.aiming = this.los && dist < 22;
-      if (!this.los || dist > 15) follow();
-      else if (dist < 7) {
-        wx = -dx / dist;
-        wz = -dz / dist;
-      } else {
-        this.strafeT -= dt;
-        if (this.strafeT <= 0) {
-          this.side = -this.side;
-          this.strafeT = 1.2 + Math.random() * 2;
-        }
-        wx = (-dz / dist) * this.side * 0.6;
-        wz = (dx / dist) * this.side * 0.6;
-      }
-      if (this.aiming && this.attackCd <= 0) {
-        if (this.drawT === 0) g.sound.charge(this.vol());
-        this.drawT += dt;
-        if (this.drawT > 0.6) {
-          this.shoot(p);
-          this.drawT = 0;
-          this.attackCd = 2 + Math.random() * 0.9;
-        }
-      } else {
-        this.drawT = Math.max(0, this.drawT - dt * 2);
-      }
-    } else if (dist < 2 && Math.abs(dy) < 1.8) {
-      toward();
     } else {
-      follow();
+      dx = p.pos.x - this.pos.x;
+      dz = p.pos.z - this.pos.z;
+      dist = Math.hypot(dx, dz) || 1e-3;
+      dy = p.pos.y - this.pos.y;
+      const toward = () => {
+        wx = dx / dist;
+        wz = dz / dist;
+      };
+      const follow = () => {
+        const s = this.pathStep();
+        if (s) {
+          wx = s.x;
+          wz = s.z;
+          nextStand = s.stand;
+        } else toward();
+      };
+      if (this.type === 'bone') {
+        this.losT -= dt;
+        if (this.losT <= 0) {
+          this.losT = 0.2;
+          this.los = dist < 26 && this.canSee(p);
+        }
+        this.aiming = this.los && dist < 22;
+        if (!this.los || dist > 15) follow();
+        else if (dist < 7) {
+          wx = -dx / dist;
+          wz = -dz / dist;
+        } else {
+          this.strafeT -= dt;
+          if (this.strafeT <= 0) {
+            this.side = -this.side;
+            this.strafeT = 1.2 + Math.random() * 2;
+          }
+          wx = (-dz / dist) * this.side * 0.6;
+          wz = (dx / dist) * this.side * 0.6;
+        }
+        if (this.aiming && this.attackCd <= 0) {
+          if (this.drawT === 0) g.sound.charge(this.vol());
+          this.drawT += dt;
+          if (this.drawT > 0.6) {
+            this.shoot(p);
+            this.drawT = 0;
+            this.attackCd = 2 + Math.random() * 0.9;
+          }
+        } else {
+          this.drawT = Math.max(0, this.drawT - dt * 2);
+        }
+      } else if (dist < 2 && Math.abs(dy) < 1.8) {
+        toward();
+      } else {
+        follow();
+      }
     }
 
     if (this.type === 'gloop') this.hop(dt, wx, wz);
@@ -265,13 +281,21 @@ class Mob {
       this.lastZ = this.pos.z;
       this.progressT = 0;
     }
-    if (alive && this.stuck >= 2 && this.def.digs) this.dig(dt, dx / dist, dz / dist);
+    if (p && this.stuck >= 2 && this.def.digs) this.dig(dt, dx / dist, dz / dist);
 
-    if (alive) {
-      if (this.type === 'moss' && dist < 1.3 && dy > -1.2 && dy < 1.6 && this.attackCd <= 0) {
-        p.hurt(this.def.dmg, this.pos, 'moss');
-        this.attackCd = 1;
-        this.swingT = 0.35;
+    if (p) {
+      // Mossheads wind up, then slam. Step back in time and it misses.
+      if (this.type === 'moss') {
+        if (this.attackT < 0 && dist < 1.4 && dy > -1.2 && dy < 1.6 && this.attackCd <= 0) {
+          this.attackT = 0;
+          this.attackCd = 1.1;
+          this.dealt = false;
+        }
+        if (this.attackT >= 0.45 && !this.dealt) {
+          this.dealt = true;
+          if (dist < 1.9 && dy > -1.2 && dy < 1.8) p.hurt(this.def.dmg, this.pos, 'moss');
+        }
+        if (Math.random() < dt * 0.3) g.sound.groan(this.vol());
       }
       if (this.type === 'gloop' && this.attackCd <= 0) {
         const cy = this.pos.y + 0.45;
@@ -281,17 +305,77 @@ class Mob {
           this.attackCd = 0.9;
         }
       }
-      if (this.type === 'moss' && Math.random() < dt * 0.3) g.sound.groan(this.vol());
     }
 
-    const faceTarget = alive && (this.type === 'bone' ? this.aiming : dist < 5);
+    const faceTarget = p && (this.type === 'bone' ? this.aiming : dist < 5);
     const hs = Math.hypot(this.vel.x, this.vel.z);
     const targetYaw = faceTarget ? Math.atan2(dx, dz) : hs > 0.3 ? Math.atan2(this.vel.x, this.vel.z) : this.yaw;
     this.yaw += wrapAngle(targetYaw - this.yaw) * Math.min(1, dt * 8);
-    this.sync();
+    this.sync(dt);
   }
 
-  // Next step along the flow field, as a unit direction.
+  spawnDust() {
+    const g = this.game;
+    if (Math.random() > 0.5) return;
+    const below = g.world.get(Math.floor(this.pos.x), Math.floor(this.pos.y) - 1, Math.floor(this.pos.z));
+    if (!below) return;
+    g.fx.burst(this.pos.x, this.pos.y + 0.1, this.pos.z, g.atlas.colors[BLOCKS[below].top], 1, {
+      speed: 1.5,
+      size: 0.09,
+      up: 3,
+      life: 0.5,
+      spread: 0.35,
+    });
+  }
+
+  // Mirrors the host's copy of this mob: glide toward where it says the mob
+  // is and play the same animations.
+  updatePuppet(dt) {
+    this.tickTimers(dt);
+    if (this.state === 'dying') {
+      this.updateDeath(dt);
+      return;
+    }
+    const n = this.net;
+    const k = 1 - Math.exp(-12 * dt);
+    const ox = this.pos.x;
+    const oz = this.pos.z;
+    if (Math.hypot(n.x - this.pos.x, n.y - this.pos.y, n.z - this.pos.z) > 5) this.pos.set(n.x, n.y, n.z);
+    else {
+      this.pos.x += (n.x - this.pos.x) * k;
+      this.pos.y += (n.y - this.pos.y) * k;
+      this.pos.z += (n.z - this.pos.z) * k;
+    }
+    if (dt > 0) this.vel.set((this.pos.x - ox) / dt, 0, (this.pos.z - oz) / dt);
+    this.yaw += wrapAngle(n.yaw - this.yaw) * k;
+    this.spawnT = this.state === 'spawn' ? n.spawn : 1;
+    if (this.state === 'spawn') this.spawnDust();
+    if (this.type === 'gloop' && this.onGround && !n.ground) this.game.sound.hop(this.vol());
+    this.onGround = n.ground;
+    this.aiming = !!(n.flags & 1);
+    this.drawT = n.flags & 2 ? Math.min(0.6, this.drawT + dt) : Math.max(0, this.drawT - dt * 2);
+    if (this.type === 'moss' && Math.random() < dt * 0.3) this.game.sound.groan(this.vol());
+    this.sync(dt);
+  }
+
+  applyNet(e) {
+    const n = this.net;
+    n.x = e[2];
+    n.y = e[3];
+    n.z = e[4];
+    n.yaw = e[5];
+    const flags = e[7];
+    if (flags & 4 && !(n.flags & 4)) this.attackT = 0;
+    if (flags & 8 && !(n.flags & 8) && this.hurtT <= 0) this.hurtT = 0.2;
+    n.flags = flags;
+    n.ground = !!(flags & 16);
+    n.spawn = e[8];
+    n.hp = e[9];
+    const st = e[6];
+    if (st === 1 && this.state === 'spawn') this.state = 'live';
+    if (st === 2 && this.state !== 'dying') this.startDeath(false);
+  }
+
   pathStep() {
     const f = this.mobs.flow;
     const cx = Math.floor(this.pos.x);
@@ -317,7 +401,7 @@ class Mob {
   }
 
   walk(dt, wx, wz, nextStand) {
-    const slow = (this.stuck >= 2 ? 0.4 : 1) * (this.drawT > 0 ? 0.4 : 1);
+    const slow = (this.stuck >= 2 ? 0.4 : 1) * (this.drawT > 0 ? 0.4 : 1) * (this.attackT >= 0 ? 0.3 : 1);
     const sp = this.speed * slow;
     const k = Math.min(1, (this.onGround ? 12 : 3) * dt);
     this.vel.x += (wx * sp - this.vel.x) * k;
@@ -331,7 +415,6 @@ class Mob {
       this.vel.y = 8.8;
       this.jumpCd = 0.4;
     }
-    this.walkPhase += Math.hypot(this.vel.x, this.vel.z) * dt * 2.6;
   }
 
   // Gloops travel in big bouncy hops that clear two-block walls.
@@ -377,7 +460,8 @@ class Mob {
         if (res.broken) g.sound.blockBreak(res.info.sound);
         else g.sound.blockHit(res.info.sound);
       }
-      this.swingT = 0.35;
+      if (this.type === 'moss' && this.attackT < 0) this.attackT = 0.3;
+      else this.wobble = 1;
       return;
     }
   }
@@ -405,7 +489,8 @@ class Mob {
     dir.y += (Math.random() - 0.5) * 0.03;
     dir.z += (Math.random() - 0.5) * 0.05;
     dir.normalize();
-    this.mobs.spawnBolt(o, dir.multiplyScalar(speed));
+    this.fired = 1;
+    this.mobs.spawnBolt(o, dir.multiplyScalar(speed), this.id);
     this.game.sound.bolt(this.vol());
   }
 
@@ -426,25 +511,88 @@ class Mob {
     return null;
   }
 
-  damage(amount, dir, head, at) {
+  damage(amount, dir, head, at, byId) {
     if (this.state === 'dying' || this.gone) return;
     const g = this.game;
-    this.hp -= amount;
     this.hurtT = 0.2;
+    this.wobble = 1;
+    this.hitDir.set(dir.x, 0, dir.z).normalize();
+    if (at) g.fx.burst(at.x, at.y, at.z, this.def.colorObjs, 6, { speed: 2.5, size: 0.08, up: 1.5, life: 0.5, spread: 0.1 });
+    if (this.remote) {
+      // The host decides what the hit does; we just show it landed.
+      if (g.mp) g.mp.sendHitMob(this, amount, head, dir);
+      g.sound.mobHurt(this.type, 1);
+      return;
+    }
+    this.hp -= amount;
     this.vel.x += dir.x * 3.5;
     this.vel.z += dir.z * 3.5;
     if (this.onGround) this.vel.y = Math.max(this.vel.y, 3);
-    g.fx.burst(at.x, at.y, at.z, this.def.colorObjs, 6, { speed: 2.5, size: 0.08, up: 1.5, life: 0.5, spread: 0.1 });
     if (this.hp <= 0) {
-      this.state = 'dying';
-      this.deathT = 0;
-      this.hurtT = 0.75;
-      this.aiming = false;
-      g.sound.mobDie(this.type, 1);
-      g.onKill(this, head);
+      this.startDeath(true);
+      g.onKill(this, head, byId);
     } else {
       g.sound.mobHurt(this.type, 1);
     }
+  }
+
+  startDeath(loud) {
+    this.state = 'dying';
+    this.deathT = 0;
+    this.hurtT = 0.2;
+    this.aiming = false;
+    this.attackT = -1;
+    if (this.shard) this.shard.visible = false;
+    this.game.sound.mobDie(this.type, loud ? 1 : this.vol());
+    if (this.type === 'bone') this.breakApart();
+  }
+
+  // Boneheads rattle apart: every limb flies off and tumbles.
+  breakApart() {
+    const scene = this.game.scene;
+    this.model.root.updateMatrixWorld(true);
+    this.debris = [];
+    for (const name of ['head', 'body', 'armR', 'armL', 'legR', 'legL']) {
+      const obj = this.model.parts[name];
+      scene.attach(obj);
+      const v = new THREE.Vector3(
+        (Math.random() - 0.5) * 3 + this.hitDir.x * 2.5,
+        2 + Math.random() * 3.5,
+        (Math.random() - 0.5) * 3 + this.hitDir.z * 2.5,
+      );
+      const spin = new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+      this.debris.push({ obj, v, spin });
+    }
+  }
+
+  updateDeath(dt) {
+    this.deathT += dt;
+    const w = this.game.world;
+    if (this.debris) {
+      for (const d of this.debris) {
+        d.v.y -= 22 * dt;
+        const o = d.obj.position;
+        o.addScaledVector(d.v, dt);
+        const fy = Math.floor(o.y - 0.08);
+        if (w.solid(Math.floor(o.x), fy, Math.floor(o.z))) {
+          o.y = fy + 1.08;
+          if (d.v.y < 0) d.v.y *= -0.35;
+          d.v.x *= 0.7;
+          d.v.z *= 0.7;
+          d.spin.multiplyScalar(0.7);
+        }
+        d.obj.rotation.x += d.spin.x * dt;
+        d.obj.rotation.y += d.spin.y * dt;
+        d.obj.rotation.z += d.spin.z * dt;
+      }
+    } else if (!this.remote) {
+      this.vel.x *= 0.9;
+      this.vel.z *= 0.9;
+      this.vel.y = Math.max(this.vel.y - 30 * dt, -40);
+      moveEntity(w, this, dt);
+    }
+    if (this.deathT > this.def.death) this.remove(true);
+    else this.sync(dt);
   }
 
   remove(withPuff) {
@@ -452,21 +600,36 @@ class Mob {
     this.gone = true;
     const g = this.game;
     if (withPuff) {
-      g.fx.burst(this.pos.x, this.pos.y + this.h * 0.5, this.pos.z, this.def.colorObjs, 22, {
-        speed: 3,
-        size: 0.12,
-        up: 2,
-        life: 0.9,
-        spread: 0.4,
-      });
+      if (this.debris) {
+        for (const d of this.debris) {
+          const o = d.obj.position;
+          g.fx.burst(o.x, o.y, o.z, this.def.colorObjs, 5, { speed: 2, size: 0.1, up: 1.5, life: 0.6, spread: 0.2 });
+        }
+      } else {
+        g.fx.burst(this.pos.x, this.pos.y + this.h * 0.5, this.pos.z, this.def.colorObjs, 22, {
+          speed: 3,
+          size: 0.12,
+          up: 2,
+          life: 0.9,
+          spread: 0.4,
+        });
+      }
     }
+    if (this.debris) for (const d of this.debris) g.scene.remove(d.obj);
     g.scene.remove(this.model.root);
     this.model.dispose();
   }
 
-  sync() {
+  // Who to turn our head toward: our target, or the nearest player we know.
+  lookTarget() {
+    if (this.target && !this.target.dead) return this.target;
+    return this.mobs.pickTarget(this.pos);
+  }
+
+  sync(dt) {
     const m = this.model;
-    m.root.position.set(this.pos.x, this.pos.y + this.yOffset(), this.pos.z);
+    const jitter = this.state === 'spawn' ? (Math.random() - 0.5) * 0.05 : 0;
+    m.root.position.set(this.pos.x + jitter, this.pos.y + this.yOffset(), this.pos.z);
     m.root.rotation.y = this.yaw;
     const flash = this.hurtT > 0 ? Math.min(1, this.hurtT / 0.2) : 0;
     for (const mat of this.emissives) mat.emissive.setRGB(0.55 * flash, 0.05 * flash, 0.03 * flash);
@@ -476,52 +639,48 @@ class Mob {
       let sy = 1;
       if (this.state === 'dying') {
         const k = Math.min(1, this.deathT / 0.5);
-        sy = 1 - k * 0.7;
-        sx = 1 + k * 0.4;
+        sy = 1 - ease(k) * 0.75;
+        sx = 1 + ease(k) * 0.45;
       } else if (!this.onGround && this.state === 'live') {
-        sy = 1 + clamp(this.vel.y * 0.03, -0.2, 0.25);
+        const vy = this.remote ? 4 : this.vel.y;
+        sy = 1 + clamp(vy * 0.03, -0.2, 0.25);
         sx = 1 - (sy - 1) * 0.6;
-      } else if (this.hopCd < 0.18) {
+      } else if (!this.remote && this.hopCd < 0.18) {
         const q = ((0.18 - Math.max(0, this.hopCd)) / 0.18) * 0.25;
         sy = 1 - q;
         sx = 1 + q * 0.6;
       }
-      m.body.scale.set(sx, sy, sx);
+      const wob = this.wobble * Math.sin(this.t * 38) * 0.16;
+      m.body.scale.set(sx + wob, sy - wob, sx + wob);
       return;
     }
 
-    const P = m.parts;
-    const amt = Math.min(1, Math.hypot(this.vel.x, this.vel.z) / 3);
-    const s = Math.sin(this.walkPhase) * 0.75 * amt;
-    P.legR.rotation.x = s;
-    P.legL.rotation.x = -s;
-    const p = this.game.player;
-    const dx = p.pos.x - this.pos.x;
-    const dz = p.pos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz) || 1;
-    const pitchTo = Math.atan2(p.pos.y + 1.4 - (this.pos.y + 1.6), dist);
-    if (this.state === 'live') {
-      P.head.rotation.y = clamp(wrapAngle(Math.atan2(dx, dz) - this.yaw), -1, 1);
-      P.head.rotation.x = -clamp(pitchTo, -0.6, 0.6);
+    if (this.debris) return;
+    const tgt = this.lookTarget();
+    let lookYaw = 0;
+    let lookPitch = 0;
+    if (tgt) {
+      const dx = tgt.pos.x - this.pos.x;
+      const dz = tgt.pos.z - this.pos.z;
+      lookYaw = wrapAngle(Math.atan2(dx, dz) - this.yaw);
+      lookPitch = Math.atan2(tgt.pos.y + 1.4 - (this.pos.y + 1.6), Math.hypot(dx, dz) || 1);
     }
-    if (this.type === 'moss') {
-      const swing = this.swingT > 0 ? Math.sin((1 - this.swingT / 0.35) * Math.PI) * 0.9 : 0;
-      const sway = Math.sin(this.t * 3) * 0.06;
-      P.armR.rotation.x = -1.45 + sway + swing;
-      P.armL.rotation.x = -1.45 - sway + swing;
-    } else if (this.aiming) {
-      P.armR.rotation.x = -Math.PI / 2 - pitchTo;
-      P.armR.rotation.y = 0.1;
-      P.armL.rotation.x = -Math.PI / 2 - pitchTo + 0.1;
-      P.armL.rotation.y = -0.45;
-    } else {
-      P.armR.rotation.x = -s * 0.8;
-      P.armL.rotation.x = s * 0.8;
-      P.armR.rotation.y = 0;
-      P.armL.rotation.y = 0;
-    }
+    const s = {
+      speed: Math.hypot(this.vel.x, this.vel.z),
+      attack: this.attackT,
+      hurt: this.hurtT / 0.2,
+      spawn: this.state === 'spawn' ? this.spawnT : 1,
+      dead: this.state === 'dying',
+      deadT: this.deathT,
+      lookYaw,
+      lookPitch,
+      aiming: this.aiming,
+      draw: Math.min(1, this.drawT / 0.6),
+      fired: this.fired,
+    };
+    if (this.type === 'moss') poseMoss(this.rig, s, dt);
+    else poseBone(this.rig, s, dt);
     if (this.shard) this.shard.visible = this.drawT > 0.05;
-    if (this.state === 'dying') m.root.rotation.z = Math.min(1, this.deathT / 0.35) * (Math.PI / 2);
   }
 }
 
@@ -534,6 +693,8 @@ export class Mobs {
     this.flow = new FlowField();
     this.flowTimer = 0;
     this.flowKey = '';
+    this.nextId = 1;
+    this.nextPickup = 1;
     this.tex = {};
     for (const [k, paint] of Object.entries({ moss: paintMoss, bone: paintBone, gloop: paintGloop })) {
       const c = document.createElement('canvas');
@@ -595,18 +756,32 @@ export class Mobs {
     return n;
   }
 
+  pickTarget(pos) {
+    let best = null;
+    let bd = Infinity;
+    for (const t of this.game.targets()) {
+      const d = (t.pos.x - pos.x) ** 2 + (t.pos.y - pos.y) ** 2 + (t.pos.z - pos.z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+
   refreshFlow(force = false) {
-    const p = this.game.player.pos;
-    const key = `${Math.floor(p.x)},${Math.floor(p.z)},${this.game.world.version}`;
+    const cells = this.game.targets().map((t) => [Math.floor(t.pos.x), Math.floor(t.pos.z)]);
+    if (!cells.length) cells.push([SX >> 1, SZ >> 1]);
+    const key = cells.map((c) => c.join(',')).join(';') + '|' + this.game.world.version;
     if (force || key !== this.flowKey) {
-      this.flow.compute(this.game.world, Math.floor(p.x), Math.floor(p.z));
+      this.flow.compute(this.game.world, cells);
       this.flowKey = key;
     }
   }
 
   findSpawn() {
     const f = this.flow;
-    const p = this.game.player.pos;
+    const players = this.game.targets();
     for (let pass = 0; pass < 2; pass++) {
       const minD = pass === 0 ? 17 : 9;
       for (let i = 0; i < 90; i++) {
@@ -614,8 +789,9 @@ export class Mobs {
         const z = 2 + Math.floor(Math.random() * (SZ - 4));
         const s = f.standAt(x, z);
         if (s <= SEA) continue;
-        const d = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z);
-        if (d < minD || d > 40) continue;
+        let near = Infinity;
+        for (const p of players) near = Math.min(near, Math.hypot(x + 0.5 - p.pos.x, z + 0.5 - p.pos.z));
+        if (near < minD || (players.length && near > 40)) continue;
         if (pass === 0 && !isFinite(f.at(x, z))) continue;
         return new THREE.Vector3(x + 0.5, s, z + 0.5);
       }
@@ -626,22 +802,43 @@ export class Mobs {
   spawn(type, mul) {
     const at = this.findSpawn();
     if (!at) return false;
-    this.list.push(new Mob(this, type, at.x, at.y, at.z, mul));
+    this.list.push(new Mob(this, type, at.x, at.y, at.z, mul, this.nextId++));
     return true;
   }
 
-  spawnBolt(o, v) {
+  spawnBolt(o, v, mobId, fromNet = false) {
     const mesh = new THREE.Mesh(this.boltGeo, this.boltMat);
     mesh.position.copy(o);
     this.game.scene.add(mesh);
     this.bolts.push({ pos: o.clone(), vel: v.clone(), life: 3, mesh });
+    if (fromNet) {
+      const m = this.list.find((x) => x.id === mobId);
+      if (m) {
+        m.fired = 1;
+        this.game.sound.bolt(m.vol());
+      }
+    } else if (this.game.mp) {
+      this.game.mp.sendBolt(o, v, mobId);
+    }
   }
 
-  spawnPickup(kind, x, y, z) {
+  spawnPickup(kind, x, y, z, id) {
+    if (id === undefined) id = this.nextPickup++;
     const mesh = (kind === 'heart' ? this.heartProto : this.bundleProto).clone();
     mesh.position.set(x, y + 0.45, z);
     this.game.scene.add(mesh);
-    this.pickups.push({ kind, mesh, x, y: y + 0.45, z, t: 0 });
+    const pk = { id, kind, mesh, x, y: y + 0.45, z, t: 0 };
+    this.pickups.push(pk);
+    return pk;
+  }
+
+  removePickup(id) {
+    const pk = this.pickups.find((p) => p.id === id);
+    if (!pk) return false;
+    pk.t = 99;
+    this.game.scene.remove(pk.mesh);
+    this.pickups = this.pickups.filter((p) => p !== pk);
+    return true;
   }
 
   raycast(o, d, maxT) {
@@ -654,27 +851,90 @@ export class Mobs {
     return best;
   }
 
+  // Host / single player: run every mob's brain.
   update(dt) {
     this.flowTimer -= dt;
     if (this.flowTimer <= 0) {
       this.flowTimer = 0.35;
       this.refreshFlow();
     }
-    for (const m of this.list) m.update(dt);
+    for (const m of this.list) {
+      if (m.remote) m.updatePuppet(dt);
+      else m.update(dt);
+    }
     this.separate(dt);
     this.list = this.list.filter((m) => !m.gone);
     this.updateBolts(dt);
     this.updatePickups(dt);
   }
 
+  // Joined players: mobs are copies of the host's.
+  updateRemote(dt) {
+    for (const m of this.list) m.updatePuppet(dt);
+    this.list = this.list.filter((m) => !m.gone);
+    this.updateBolts(dt);
+    this.updatePickups(dt);
+  }
+
+  snapshot() {
+    return this.list
+      .filter((m) => !m.gone)
+      .map((m) => [
+        m.id,
+        TYPE_LIST.indexOf(m.type),
+        r2(m.pos.x),
+        r2(m.pos.y),
+        r2(m.pos.z),
+        r2(m.yaw),
+        m.state === 'spawn' ? 0 : m.state === 'live' ? 1 : 2,
+        (m.aiming ? 1 : 0) | (m.drawT > 0.05 ? 2 : 0) | (m.attackT >= 0 ? 4 : 0) | (m.hurtT > 0 ? 8 : 0) | (m.onGround ? 16 : 0),
+        r2(m.spawnT),
+        r2(Math.max(0, m.hp / m.maxHp)),
+      ]);
+  }
+
+  applySnapshot(entries) {
+    const seen = new Set();
+    for (const e of entries) {
+      const id = e[0];
+      seen.add(id);
+      let m = this.list.find((x) => x.id === id);
+      if (!m) {
+        if (e[6] === 2) continue;
+        m = new Mob(this, TYPE_LIST[e[1]] || 'moss', e[2], e[3], e[4], { hp: 1, speed: 1 }, id, true);
+        m.yaw = e[5];
+        this.list.push(m);
+      }
+      m.applyNet(e);
+    }
+    // Gone on the host: drop it here too, unless it is mid-death animation.
+    for (const m of this.list) if (!seen.has(m.id) && m.state !== 'dying') m.remove(false);
+    this.list = this.list.filter((m) => !m.gone);
+  }
+
+  // We just became the host: take over every mob from where it stands.
+  promote(mul) {
+    for (const m of this.list) {
+      if (!m.remote) continue;
+      m.remote = false;
+      m.maxHp = m.def.hp * mul.hp;
+      m.hp = Math.max(1, m.maxHp * m.net.hp);
+      m.speed = m.def.speed * mul.speed;
+      m.pos.set(m.net.x, m.net.y, m.net.z);
+      m.vel.set(0, 0, 0);
+      this.nextId = Math.max(this.nextId, m.id + 1);
+    }
+    this.refreshFlow(true);
+  }
+
   separate(dt) {
     const L = this.list;
     for (let i = 0; i < L.length; i++) {
       const a = L[i];
-      if (a.state !== 'live') continue;
+      if (a.state !== 'live' || a.remote) continue;
       for (let j = i + 1; j < L.length; j++) {
         const b = L[j];
-        if (b.state !== 'live') continue;
+        if (b.state !== 'live' || b.remote) continue;
         const dx = b.pos.x - a.pos.x;
         const dz = b.pos.z - a.pos.z;
         const r = a.hw + b.hw + 0.15;
@@ -690,6 +950,8 @@ export class Mobs {
     }
   }
 
+  // Every player simulates every bolt, and each one only checks whether it
+  // hit themselves. That keeps dodging fair even with lag.
   updateBolts(dt) {
     const g = this.game;
     const p = g.player;
@@ -702,6 +964,7 @@ export class Mobs {
       b.mesh.lookAt(vB.copy(b.pos).add(b.vel));
       const inPlayer =
         !p.dead &&
+        g.state !== 'menu' &&
         Math.abs(b.pos.x - p.pos.x) < p.hw + 0.12 &&
         Math.abs(b.pos.z - p.pos.z) < p.hw + 0.12 &&
         b.pos.y > p.pos.y &&
@@ -729,7 +992,7 @@ export class Mobs {
       pk.mesh.position.y = pk.y + Math.sin(pk.t * 3) * 0.1;
       pk.mesh.visible = pk.t < 20 || Math.floor(pk.t * 8) % 2 === 0;
       const d = Math.hypot(p.pos.x - pk.x, p.pos.y + 0.9 - pk.y, p.pos.z - pk.z);
-      if (!p.dead && d < 1.5) {
+      if (!p.dead && d < 1.5 && pk.t < 25) {
         if (pk.kind === 'heart') {
           p.heal(6);
           g.hud.popup('+3 hearts', 'heal');
@@ -739,10 +1002,10 @@ export class Mobs {
         }
         g.sound.pickup();
         pk.t = 99;
+        if (g.mp) g.mp.pickupTaken(pk.id);
       }
       if (pk.t > 25) g.scene.remove(pk.mesh);
     }
     this.pickups = this.pickups.filter((pk) => pk.t <= 25);
   }
 }
-

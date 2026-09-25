@@ -1,16 +1,22 @@
 import * as THREE from 'three';
-import { moveEntity } from './physics.js';
+import { moveEntity, boxHitsWorld } from './physics.js';
 import { B, BLOCKS, SEA, SY } from './world.js';
 import { buildHumanoid, buildBlaster, setBoxUV, PX } from './model.js';
+import { Rig, posePlayer, ease } from './anim.js';
 import { clamp } from './util.js';
 
 export const PLACEABLE = [B.COBBLE, B.PLANKS, B.BRICK, B.MOSSY];
 export const MAG = 16;
 export const MAX_HP = 20;
-const RELOAD = 1.1;
+export const RELOAD = 1.1;
 const FIRE_GAP = 0.13;
 const REACH = 5.5;
 const RANGE = 90;
+const H_STAND = 1.8;
+const H_CROUCH = 1.5;
+const EYE_STAND = 1.62;
+const EYE_CROUCH = 1.27;
+const BASE_FOV = 75;
 
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
@@ -18,6 +24,7 @@ const vC = new THREE.Vector3();
 const vD = new THREE.Vector3();
 const vE = new THREE.Vector3();
 const vF = new THREE.Vector3();
+const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 
 function overlapsBlock(e, x, y, z) {
   return (
@@ -67,9 +74,12 @@ function buildViewModel(skin) {
   flash.position.set(0, 0.01, -0.55);
   flash.visible = false;
   gun.add(flash);
+  const cell = gun.userData.cell;
   return {
     group,
     flash,
+    cell,
+    cellY: cell.position.y,
     rest: group.position.clone(),
     dispose() {
       for (const g of geos) g.dispose();
@@ -85,8 +95,7 @@ export class Player {
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.hw = 0.3;
-    this.h = 1.8;
-    this.eyeH = 1.62;
+    this.h = H_STAND;
     this.maxHp = MAX_HP;
     this.thirdPerson = false;
     this.selection = new THREE.LineSegments(
@@ -117,6 +126,7 @@ export class Player {
     this.model.parts.armR.add(gun);
     this.gun3p = gun;
     this.model.root.visible = wasVisible;
+    this.rig = new Rig(this.model);
     scene.add(this.model.root);
 
     if (this.view) {
@@ -151,9 +161,29 @@ export class Player {
     this.walkAmt = 0;
     this.stepDist = 0;
     this.recoil = 0;
+    this.recoilRoll = 0;
     this.flashT = 0;
     this.onGround = false;
     this.inWater = false;
+    this.crouch = false;
+    this.sprint = false;
+    this.sprintLatch = false;
+    this.lastW = -1;
+    this.time = 0;
+    this.h = H_STAND;
+    this.eye = EYE_STAND;
+    this.fov = BASE_FOV;
+    this.landDip = 0;
+    this.landed = 0;
+    this.hurtT = 0;
+    this.hurtRoll = 0;
+    this.strafeRoll = 0;
+    this.sinceShot = 99;
+    this.equip = 0;
+    this.swayX = 0;
+    this.swayY = 0;
+    this.sprintW = 0;
+    this.crouchW = 0;
   }
 
   aimDir(out) {
@@ -162,17 +192,40 @@ export class Player {
     return out.set(-Math.sin(this.yaw) * cp, Math.sin(p), -Math.cos(this.yaw) * cp);
   }
 
-  eye(out) {
-    return out.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z);
+  eyePos(out) {
+    return out.set(this.pos.x, this.pos.y + this.eye, this.pos.z);
+  }
+
+  canStand() {
+    const p = this.pos;
+    return !boxHitsWorld(this.game.world, p.x - this.hw, p.y, p.z - this.hw, p.x + this.hw, p.y + H_STAND, p.z + this.hw);
+  }
+
+  // Is there a block under any corner of our feet?
+  supported(x, y, z) {
+    const w = this.game.world;
+    const fy = Math.floor(y - 0.05);
+    const r = this.hw - 0.01;
+    return (
+      w.solidP(Math.floor(x - r), fy, Math.floor(z - r)) ||
+      w.solidP(Math.floor(x + r), fy, Math.floor(z - r)) ||
+      w.solidP(Math.floor(x - r), fy, Math.floor(z + r)) ||
+      w.solidP(Math.floor(x + r), fy, Math.floor(z + r))
+    );
   }
 
   update(dt) {
     const g = this.game;
     const inp = g.input;
     const w = g.world;
+    this.time += dt;
     this.kick *= Math.exp(-10 * dt);
     this.shake *= Math.exp(-9 * dt);
     this.recoil *= Math.exp(-14 * dt);
+    this.recoilRoll *= Math.exp(-12 * dt);
+    this.hurtT = Math.max(0, this.hurtT - dt);
+    this.sinceShot += dt;
+    this.equip = Math.min(1, this.equip + dt * 2.2);
     this.flashT -= dt;
 
     if (this.dead) {
@@ -182,6 +235,7 @@ export class Player {
       this.vel.y = Math.max(this.vel.y - 30 * dt, -40);
       moveEntity(w, this, dt);
       this.selection.visible = false;
+      this.sprint = false;
       return;
     }
 
@@ -189,14 +243,33 @@ export class Player {
     const sens = 0.0024 * g.settings.sens;
     this.yaw -= mx * sens;
     this.pitch = clamp(this.pitch - my * sens, -1.55, 1.55);
+    this.swayX = clamp(this.swayX + mx * 0.00022, -0.05, 0.05);
+    this.swayY = clamp(this.swayY + my * 0.00022, -0.05, 0.05);
 
     for (let i = 0; i < 4; i++) if (inp.pressed.has('Digit' + (i + 1))) this.slot = i;
     if (inp.wheel) this.slot = (this.slot + (inp.wheel > 0 ? 1 : -1) + 4) % 4;
     if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) this.thirdPerson = !this.thirdPerson;
 
     const k = inp.keys;
-    const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    // Crouch: hold Shift. You stay crouched under low ceilings.
+    const wantCrouch = k.has('ShiftLeft') || k.has('ShiftRight');
+    if (wantCrouch) this.crouch = true;
+    else if (this.crouch && this.canStand()) this.crouch = false;
+    this.h = this.crouch ? H_CROUCH : H_STAND;
+
+    const fwdHeld = k.has('KeyW') || k.has('ArrowUp');
+    const fwd = (fwdHeld ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const side = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    // Sprint: double-tap W (or hold Ctrl in the desktop app, where Ctrl+W
+    // can't close the window).
+    if (inp.pressed.has('KeyW') || inp.pressed.has('ArrowUp')) {
+      if (this.time - this.lastW < 0.3) this.sprintLatch = true;
+      this.lastW = this.time;
+    }
+    if (!fwdHeld) this.sprintLatch = false;
+    const ctrl = g.desktop && (k.has('ControlLeft') || k.has('ControlRight'));
+    this.sprint = fwd > 0 && (this.sprintLatch || ctrl) && !this.crouch && !this.inWater;
+
     let wx = -Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * side;
     let wz = -Math.cos(this.yaw) * fwd - Math.sin(this.yaw) * side;
     const len = Math.hypot(wx, wz);
@@ -205,8 +278,7 @@ export class Player {
       wz /= len;
     }
     this.inWater = this.pos.y < SEA - 0.35;
-    const sprint = k.has('ShiftLeft') || k.has('ShiftRight');
-    let speed = sprint && fwd > 0 ? 7 : 4.7;
+    let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
     if (this.inWater) speed *= 0.55;
     const accel = this.onGround ? 14 : this.inWater ? 6 : 3.5;
     const a = Math.min(1, accel * dt);
@@ -224,13 +296,43 @@ export class Player {
         g.sound.jump();
       }
     }
+    const px = this.pos.x;
+    const py = this.pos.y;
+    const pz = this.pos.z;
+    const wasGround = this.onGround;
+    const vyBefore = this.vel.y;
     moveEntity(w, this, dt);
+
+    // Crouching never walks you off an edge.
+    if (this.crouch && wasGround && !this.onGround && vyBefore <= 0 && !this.supported(this.pos.x, py, this.pos.z)) {
+      if (this.supported(this.pos.x, py, pz)) {
+        this.pos.z = pz;
+        this.vel.z = 0;
+      } else if (this.supported(px, py, this.pos.z)) {
+        this.pos.x = px;
+        this.vel.x = 0;
+      } else {
+        this.pos.x = px;
+        this.pos.z = pz;
+        this.vel.x = this.vel.z = 0;
+      }
+      this.pos.y = py;
+      this.vel.y = 0;
+      this.onGround = true;
+    }
+
+    if (!wasGround && this.onGround && vyBefore < -7) {
+      this.landed = clamp((-vyBefore - 7) / 14, 0.25, 1);
+      this.landDip = this.landed;
+      const below = w.get(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.1), Math.floor(this.pos.z));
+      if (below) g.sound.step(BLOCKS[below].sound);
+    }
 
     const hs = Math.hypot(this.vel.x, this.vel.z);
     const target = this.onGround && hs > 0.5 ? Math.min(1, hs / 5) : 0;
     this.walkAmt += (target - this.walkAmt) * Math.min(1, dt * 10);
-    this.walkPhase += hs * dt * 2.2;
-    if (this.onGround && hs > 1) {
+    this.walkPhase += hs * dt * (this.crouch ? 3 : 2.2);
+    if (this.onGround && hs > 1 && !this.crouch) {
       this.stepDist += hs * dt;
       if (this.stepDist > 2.1) {
         this.stepDist = 0;
@@ -238,6 +340,7 @@ export class Player {
         if (below) g.sound.step(BLOCKS[below].sound);
       }
     }
+    this.strafeRoll = damp(this.strafeRoll, -side * 0.012, 8, dt);
 
     this.fireCd -= dt;
     this.placeCd -= dt;
@@ -246,7 +349,7 @@ export class Player {
       if (this.reloadT <= 0) this.ammo = MAG;
     }
     if (inp.pressed.has('KeyR') && this.ammo < MAG && this.reloadT <= 0) this.startReload();
-    if (inp.left && this.fireCd <= 0 && this.reloadT <= 0 && this.ammo > 0) this.shoot();
+    if (inp.left && this.fireCd <= 0 && this.reloadT <= 0 && this.ammo > 0 && this.equip > 0.6) this.shoot();
     if (this.ammo === 0 && this.reloadT <= 0 && this.fireCd <= 0) this.startReload();
     if (inp.right && this.placeCd <= 0) this.tryPlace();
 
@@ -265,7 +368,12 @@ export class Player {
 
   startReload() {
     this.reloadT = RELOAD;
+    this.sprintLatch = false;
     this.game.sound.reload();
+  }
+
+  get reloadFrac() {
+    return this.reloadT > 0 ? 1 - this.reloadT / RELOAD : -1;
   }
 
   muzzleWorld(out) {
@@ -279,10 +387,13 @@ export class Player {
     const w = g.world;
     this.ammo--;
     this.fireCd = FIRE_GAP;
+    this.sprintLatch = false;
+    this.sinceShot = 0;
     const origin = vA.copy(g.camera.position);
     const dir = this.aimDir(vB);
     const moving = Math.hypot(this.vel.x, this.vel.z) > 1;
-    const spread = 0.004 + (moving ? 0.01 : 0) + (this.onGround || this.inWater ? 0 : 0.025);
+    let spread = 0.004 + (moving ? 0.01 : 0) + (this.onGround || this.inWater ? 0 : 0.025);
+    if (this.crouch && this.onGround) spread *= 0.35;
     dir.x += (Math.random() - 0.5) * spread * 2;
     dir.y += (Math.random() - 0.5) * spread * 2;
     dir.z += (Math.random() - 0.5) * spread * 2;
@@ -294,7 +405,7 @@ export class Player {
     if (mobHit && (!blockHit || mobHit.t < blockHit.t)) {
       endT = mobHit.t;
       const at = vC.copy(dir).multiplyScalar(endT).add(origin);
-      mobHit.mob.damage(mobHit.head ? 9 : 4, dir, mobHit.head, at);
+      mobHit.mob.damage(mobHit.head ? 9 : 4, dir, mobHit.head, at, g.myId);
       g.hud.hitmarker(mobHit.head);
       if (mobHit.head) g.sound.headshot();
       else g.sound.hit();
@@ -327,9 +438,12 @@ export class Player {
       }
     }
     const end = vC.copy(dir).multiplyScalar(endT).add(origin);
-    g.tracers.fire(this.muzzleWorld(vD), end);
-    this.kick += 0.022;
+    const from = this.muzzleWorld(vD);
+    g.tracers.fire(from, end);
+    if (g.mp) g.mp.sendShot(from, end);
+    this.kick += this.crouch ? 0.012 : 0.022;
     this.recoil = 1;
+    this.recoilRoll = (Math.random() - 0.5) * 0.08;
     this.flashT = 0.05;
     this.shake = Math.max(this.shake, 0.04);
     g.sound.shoot();
@@ -340,7 +454,7 @@ export class Player {
   targetBlock() {
     const cam = this.game.camera;
     const dir = this.aimDir(vE);
-    const extra = this.thirdPerson ? cam.position.distanceTo(this.eye(vF)) : 0;
+    const extra = this.thirdPerson ? cam.position.distanceTo(this.eyePos(vF)) : 0;
     const o = cam.position;
     return this.game.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, REACH + extra);
   }
@@ -362,11 +476,13 @@ export class Player {
     if (!w.inBounds(x, y, z) || y >= SY - 1 || w.get(x, y, z) !== B.AIR) return;
     if (overlapsBlock(this, x, y, z)) return;
     if (g.mobs.list.some((m) => m.state !== 'dying' && overlapsBlock(m, x, y, z))) return;
+    if (g.mp && g.mp.remotes.list().some((r) => !r.dead && overlapsBlock(r, x, y, z))) return;
     const id = PLACEABLE[this.slot];
     w.set(x, y, z, id);
     this.blocks--;
     g.stats.placed++;
     g.sound.place();
+    this.recoil = Math.max(this.recoil, 0.4);
     g.fx.burst(x + 0.5, y + 0.5, z + 0.5, g.atlas.colors[BLOCKS[id].side], 6, {
       speed: 1.2,
       size: 0.08,
@@ -389,6 +505,7 @@ export class Player {
     this.invuln = 0.4;
     this.sinceHurt = 0;
     this.regenT = 0;
+    this.hurtT = 0.3;
     if (from) {
       const dx = this.pos.x - from.x;
       const dz = this.pos.z - from.z;
@@ -396,6 +513,11 @@ export class Player {
       this.vel.x += (dx / l) * 6;
       this.vel.z += (dz / l) * 6;
       this.vel.y = Math.max(this.vel.y, 4.5);
+      // Tip the camera away from whatever hit you.
+      const right = Math.cos(this.yaw) * (dx / l) - Math.sin(this.yaw) * (dz / l);
+      this.hurtRoll = (right >= 0 ? -1 : 1) * 0.09;
+    } else {
+      this.hurtRoll = (Math.random() < 0.5 ? -1 : 1) * 0.09;
     }
     this.shake = 0.12;
     g.hud.damage();
@@ -405,6 +527,7 @@ export class Player {
       this.dead = true;
       this.deadT = 0;
       this.killer = source;
+      this.crouch = false;
       g.sound.death();
       g.onPlayerDeath();
     }
@@ -414,15 +537,20 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + n);
   }
 
-  updateCamera(cam) {
-    const eye = this.eye(vA);
-    let roll = 0;
+  updateCamera(cam, dt) {
+    this.eye = damp(this.eye, this.crouch ? EYE_CROUCH : EYE_STAND, 14, dt);
+    this.landDip = Math.max(0, this.landDip - dt * 3.2);
+    this.hurtRoll *= Math.exp(-7 * dt);
+    const eye = this.eyePos(vA);
+    eye.y -= Math.sin(this.landDip * Math.PI * 0.5) * 0.16;
+    let roll = this.hurtRoll + this.strafeRoll;
     if (this.dead) {
       const k = Math.min(1, this.deadT / 0.7);
-      eye.y -= k * 1.2;
-      roll = k * 0.6;
+      eye.y -= ease(k) * (this.eye - 0.25);
+      roll = ease(k) * 0.6;
     } else if (!this.thirdPerson) {
-      eye.y += Math.abs(Math.sin(this.walkPhase)) * 0.06 * this.walkAmt - 0.03 * this.walkAmt;
+      const bob = this.walkAmt * (1 + this.sprintW * 0.6);
+      eye.y += Math.abs(Math.sin(this.walkPhase)) * 0.06 * bob - 0.03 * bob;
     }
     const s = this.shake;
     cam.rotation.set(
@@ -450,35 +578,78 @@ export class Player {
     } else {
       cam.position.copy(eye);
     }
+    // Sprinting widens the view a little.
+    const moving = Math.hypot(this.vel.x, this.vel.z) > 2;
+    this.fov = damp(this.fov, BASE_FOV + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0), 8, dt);
+    if (Math.abs(cam.fov - this.fov) > 0.01) {
+      cam.fov = this.fov;
+      cam.updateProjectionMatrix();
+    }
     cam.updateMatrixWorld();
   }
 
-  updateModels() {
+  // Everything the third-person model, remote copies and animation need.
+  animState() {
+    return {
+      speed: Math.hypot(this.vel.x, this.vel.z),
+      sprint: this.sprint,
+      crouch: this.crouch,
+      onGround: this.onGround,
+      water: this.inWater,
+      vy: this.vel.y,
+      pitch: this.pitch + this.kick,
+      aim: this.sinceShot < 1.4 || this.reloadT > 0 ? 1 : 0,
+      recoil: this.recoil,
+      reload: this.reloadFrac,
+      hurt: this.hurtT / 0.3,
+      landed: this.landed,
+      dead: this.dead,
+      deadT: this.deadT,
+    };
+  }
+
+  updateModels(dt) {
     const m = this.model;
-    const show = this.thirdPerson;
-    m.root.visible = show;
-    if (show) {
-      const P = m.parts;
+    m.root.visible = this.thirdPerson;
+    const flash = this.hurtT > 0 ? this.hurtT / 0.3 : this.dead ? 0.5 : 0;
+    for (const mat of m.materials) mat.emissive.setRGB(0.6 * flash, 0.05 * flash, 0.03 * flash);
+    if (this.thirdPerson) {
       m.root.position.copy(this.pos);
       m.root.rotation.y = this.yaw + Math.PI;
-      m.root.rotation.z = this.dead ? Math.min(1, this.deadT / 0.4) * (Math.PI / 2) : 0;
-      const s = Math.sin(this.walkPhase) * 0.8 * this.walkAmt;
-      P.legR.rotation.x = s;
-      P.legL.rotation.x = -s;
-      const aim = -Math.PI / 2 - (this.pitch + this.kick);
-      P.armR.rotation.x = aim - this.recoil * 0.25;
-      P.armR.rotation.y = 0.1;
-      P.armL.rotation.x = aim + 0.12;
-      P.armL.rotation.y = -0.5;
-      P.head.rotation.x = -clamp(this.pitch, -1.2, 1.2);
+      posePlayer(this.rig, this.animState(), dt);
     }
+    this.landed = 0;
+
     const v = this.view;
     v.group.visible = !this.thirdPerson && !this.dead;
-    const bobX = Math.sin(this.walkPhase) * 0.012 * this.walkAmt;
-    const bobY = -Math.abs(Math.cos(this.walkPhase)) * 0.014 * this.walkAmt;
-    const r = this.reloadT > 0 ? Math.sin((1 - this.reloadT / RELOAD) * Math.PI) : 0;
-    v.group.position.set(v.rest.x + bobX, v.rest.y + bobY - r * 0.12, v.rest.z + this.recoil * 0.07);
-    v.group.rotation.set(this.recoil * 0.12 - r * 0.9, 0.04, r * 0.5);
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    this.sprintW = damp(this.sprintW, this.sprint && hs > 1 ? 1 : 0, 9, dt);
+    this.crouchW = damp(this.crouchW, this.crouch ? 1 : 0, 9, dt);
+    const bob = this.walkAmt * (1 + this.sprintW * 0.9);
+    const bx = Math.sin(this.walkPhase) * 0.014 * bob;
+    const by = -Math.abs(Math.cos(this.walkPhase)) * 0.016 * bob;
+    const r = this.reloadFrac;
+    const tilt = r < 0 ? 0 : r < 0.2 ? ease(r / 0.2) : r > 0.8 ? ease((1 - r) / 0.2) : 1;
+    const eq = 1 - ease(this.equip);
+    v.group.position.set(
+      v.rest.x + bx - this.swayX * 0.6 - this.sprintW * 0.05 - this.crouchW * 0.035,
+      v.rest.y + by + this.swayY * 0.6 - tilt * 0.03 - this.sprintW * 0.05 - this.landDip * 0.05 - eq * 0.35,
+      v.rest.z + this.recoil * 0.06 + this.sprintW * 0.03,
+    );
+    v.group.rotation.set(
+      this.recoil * 0.12 - tilt * 0.25 - this.sprintW * 0.4 + this.swayY * 1.2 - eq * 0.9,
+      0.04 + this.sprintW * 0.65 + this.swayX * 1.5,
+      tilt * 0.6 + this.sprintW * 0.25 + this.recoilRoll,
+    );
+    this.swayX *= Math.exp(-9 * dt);
+    this.swayY *= Math.exp(-9 * dt);
+    // Reload: the energy cell drops out and a fresh one slides in.
+    let off = 0;
+    if (r > 0.2 && r < 0.45) off = ease((r - 0.2) / 0.25);
+    else if (r >= 0.45 && r < 0.55) off = 1;
+    else if (r >= 0.55 && r < 0.8) off = 1 - ease((r - 0.55) / 0.25);
+    v.cell.position.y = v.cellY - off * 0.18;
+    v.cell.visible = off < 0.97;
     v.flash.visible = this.flashT > 0;
     if (v.flash.visible) v.flash.rotation.z = Math.random() * Math.PI;
   }

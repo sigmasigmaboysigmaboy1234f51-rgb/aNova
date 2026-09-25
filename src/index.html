@@ -4,9 +4,6 @@
 <title>Blockfire</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Pixelify+Sans:wght@400;600&display=swap">
 <style>/*STYLE*/</style>
 </head>
 <body>
@@ -42,6 +39,19 @@
       <div id="ammo-status" class="ammo-status">R to reload</div>
     </div>
   </div>
+  <div id="chat" class="chat">
+    <div id="chat-log" class="chat-log" aria-live="polite"></div>
+    <form id="chat-form" class="chat-form" hidden autocomplete="off">
+      <label for="chat-input" class="sr-only">Chat message</label>
+      <input id="chat-input" maxlength="120" placeholder="Say something, then press Enter">
+    </form>
+  </div>
+  <div id="tablist" class="tablist panel" hidden>
+    <table>
+      <thead><tr><th>Player</th><th>Kills</th><th>Score</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
   <div id="vignette" class="vignette"></div>
   <div id="lowhp" class="lowhp"></div>
 </div>
@@ -54,29 +64,59 @@
     </header>
     <div class="panel menu-panel">
       <div class="menu-buttons">
-        <button id="btn-play" class="btn btn-go" type="button">Play</button>
+        <button id="btn-play" class="btn btn-go" type="button">Single player</button>
+        <button id="btn-mp" class="btn" type="button">Multiplayer</button>
         <button id="btn-skin" class="btn" type="button">Edit skin</button>
-        <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
+        <div class="btn-row">
+          <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
+          <button id="btn-quit-app" class="btn btn-quiet" type="button" hidden>Quit</button>
+        </div>
       </div>
       <p id="best" class="best"></p>
       <p id="touch-note" class="note" hidden>Playing needs a keyboard and mouse. The skin editor works with touch.</p>
+      <details class="controls-wrap">
+        <summary>Controls</summary>
       <dl class="controls">
         <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move</dd>
         <dt><kbd>Space</kbd></dt><dd>Jump</dd>
-        <dt><kbd>Shift</kbd></dt><dd>Sprint</dd>
+        <dt><kbd>Shift</kbd></dt><dd>Crouch. You won't fall off edges</dd>
+        <dt><kbd>W</kbd><kbd>W</kbd> <span class="app-only">or <kbd>Ctrl</kbd></span></dt><dd>Sprint (double-tap W)</dd>
         <dt><kbd>Left click</kbd></dt><dd>Shoot. Shots break blocks too</dd>
         <dt><kbd>Right click</kbd></dt><dd>Place a block</dd>
         <dt><kbd>1</kbd>–<kbd>4</kbd> or scroll</dt><dd>Pick block type</dd>
         <dt><kbd>R</kbd></dt><dd>Reload</dd>
         <dt><kbd>V</kbd> or <kbd>F5</kbd></dt><dd>Third person</dd>
+        <dt><kbd>T</kbd> / <kbd>Tab</kbd></dt><dd>Chat / player list (multiplayer)</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>
+      </details>
       <label class="slider" for="sens"><span>Mouse speed</span><input id="sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
     </div>
   </div>
   <div class="menu-char">
     <div id="menu-preview" class="preview-slot"></div>
     <p class="char-caption">This is you. Drag to spin, or <button id="btn-skin-2" class="link" type="button">change your skin</button>.</p>
+  </div>
+</section>
+
+<section id="mp" class="screen overlay mp" hidden aria-label="Multiplayer">
+  <div class="panel overlay-panel mp-panel">
+    <h2 class="overlay-title">Multiplayer</h2>
+    <label class="field" for="mp-name"><span>Your name</span><input id="mp-name" maxlength="16" autocomplete="nickname"></label>
+    <div id="mp-host-box" class="mp-box">
+      <h3>Host a game</h3>
+      <p>Your computer runs the world. Friends on the same Wi-Fi join with your address, which shows up once you start.</p>
+      <button id="mp-host" class="btn btn-go" type="button">Host game</button>
+    </div>
+    <form id="mp-form" class="mp-box" autocomplete="off">
+      <h3>Join a game</h3>
+      <label class="field" for="mp-addr"><span>Server address</span><input id="mp-addr" placeholder="192.168.1.23" inputmode="url" spellcheck="false"></label>
+      <button id="mp-join" class="btn" type="submit">Join</button>
+    </form>
+    <p id="mp-web-note" class="mp-note">To host from this browser, run the server that comes with the game (<code>npm run server</code>), or use the Blockfire desktop app, which has a Host button.</p>
+    <p id="mp-artifact-note" class="mp-note" hidden>This page can't connect to game servers. Download Blockfire to play online.</p>
+    <p id="mp-status" class="note" role="status"></p>
+    <button id="mp-back" class="btn btn-quiet" type="button">Back</button>
   </div>
 </section>
 
@@ -151,6 +191,7 @@
   <div class="panel overlay-panel">
     <h2 class="overlay-title">Paused</h2>
     <p id="pause-msg" class="note" hidden></p>
+    <p id="pause-mp" class="pause-mp" hidden></p>
     <div class="menu-buttons">
       <button id="btn-resume" class="btn btn-go" type="button">Resume</button>
       <button id="btn-pause-skin" class="btn" type="button">Edit skin</button>

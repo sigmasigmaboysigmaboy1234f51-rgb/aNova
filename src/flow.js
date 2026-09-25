@@ -72,17 +72,20 @@ export class FlowField {
     return this.stand[z * SX + x];
   }
 
-  compute(world, tx, tz) {
+  // targets: [[x, z], ...] columns to walk toward (every living player).
+  compute(world, targets) {
     world.computeStand(this.stand);
     const dist = this.dist;
     const stand = this.stand;
     dist.fill(Infinity);
-    tx = Math.min(SX - 1, Math.max(0, tx));
-    tz = Math.min(SZ - 1, Math.max(0, tz));
     const heap = this.heap;
     heap.n = 0;
-    dist[tz * SX + tx] = 0;
-    heap.push(0, tz * SX + tx);
+    for (let [tx, tz] of targets) {
+      tx = Math.min(SX - 1, Math.max(0, tx));
+      tz = Math.min(SZ - 1, Math.max(0, tz));
+      dist[tz * SX + tx] = 0;
+      heap.push(0, tz * SX + tx);
+    }
     // Can a mob step from column b into column a? One block up at most.
     const ok = (a, b) => a >= 0 && b >= 0 && a - b <= 1 && b - a <= 4;
     while (heap.n > 0) {
