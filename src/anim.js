@@ -42,6 +42,19 @@ export class Rig {
   }
 }
 
+// Step through [t, [a, b]] keyframes with easing.
+function track2(keys, r) {
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [t0, a] = keys[i];
+    const [t1, b] = keys[i + 1];
+    if (r <= t1) {
+      const k = ease(Math.max(0, (r - t0) / Math.max(1e-6, t1 - t0)));
+      return [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+
 // s: { speed, sprint, crouch, onGround, water, vy, pitch, aim (0..1),
 //      recoil (0..1), reload (-1 or 0..1), hurt (0..1), landed (0..1),
 //      dead, deadT }
@@ -95,20 +108,44 @@ export function posePlayer(rig, s, dt) {
   const rY = lerp(0.25, 0.1, aim);
   let lY = lerp(-0.7, -0.5, aim);
   let rZ = 0;
+  let headDown = 0;
+  let rYr = rY;
   if (s.reload >= 0) {
-    const w = Math.sin(Math.PI * s.reload);
-    lX += 0.9 * w;
-    lY -= 0.25 * w;
-    rZ += 0.35 * w;
+    // A real reload: gun tipped across the chest, left hand pulls the
+    // magazine, reaches to the belt for a new one, slaps it in and racks.
+    const r = s.reload;
+    const hold = r < 0.1 ? ease(r / 0.1) : r > 0.9 ? ease((1 - r) / 0.1) : 1;
+    rX = lerp(rX, -0.95, hold * 0.7);
+    rYr = lerp(rY, 0.5, hold);
+    rZ += 0.35 * hold;
+    headDown = 0.35 * hold;
+    const [kx, ky] = track2(
+      [
+        [0, [lX, lY]],
+        [0.1, [-0.95, -0.55]],
+        [0.28, [-0.35, -0.2]],
+        [0.45, [-0.15, 0.15]],
+        [0.55, [-0.2, 0.05]],
+        [0.66, [-0.95, -0.55]],
+        [0.72, [-1.05, -0.6]],
+        [0.8, [-1.35, -0.85]],
+        [0.86, [-1.15, -0.95]],
+        [0.9, [-1.3, -0.85]],
+        [1, [lX, lY]],
+      ],
+      r,
+    );
+    lX = kx;
+    lY = ky;
   }
   const br = Math.sin(rig.t * 1.7) * 0.025 * (1 - moving);
   rig.go('armR.x', rX + br, 20, dt);
-  rig.go('armR.y', rY, 20, dt);
+  rig.go('armR.y', rYr, 20, dt);
   rig.go('armR.z', rZ - 0.05 - br, 20, dt);
   rig.go('armL.x', lX - br, 20, dt);
   rig.go('armL.y', lY, 20, dt);
   rig.go('armL.z', 0.05 + br, 20, dt);
-  rig.go('head.x', -look - hx, 30, dt);
+  rig.go('head.x', -look - hx + headDown, 30, dt);
   rig.go('head.y', 0, 10, dt);
   rig.go('head.z', 0, 10, dt);
   rig.apply();

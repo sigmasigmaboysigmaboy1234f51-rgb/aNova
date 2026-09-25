@@ -2,7 +2,7 @@
 
 A blocky first-person shooter on a small voxel island, with online multiplayer and a skin editor that makes real Minecraft skins.
 
-Everything is drawn by code: the block textures, the characters, the sounds. There are no image or audio files.
+Everything is drawn by code: the block textures, the characters, the sounds. There are no image or audio files. Sounds are built like real foley, from layered noise, pitched thumps and metal clicks, with a room reverb.
 
 ## Get it
 
@@ -30,7 +30,8 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | Q | Swap back to what you held before |
 | F | Place a block without putting your gun away |
 | G | Throw a grenade. It breaks blocks too |
-| R | Reload |
+| R | Reload. Your left hand swaps the magazine (or loads shells, or swings out the cylinder) |
+| I | Inspect your gun |
 | B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Switch to third person to see your skin |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
@@ -138,20 +139,20 @@ Click **Mobs** on the title screen to see every mob and boss you have met, how t
 
 ### 10 bosses
 
-Every fifth wave a boss bursts out of the ground: a huge bodybuilder that flexes when it arrives and gets angry when it's hurt. Each has its own moves, and they come in this order:
+Every fifth wave a boss bursts out of the ground. It flexes when it arrives and gets angry when it's hurt. Every boss has its own body: some are buff bodybuilders, some are fat with a big wobbly belly and a double chin, some are tall and lanky, one is a hunched gorilla with arms down to the ground, and one is short, wide and has a single giant eye. Each has its own moves, and they come in this order:
 
-| Wave | Boss | Moves |
-| --- | --- | --- |
-| 5 | Mossback Brute | Ground slam shockwave (jump over it!), haymakers, calls Mossheads |
-| 10 | Bone Colossus | Bone volleys, haymakers, calls Boneheads |
-| 15 | King Gloop | Belly flop from across the map, calls Gloops |
-| 20 | Magma Titan | Throws lava boulders that burn and blow holes in the ground |
-| 25 | Glacier Hulk | Freezing breath, ice-shard volleys |
-| 30 | Storm Champion | Calls lightning down on you. Watch for the yellow circles |
-| 35 | Shadow Bruiser | Teleports behind you and uppercuts |
-| 40 | Stone Goliath | Throws boulders that build walls around you |
-| 45 | Toxic Tyrant | Poison bombs that leave clouds behind |
-| 50 | Golden Overlord | Charges straight through walls, slams, gold volleys |
+| Wave | Boss | Body | Moves |
+| --- | --- | --- | --- |
+| 5 | Mossback Brute | Hunched gorilla | Ground slam shockwave (jump over it!), haymakers, calls Mossheads |
+| 10 | Bone Colossus | Tall and lanky | Bone volleys, haymakers, calls Boneheads |
+| 15 | King Gloop | Fat, with a crown | Belly flop from across the map, calls Gloops |
+| 20 | Magma Titan | Buff, horns and tusks | Throws lava boulders that burn and blow holes in the ground |
+| 25 | Glacier Hulk | Fat, with a frosty beard | Freezing breath, ice-shard volleys |
+| 30 | Storm Champion | Buff wrestler | Calls lightning down on you. Watch for the yellow circles |
+| 35 | Shadow Bruiser | Tall and hooded | Teleports behind you and uppercuts |
+| 40 | Stone Goliath | Short, wide, one eye | Throws boulders that build walls around you |
+| 45 | Toxic Tyrant | Fat, gas mask and tanks | Poison bombs that leave clouds behind |
+| 50 | Golden Overlord | Buff, gold beard and cape | Charges straight through walls, slams, gold volleys |
 
 After wave 50 they come back, tougher. Bosses always drop a supply crate.
 
@@ -294,6 +295,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/model.js` | Blocky character models |
 | `src/editor.js`, `src/preview.js` | The skin editor |
 | `src/sound.js` | Synthesized sound effects |
+| `src/viewanim.js` | First-person reloads and gun inspecting |
 | `src/hud.js`, `src/style.css`, `src/index.html` | Interface |
 
 ## Copyright

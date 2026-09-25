@@ -255,6 +255,8 @@ class RemotePlayer {
     this.gun.userData.shroud.position.z = this.recoil * 0.03;
     this.gun.userData.setHeat(this.heat);
     this.gun.userData.showFlash(this.flashT > 0);
+    const rl = this.buf.length ? this.buf[this.buf.length - 1].r : -1;
+    this.gun.userData.cell.visible = !(rl >= 0.28 && rl < 0.55);
     // Draw where they were ~110 ms ago, blending between the two updates
     // around that moment, so movement stays smooth on a bumpy connection.
     const rt = performance.now() - 110;

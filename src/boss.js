@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Mob, MF } from './mob.js';
-import { buildBrute, poseBrute } from './brute.js';
+import { BODIES, buildBrute, poseBrute } from './brute.js';
 import { MOB_TYPES, TYPE_LIST } from './mobtypes.js';
 import { B, BLOCKS } from './world.js';
 import { PX } from './model.js';
@@ -57,6 +57,7 @@ export const BOSSES = [
     bolt: 'bolt',
     colors: ['#5f7a52', '#4f7d2f', '#3d6a6e'],
     look: {
+      body: 'hunch',
       ...skinTone('#5f7a52'),
       pants: C('#4a3b2c'),
       boots: '#2a2018',
@@ -84,6 +85,7 @@ export const BOSSES = [
     bolt: 'bone',
     colors: ['#dcd6c4', '#c4bca6', '#3b3446'],
     look: {
+      body: 'tall',
       ...skinTone('#dcd6c4'),
       pants: C('#2a2436'),
       boots: '#1d1826',
@@ -109,6 +111,7 @@ export const BOSSES = [
     bolt: 'bolt',
     colors: ['#9b5fd1', '#caa6ee', '#6d3aa0'],
     look: {
+      body: 'fat',
       ...skinTone('#9b5fd1'),
       pants: C('#6d3aa0'),
       boots: '#4c1f73',
@@ -133,6 +136,7 @@ export const BOSSES = [
     bolt: 'lava',
     colors: ['#3a302a', '#ff7a2f', '#ffd84a'],
     look: {
+      tusks: true,
       ...skinTone('#3a302a'),
       pants: C('#1a1410'),
       boots: '#120e0a',
@@ -159,6 +163,8 @@ export const BOSSES = [
     bolt: 'ice',
     colors: ['#7fb6e0', '#c9ecff', '#3a78b0'],
     look: {
+      body: 'fat',
+      beard: 0xf4f8ff,
       ...skinTone('#7fb6e0'),
       pants: C('#1d3f66'),
       boots: '#16304e',
@@ -214,6 +220,7 @@ export const BOSSES = [
     bolt: 'shade',
     colors: ['#2a2236', '#d27bff', '#121018'],
     look: {
+      body: 'tall',
       ...skinTone('#2a2236'),
       pants: C('#121018'),
       boots: '#0a080e',
@@ -243,6 +250,8 @@ export const BOSSES = [
     armor: 0.2,
     colors: ['#7a7a7a', '#5e5e5e', '#4f7d2f'],
     look: {
+      body: 'stocky',
+      eye: 'cyclops',
       ...skinTone('#808080'),
       pants: C('#4a4a4a'),
       boots: '#3a3a3a',
@@ -270,6 +279,7 @@ export const BOSSES = [
     bolt: 'toxic',
     colors: ['#7bc62a', '#c8f25a', '#3f6b12'],
     look: {
+      body: 'fat',
       ...skinTone('#6fb028'),
       pants: C('#2a2436'),
       boots: '#1a1622',
@@ -299,6 +309,7 @@ export const BOSSES = [
     armor: 0.15,
     colors: ['#f2c230', '#fff6c8', '#8a6a1f'],
     look: {
+      beard: 0xc99a20,
       ...skinTone('#e8b830'),
       pants: C('#7a1f1f'),
       boots: '#3a0e0e',
@@ -335,8 +346,9 @@ BOSSES.forEach((b, i) => {
     score: 3000 + i * 600,
     coins: 160 + i * 30,
     scale,
-    hw: 0.72 * scale,
-    h: 3.05 * scale,
+    bodyDims: BODIES[b.look.body] || BODIES.buff,
+    hw: 0.72 * scale * ((BODIES[b.look.body] || BODIES.buff).bodyW / 1.05),
+    h: ((BODIES[b.look.body] || BODIES.buff).headHi - 0.07) * scale,
     death: 3.4,
     armor: b.armor || 0,
     alpha: 1,
@@ -757,12 +769,17 @@ export class Boss extends Mob {
 
   hitTest(o, d, maxT) {
     const s = this.def.scale;
+    const D = this.def.bodyDims;
     const x = this.pos.x;
     const y = this.pos.y + this.yOffset();
     const z = this.pos.z;
-    const bw = 1.05 * s;
-    const tb = rayBoxT(o, d, x - bw, y, z - bw * 0.6, x + bw, y + 2.62 * s, z + bw * 0.6);
-    const th = rayBoxT(o, d, x - 0.3 * s, y + 2.62 * s, z - 0.3 * s, x + 0.3 * s, y + 3.12 * s, z + 0.3 * s);
+    const bw = D.bodyW * s;
+    const tb = rayBoxT(o, d, x - bw, y, z - bw * 0.6, x + bw, y + D.headLo * s, z + bw * 0.6);
+    // A hunched boss carries its head out in front.
+    const ahead = (D.headAhead || 0) * s;
+    const hx = x + Math.sin(this.yaw) * ahead;
+    const hz = z + Math.cos(this.yaw) * ahead;
+    const th = rayBoxT(o, d, hx - 0.3 * s, y + D.headLo * s, hz - 0.3 * s, hx + 0.3 * s, y + D.headHi * s, hz + 0.3 * s);
     const okB = tb >= 0 && tb < maxT;
     const okH = th >= 0 && th < maxT;
     if (okH && (!okB || th <= tb)) return { t: th, head: true };

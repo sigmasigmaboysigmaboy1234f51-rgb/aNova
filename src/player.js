@@ -9,6 +9,7 @@ import { Rig, posePlayer, ease } from './anim.js';
 import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
 import { POWERS } from './powerups.js';
 import { EMOTES, EMOTE_KEYS, emoteWeight, poseEmote } from './emotes.js';
+import { reloadStyle, gunPoints, buildLeftArm, buildShell, reloadPose, inspectPose } from './viewanim.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
 
@@ -24,6 +25,10 @@ const BASE_FOV = 75;
 const SHIELD_COLORS = [new THREE.Color('#6f8cff'), new THREE.Color('#bfe8ff'), new THREE.Color('#ffffff')];
 const VIEW_SCALE = 0.6;
 const VIEW_REST = new THREE.Vector3(0.22, -0.2, -0.45);
+const ZERO3 = [0, 0, 0];
+// Where your left shoulder is, in view space: behind you, low and left.
+const LEFT_SHOULDER = new THREE.Vector3(-0.3, -0.8, -0.08);
+const UP = new THREE.Vector3(0, 1, 0);
 
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
@@ -109,12 +114,38 @@ function buildGunView(skin, weapon) {
   arm.position.set(0.01, -0.1, 0.12);
   arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.85, -0.3, 0.45).normalize());
   group.add(arm);
+  // The left hand holds the front of the gun and does the reloading.
+  const points = gunPoints(gun);
+  const armL = buildLeftArm(skin, geos, base, outer, setBoxUV);
+  group.add(armL);
+  const shell = weapon.def.frame === 'shotgun' ? buildShell() : null;
+  if (shell) {
+    shell.visible = false;
+    group.add(shell);
+  }
   group.position.copy(VIEW_REST);
   group.scale.setScalar(VIEW_SCALE);
   const eye = gun.userData.eye;
+  const dir = new THREE.Vector3();
+  // The shoulder stays put on screen however the gun tilts, so the arm
+  // always reaches back to it.
+  const setHand = (x, y, z) => {
+    armL.position.set(x, y, z);
+    group.updateMatrixWorld();
+    dir.copy(LEFT_SHOULDER);
+    group.worldToLocal(dir);
+    dir.sub(armL.position).normalize();
+    armL.quaternion.setFromUnitVectors(UP, dir);
+  };
+  setHand(points.support.x, points.support.y, points.support.z);
   return {
     group,
     gun,
+    armL,
+    shell,
+    points,
+    setHand,
+    style: reloadStyle(weapon.def.frame, points.cellTop),
     cell: gun.userData.cell,
     cellY: gun.userData.cell.position.y,
     ads: new THREE.Vector3(-eye.x * VIEW_SCALE, -eye.y * VIEW_SCALE, -0.3 - eye.z * VIEW_SCALE),
@@ -123,6 +154,7 @@ function buildGunView(skin, weapon) {
       base.dispose();
       outer.dispose();
       gun.userData.dispose();
+      if (shell) shell.userData.dispose();
     },
   };
 }
@@ -230,6 +262,7 @@ export class Player {
   select(slot) {
     if (slot === this.held) return;
     if (slot < 3 && !this.weapons[slot]) return;
+    this.inspectT = 0;
     const w = this.weapon;
     if (w) w.reloadT = 0;
     this.lastHeld = this.held;
@@ -339,6 +372,7 @@ export class Player {
     this.stepDist = 0;
     this.recoil = 0;
     this.recoilRoll = 0;
+    this.recoilYaw = 0;
     this.swing = 0;
     this.onGround = false;
     this.inWater = false;
@@ -468,6 +502,12 @@ export class Player {
       this.emoteView = false;
     }
     for (const [key, id] of EMOTE_KEYS) if (inp.pressed.has(key)) this.startEmote(id);
+    // I: show off your gun.
+    if (inp.pressed.has('KeyI') && this.weapon && this.weapon.reloadT <= 0) this.inspectT = 0.001;
+    if (this.inspectT > 0) {
+      this.inspectT += dt;
+      if (inp.left || inp.right || (this.weapon && this.weapon.reloadT > 0) || this.inspectT > 2.4) this.inspectT = 0;
+    }
     this.updateEmote(dt);
     if (this.held >= 3) this.blockSlot = this.held - 3;
 
@@ -662,7 +702,7 @@ export class Player {
     if (this.infiniteAmmo()) return;
     w.reloadT = w.stats.reload * (this.buff('rapid') ? 0.5 : 1);
     this.sprintLatch = false;
-    this.game.sound.reload(w.stats.reload);
+    this.game.sound.reload(w.stats.reload * (this.buff("rapid") ? 0.5 : 1), w.def.frame);
     this.game.combat.beamTick(this, null, 0, false);
   }
 
@@ -687,6 +727,7 @@ export class Player {
     this.kick += 0.022 * s.recoil * steady * (1 - this.ads * 0.3);
     this.recoil = 1;
     this.recoilRoll = (Math.random() - 0.5) * 0.08;
+    this.recoilYaw = (Math.random() - 0.5) * 0.06;
     if (!s.noFlash) w.flashT = 0.05;
     w.heat = Math.min(1, w.heat + 0.06 + s.gap * 0.1);
     this.shake = Math.max(this.shake, 0.02 + 0.015 * s.recoil);
@@ -1137,26 +1178,43 @@ export class Player {
     if (weapon) {
       const v = this.views[this.held];
       const r = weapon.reloadFrac;
-      const tilt = r < 0 ? 0 : r < 0.2 ? ease(r / 0.2) : r > 0.8 ? ease((1 - r) / 0.2) : 1;
       const A = this.ads;
+      // A proper reload: the left hand does the work (see viewanim.js).
+      const P = r >= 0 ? reloadPose(v.style, r, v.points) : null;
+      const I = !P && this.inspectT > 0 ? inspectPose(this.inspectT) : null;
+      const rr = P ? P.rot : I ? I.rot : ZERO3;
+      const rp = P ? P.pos : I ? I.pos : ZERO3;
+      // Breathing: a slow drift when you stand still.
+      const still = 1 - Math.min(1, this.walkAmt * 2);
+      const breathe = Math.sin(this.time * 1.7) * 0.004 * still * (1 - A * 0.8);
+      const drift = Math.sin(this.time * 0.9) * 0.012 * still * (1 - A);
       v.group.position.set(
-        lerp(VIEW_REST.x, v.ads.x, A) + bx - this.swayX * 0.6 * sway - this.sprintW * 0.05 - this.crouchW * 0.035 * (1 - A),
-        lerp(VIEW_REST.y, v.ads.y, A) + by + this.swayY * 0.6 * sway - tilt * 0.03 - this.sprintW * 0.05 - this.landDip * 0.05 - eq * 0.35,
-        lerp(VIEW_REST.z, v.ads.z, A) + this.recoil * 0.06 * (1 - A * 0.5) + this.sprintW * 0.03,
+        lerp(VIEW_REST.x, v.ads.x, A) + bx - this.swayX * 0.6 * sway - this.sprintW * 0.05 - this.crouchW * 0.035 * (1 - A) + rp[0] + eq * 0.12,
+        lerp(VIEW_REST.y, v.ads.y, A) + by + breathe + this.swayY * 0.6 * sway - this.sprintW * 0.05 - this.landDip * 0.05 - eq * 0.35 + rp[1],
+        lerp(VIEW_REST.z, v.ads.z, A) + this.recoil * 0.06 * (1 - A * 0.5) + this.sprintW * 0.03 + rp[2],
       );
       v.group.rotation.set(
-        this.recoil * 0.12 * (1 - A * 0.6) - tilt * 0.25 - this.sprintW * 0.4 + this.swayY * 1.2 * sway - eq * 0.9,
-        0.04 * (1 - A) + this.sprintW * 0.65 + this.swayX * 1.5 * sway,
-        tilt * 0.6 + this.sprintW * 0.25 + this.recoilRoll,
+        this.recoil * 0.12 * (1 - A * 0.6) - this.sprintW * 0.4 + this.swayY * 1.2 * sway - eq * 0.9 + rr[0],
+        0.04 * (1 - A) + this.sprintW * 0.65 + this.swayX * 1.5 * sway + this.recoil * this.recoilYaw + rr[1],
+        this.sprintW * 0.25 + this.recoilRoll + drift + eq * 0.6 + rr[2],
       );
-      // Reload: the magazine drops out and a fresh one slides in.
-      let off = 0;
-      if (r > 0.2 && r < 0.45) off = ease((r - 0.2) / 0.25);
-      else if (r >= 0.45 && r < 0.55) off = 1;
-      else if (r >= 0.55 && r < 0.8) off = 1 - ease((r - 0.55) / 0.25);
-      const empty = weapon.stats.mag === 1 && weapon.ammo === 0 && r < 0.5;
-      v.cell.position.y = v.cellY - off * 0.18;
-      v.cell.visible = off < 0.97 && !empty;
+      const empty = weapon.stats.mag === 1 && weapon.ammo === 0;
+      if (P) {
+        v.setHand(P.hand[0], P.hand[1], P.hand[2]);
+        v.cell.position.set(P.cell[0], v.cellY + P.cell[1], P.cell[2]);
+        v.cell.visible = P.cellVisible && !(empty && (r < 0.45 || !P.cellVisible));
+        if (v.shell) {
+          v.shell.visible = !!P.shell;
+          if (P.shell) v.shell.position.set(P.shell[0], P.shell[1], P.shell[2]);
+        }
+      } else {
+        const S = v.points.support;
+        // The front hand rides the recoil a little.
+        v.setHand(S.x, S.y, S.z + this.recoil * 0.015);
+        v.cell.position.set(0, v.cellY, 0);
+        v.cell.visible = !empty;
+        if (v.shell) v.shell.visible = false;
+      }
     }
     for (let i = 0; i < 3; i++) {
       const wp = this.weapons[i];
@@ -1171,7 +1229,8 @@ export class Player {
         u.spin.rotation.z += wp.spin * dt * 40;
         // The held gun's first-person cell is handled by the reload animation.
         if (!(on && weapon && this.views[i] && gun === this.views[i].gun)) {
-          u.cell.visible = !(wp.stats.mag === 1 && wp.ammo === 0 && wp.reloadFrac < 0.5);
+          const rf = wp.reloadFrac;
+          u.cell.visible = !(wp.stats.mag === 1 && wp.ammo === 0 && rf < 0.5) && !(rf >= 0.28 && rf < 0.55);
         }
         if (u.laser) u.laser.visible = on;
       }
