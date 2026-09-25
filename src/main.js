@@ -17,6 +17,8 @@ import { Progress, xpForLevel } from './progress.js';
 import { Challenges } from './challenges.js';
 import { Duel, TARGET } from './duel.js';
 import { MAPS, MAP_ORDER } from './maps.js';
+import { Bot, BOT_NAMES } from './bots.js';
+import { Modes, VARIANTS, bestFor } from './modes.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
 import { BOSSES } from './boss.js';
@@ -148,8 +150,12 @@ class Game {
     this.dialogue = new Dialogue(this);
     this.storyMenu = new StoryMenu(this);
     this.challenges = new Challenges(this);
+    this.modes = new Modes(this);
     this.story = null;
     this.duel = null;
+    this.bots = [];
+    this.botDuel = null;
+    this.variant = 'endless';
     this.profile.listeners.add(() => this.player.refreshLoadout());
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
@@ -269,7 +275,7 @@ class Game {
   }
 
   setupUI() {
-    $('#btn-play').addEventListener('click', () => this.play());
+    $('#btn-play').addEventListener('click', () => this.setState('modes'));
     $('#btn-mp').addEventListener('click', () => this.openMp());
     $('#btn-skin').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
@@ -295,7 +301,7 @@ class Game {
     $('#btn-resume').addEventListener('click', () => this.resume());
     $('#btn-pause-skin').addEventListener('click', () => this.openEditor('paused'));
     $('#btn-quit').addEventListener('click', () => this.toMenu());
-    $('#btn-again').addEventListener('click', () => this.play());
+    $('#btn-again').addEventListener('click', () => this.play(this.variant));
     $('#btn-title').addEventListener('click', () => this.toMenu());
     $('#ed-done').addEventListener('click', () => this.closeEditor());
     $('#mp-back').addEventListener('click', () => {
@@ -420,6 +426,8 @@ class Game {
     else this.storyMenu.hide();
     if (s === 'challenges') this.challenges.show();
     else this.challenges.hide();
+    if (s === 'modes') this.modes.show();
+    else this.modes.hide();
     $('#storywin').hidden = s !== 'storywin';
     $('#storyfail').hidden = s !== 'storyfail';
     $('#pause').hidden = s !== 'paused';
@@ -476,6 +484,9 @@ class Game {
   startStory(index) {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
+    this.clearBots();
+    this.duel = null;
+    this.botDuel = null;
     if (this.story) this.story.dispose();
     const ch = CHAPTERS[index];
     this.world.generate(1000 + index * 77, THEMES[ch.theme]);
@@ -559,12 +570,56 @@ class Game {
 
   // --- Single player ----------------------------------------------------
 
-  play() {
+  play(variant = this.variant || 'endless') {
     this.sound.unlock();
     if (this.mp) this.leaveMp();
     if (this.story) this.story.dispose();
     this.story = null;
+    this.clearBots();
+    this.duel = null;
+    this.botDuel = null;
+    this.variant = VARIANTS[variant] ? variant : 'endless';
     this.startGame();
+    this.setState('playing');
+    this.lockMouse();
+  }
+
+  // --- Bots ------------------------------------------------------------
+
+  // Everyone you can hit in a duel.
+  pvpTargets() {
+    return [...(this.duel && this.mp ? this.mp.remotes.list() : []), ...this.bots];
+  }
+
+  clearBots() {
+    for (const b of this.bots) b.dispose();
+    this.bots = [];
+  }
+
+  startBotDuel(opts) {
+    this.sound.unlock();
+    if (this.mp) this.leaveMp();
+    if (this.story) this.story.dispose();
+    this.story = null;
+    this.clearBots();
+    this.botDuel = opts;
+    this.variant = 'endless';
+    this.duel = new Duel(this, opts.map);
+    this.duel.build();
+    this.applyTheme(this.duel.theme);
+    this.world.flush();
+    this.worldUsed = true;
+    this.resetRun();
+    const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < opts.count; i++) {
+      this.bots.push(new Bot(this, names[i], opts.level, (Math.random() * 1e9) | 0));
+    }
+    this.duel.placePlayer();
+    for (const b of this.bots) {
+      const s = this.duel.spawnFor(b.id);
+      b.spawn(s.pos, s.yaw);
+    }
+    this.hud.showBanner(`Bot Duel: ${this.duel.map.name}`, `First to ${TARGET} knockouts wins`, 3.5);
     this.setState('playing');
     this.lockMouse();
   }
@@ -634,6 +689,9 @@ class Game {
     if (this.mp) this.leaveMp();
     if (this.story) this.story.dispose();
     this.story = null;
+    this.clearBots();
+    this.duel = null;
+    this.botDuel = null;
     this.inGame = false;
     this.mobs.clear();
     this.gameOverShown = false;
@@ -741,6 +799,9 @@ class Game {
     if (this.story) this.story.dispose();
     this.story = null;
     this.duel = null;
+    this.clearBots();
+    this.botDuel = null;
+    this.variant = 'endless';
     if (typeof mode === 'string' && mode.startsWith('duel:')) {
       this.duel = new Duel(this, mode.slice(5));
       this.duel.build();
@@ -817,16 +878,24 @@ class Game {
   beginWave(n) {
     this.wave = n;
     const crowd = 1 + (this.mp ? this.mp.remotes.list().length * 0.5 : 0);
-    const bossWave = n % 5 === 0;
-    const count = Math.round((4 + n * 1.7 + (n > 10 ? (n - 10) * 0.8 : 0)) * crowd * (bossWave ? 0.45 : 1));
+    const rush = this.variant === 'bossrush' && !this.mp;
+    const horde = this.variant === 'horde' && !this.mp;
+    const bossWave = rush || n % 5 === 0;
+    let count = Math.round((4 + n * 1.7 + (n > 10 ? (n - 10) * 0.8 : 0)) * crowd * (bossWave ? 0.45 : 1));
+    if (rush) count = 2 + Math.floor(n / 2);
+    if (horde) count = Math.round(count * 3.2);
     const q = [];
-    for (let i = 0; i < count; i++) q.push(pickMob(n));
+    for (let i = 0; i < count; i++) {
+      const t = pickMob(horde ? n + 4 : n);
+      // The Horde is all tiny mobs.
+      q.push(horde ? `${t.split(':')[0]}:mini` : t);
+    }
     this.queue = q;
     this.bossPending = null;
     if (bossWave) {
       // Every fifth wave brings the next boss. After all ten, they come
-      // back tougher.
-      const k = n / 5 - 1;
+      // back tougher. Boss Rush brings one every wave.
+      const k = rush ? n - 1 : n / 5 - 1;
       const loop = Math.floor(k / BOSSES.length);
       this.bossPending = { index: k % BOSSES.length, boost: crowd * (1 + loop * 0.8) * (1 + k * 0.04), t: 2.5 };
     }
@@ -865,13 +934,14 @@ class Game {
         } else bp.t = 0.5;
       }
     }
-    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < 24 + (this.mp ? 8 : 0)) {
+    const cap = (this.variant === 'horde' ? 40 : 24) + (this.mp ? 8 : 0);
+    if (this.queue.length && this.spawnTimer <= 0 && this.mobs.alive() < cap) {
       const m = this.mobs.spawn(this.queue[this.queue.length - 1], this.mul);
       if (m) {
         this.queue.pop();
         this.profile.markSeen(m.type);
       }
-      this.spawnTimer = Math.max(0.3, 1.1 - this.wave * 0.06);
+      this.spawnTimer = Math.max(this.variant === 'horde' ? 0.12 : 0.3, 1.1 - this.wave * 0.06);
     }
     if (!this.queue.length && !this.bossPending && this.mobs.alive() === 0) {
       const bonus = 250 * this.wave;
@@ -939,7 +1009,8 @@ class Game {
       if (this.mp) this.mp.pickupAdded(pk);
     };
     // Coins always, sometimes a bonus coin for headshots.
-    const value = Math.round((mob.def.coins || 5) * (1 + Math.floor(this.wave / 5) * 0.2));
+    const hard = this.variant === 'hardcore' && !this.mp;
+    const value = Math.round((mob.def.coins || 5) * (1 + Math.floor(this.wave / 5) * 0.2) * (hard ? 2 : 1) * (this.variant === 'horde' ? 0.4 : 1));
     // Big payouts come as a shower of coins.
     const pieces = Math.min(12, Math.max(1, Math.round(value / 12)));
     for (let i = 0; i < pieces; i++) drop('coin', Math.max(1, Math.round(value / pieces)));
@@ -958,8 +1029,9 @@ class Game {
       return;
     }
     const r = Math.random();
-    if (r < 0.16) drop('heart');
-    else if (r < 0.34) drop('blocks');
+    if (r < 0.16) {
+      if (!hard) drop('heart');
+    } else if (r < 0.34) drop('blocks');
     else if (r < 0.4) drop('nade');
   }
 
@@ -978,12 +1050,12 @@ class Game {
       this.deadT = 0;
       return;
     }
-    if (this.mp && this.duel) {
+    if (this.duel) {
       const p = this.player;
       if (p.killer === 'pvp' && p.pvpKiller) {
-        this.mp.sendKnockout(p.pvpKiller);
+        if (this.mp) this.mp.sendKnockout(p.pvpKiller);
         this.duel.onKill(p.pvpKiller, this.myId);
-      } else this.mp.sendDied(p.killer);
+      } else if (this.mp) this.mp.sendDied(p.killer);
       this.respawnT = 3;
       this.hud.showBanner('Knocked out', 'Back in 3', 3.5);
       return;
@@ -1021,15 +1093,18 @@ class Game {
     $('#go-heads').textContent = String(s.heads);
     $('#go-placed').textContent = String(s.placed);
     $('#go-coins').textContent = s.coins.toLocaleString('en-US');
-    const better = s.score > 0 && (!this.best || s.score > this.best.score);
+    const key = this.variant === 'endless' ? 'best' : `best:${this.variant}`;
+    const prev = bestFor(this.variant);
+    const better = s.score > 0 && (!prev || s.score > prev.score);
     if (better) {
-      this.best = { wave: this.wave, score: s.score };
-      store.set('best', JSON.stringify(this.best));
+      store.set(key, JSON.stringify({ wave: this.wave, score: s.score }));
+      if (this.variant === 'endless') this.best = { wave: this.wave, score: s.score };
     }
+    const shown = better ? null : prev;
     $('#go-best').textContent = better
-      ? 'New best run!'
-      : this.best
-        ? `Best run: wave ${this.best.wave}, ${this.best.score.toLocaleString('en-US')} points`
+      ? `New best ${VARIANTS[this.variant].name} run!`
+      : shown
+        ? `Best ${VARIANTS[this.variant].name} run: wave ${shown.wave}, ${shown.score.toLocaleString('en-US')} points`
         : '';
     this.setState('dead');
   }
@@ -1050,7 +1125,7 @@ class Game {
 
     if (s === 'armory') this.armory.frame(dt);
     if (s === 'bestiary') this.bestiary.frame(dt);
-    if (!['editor', 'armory', 'bestiary', 'story', 'challenges'].includes(s)) {
+    if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes'].includes(s)) {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
@@ -1081,6 +1156,7 @@ class Game {
     } else {
       this.mobs.updateRemote(dt);
     }
+    for (const b of this.bots) b.update(dt);
     if (this.mp) this.mp.update(dt);
     p.updateCamera(this.camera, dt);
     p.updateModels(dt);
@@ -1104,7 +1180,7 @@ class Game {
     }
     this.hud.setScore(this.stats.score);
     if (p.dead) {
-      if (this.mp) {
+      if (this.mp || this.duel) {
         const before = Math.ceil(this.respawnT);
         this.respawnT -= dt;
         if (Math.ceil(this.respawnT) !== before && this.respawnT > 0) this.hud.showBanner('You died', `Back in ${Math.ceil(this.respawnT)}`, 1.5);

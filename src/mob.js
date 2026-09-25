@@ -223,7 +223,9 @@ export class Mob {
   // Hurt a player, adding this mob's variant effect (frost, fire, ...).
   strike(p, dmg, extra) {
     const fx = this.def.fx || extra ? { ...(this.def.fx || {}), ...(extra || {}) } : null;
-    p.hurt(dmg, this.pos, this.family, fx);
+    const g = this.game;
+    const harder = g.variant === 'hardcore' && !g.mp ? 1.6 : 1;
+    p.hurt(Math.round(dmg * harder), this.pos, this.family, fx);
   }
 
   // --- The brain -----------------------------------------------------------

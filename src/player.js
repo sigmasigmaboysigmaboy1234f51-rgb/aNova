@@ -7,6 +7,7 @@ import { GUNS, gunStats, cleanBuild, buildCode } from './weapons.js';
 import { TILE_UV } from './textures.js';
 import { Rig, posePlayer, ease } from './anim.js';
 import { clamp } from './util.js';
+import { rayBox } from './mob.js';
 
 export const PLACEABLE = [B.COBBLE, B.PLANKS, B.BRICK, B.MOSSY];
 export const MAX_HP = 20;
@@ -571,7 +572,8 @@ export class Player {
     this.invuln -= dt;
     this.sinceHurt += dt;
     this.updateStatus(dt);
-    if (this.sinceHurt > 6 && this.hp < this.maxHp && this.poisonT <= 0) {
+    const noRegen = g.variant === 'hardcore' && !g.mp && !g.duel && !g.story;
+    if (this.sinceHurt > 6 && this.hp < this.maxHp && this.poisonT <= 0 && !noRegen) {
       this.regenT += dt;
       if (this.regenT > 2.5) {
         this.regenT = 0;
@@ -778,6 +780,22 @@ export class Player {
     this.hurtT = Math.max(this.hurtT, 0.12);
     this.game.hud.damage();
     if (this.hp <= 0) this.die(source);
+  }
+
+  // Bots shoot at this box.
+  hitTest(o, d, maxT) {
+    if (this.dead) return null;
+    const k = this.h / 1.8;
+    const x = this.pos.x;
+    const y = this.pos.y;
+    const z = this.pos.z;
+    const tb = rayBox(o, d, x - 0.36, y, z - 0.36, x + 0.36, y + 1.36 * k, z + 0.36);
+    const th = rayBox(o, d, x - 0.3, y + 1.36 * k, z - 0.3, x + 0.3, y + this.h + 0.1, z + 0.3);
+    const okB = tb >= 0 && tb < maxT;
+    const okH = th >= 0 && th < maxT;
+    if (okH && (!okB || th <= tb)) return { t: th, head: true };
+    if (okB) return { t: tb, head: false };
+    return null;
   }
 
   // Duels: another player hit us. No invulnerability window, so fast guns

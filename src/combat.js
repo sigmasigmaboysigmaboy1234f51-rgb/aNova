@@ -80,9 +80,9 @@ export class Combat {
     const block = g.world.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, range);
     const blockT = block ? block.t : range;
     const hits = g.mobs.raycastAll(origin, dir, blockT);
-    // In a duel, other players can be hit too.
-    if (g.duel && g.mp) {
-      for (const r of g.mp.remotes.list()) {
+    // In a duel, other players (and bots) can be hit too.
+    if (g.duel) {
+      for (const r of g.pvpTargets()) {
         const h = r.hitTest(origin, dir, blockT);
         if (h) hits.push({ remote: r, t: h.t, head: h.head });
       }
@@ -164,11 +164,17 @@ export class Combat {
     if (s.splash) this.explode(at, s.splash, dmg * 0.45, { local: true, breaks: false, small: true });
   }
 
-  // Duels: tell the other player they were hit. Their game takes the damage.
+  // Duels: tell the other player they were hit (their game takes the
+  // damage), or hurt a bot directly.
   hitRemote(p, r, dmg, head, dir, at, s) {
     const g = this.game;
-    g.mp.sendHitPlayer(r.id, dmg, head, s, dir);
-    r.invuln = 0;
+    if (r.isBot) {
+      const fx = s && (s.burn || s.slow) ? { burn: s.burn ? 1 : 0, slow: s.slow || 0 } : null;
+      r.takeHit(dmg, head, fx, g.myId, p.pos);
+    } else {
+      g.mp.sendHitPlayer(r.id, dmg, head, s, dir);
+      r.invuln = 0;
+    }
     if (at) g.fx.burst(at.x, at.y, at.z, BLOOD, 5, { speed: 2.5, size: 0.07, up: 1.5, life: 0.45, spread: 0.1 });
     if (s && s.leech) {
       this.leechAcc += dmg * s.leech;
@@ -348,6 +354,7 @@ export class Combat {
       local: !!opts.local,
       stats: opts.stats || null,
       block: opts.block || B.COBBLE,
+      owner: opts.owner,
       stuck: false,
       spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, 0),
     });
@@ -384,8 +391,8 @@ export class Combat {
       // Mobs first (only our own projectiles can hurt).
       if (pr.local && pr.kind !== 'nade' && len > 0) {
         let hit = g.mobs.raycast(prev, seg, len + 0.1);
-        if (g.duel && g.mp) {
-          for (const r of g.mp.remotes.list()) {
+        if (g.duel) {
+          for (const r of g.pvpTargets()) {
             const h = r.hitTest(prev, seg, len + 0.1);
             if (h && (!hit || h.t < hit.t)) hit = { remote: r, t: h.t, head: h.head };
           }
@@ -404,7 +411,7 @@ export class Combat {
         if (pr.dead) continue;
       }
       if (pr.kind === 'nade' && pr.life <= 0) {
-        if (pr.local) this.explode(pr.pos, 3, 14, { local: true, breaks: true });
+        if (pr.local) this.explode(pr.pos, 3, 14, { local: true, breaks: true, owner: pr.owner });
         pr.dead = true;
         continue;
       }
@@ -535,7 +542,8 @@ export class Combat {
     }
   }
 
-  explode(pos, r, dmg, { local = false, breaks = false, small = false } = {}) {
+  // owner: who set it off (a bot's id for bot grenades; you otherwise).
+  explode(pos, r, dmg, { local = false, breaks = false, small = false, owner } = {}) {
     const g = this.game;
     const p = g.player;
     const at = pos.clone();
@@ -554,7 +562,8 @@ export class Combat {
     g.sound.explosion(Math.max(0, 1 - d / 50), small);
 
     if (!local) return;
-    for (const m of g.mobs.list) {
+    const byBot = owner !== undefined && owner !== g.myId;
+    for (const m of byBot ? [] : g.mobs.list) {
       if (m.state === 'dying' || m.gone) continue;
       const c = vA.copy(m.pos);
       c.y += m.h * 0.5;
@@ -565,17 +574,23 @@ export class Combat {
       if (!Number.isFinite(dir.x)) dir.copy(UP);
       m.damage(dmg * f, dir, false, c.clone(), g.myId, {});
     }
-    // Duels: blasts hurt the other players too.
-    if (g.duel && g.mp && dmg > 0) {
-      for (const rp of g.mp.remotes.list()) {
-        if (rp.dead || !rp.hasState) continue;
+    // Duels: blasts hurt the other players and bots too.
+    if (g.duel && dmg > 0) {
+      for (const rp of g.pvpTargets()) {
+        if (rp.dead || (!rp.isBot && !rp.hasState) || rp.id === owner) continue;
         const rd = vB.set(rp.pos.x, rp.pos.y + 0.9, rp.pos.z).distanceTo(at);
-        if (rd < r) this.hitRemote(p, rp, Math.max(1, dmg * 0.6 * (1 - rd / r)), false, vB.clone().sub(at).normalize(), null, null);
+        if (rd >= r) continue;
+        const amount = Math.max(1, dmg * 0.6 * (1 - rd / r));
+        if (rp.isBot) rp.takeHit(amount, false, null, byBot ? owner : g.myId, at);
+        else if (!byBot) this.hitRemote(p, rp, amount, false, vB.clone().sub(at).normalize(), null, null);
       }
     }
     const pc = vA.set(p.pos.x, p.pos.y + 0.9, p.pos.z);
     const pd = pc.distanceTo(at);
-    if (!p.dead && pd < r * 0.9) p.hurt(Math.max(1, Math.round(dmg * 0.3 * (1 - pd / r))), at, 'self');
+    if (!p.dead && pd < r * 0.9) {
+      if (byBot) p.pvpHit(Math.max(1, dmg * 0.6 * (1 - pd / r)), at, owner, null, false);
+      else p.hurt(Math.max(1, Math.round(dmg * 0.3 * (1 - pd / r))), at, 'self');
+    }
 
     if (breaks) this.breakBlocks(at, r);
     if (g.mp) g.mp.sendBoom(at, r, small);

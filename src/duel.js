@@ -29,7 +29,7 @@ export class Duel {
   // Everyone gets a side: players are sorted by id and take turns.
   spawnFor(id) {
     const g = this.game;
-    const ids = [g.myId, ...(g.mp ? g.mp.remotes.list().map((r) => r.id) : [])].sort((a, b) => a - b);
+    const ids = [g.myId, ...(g.mp ? g.mp.remotes.list().map((r) => r.id) : []), ...g.bots.map((b) => b.id)].sort((a, b) => a - b);
     const i = Math.max(0, ids.indexOf(id));
     const [x, y, z] = this.spawns[i % this.spawns.length];
     const pos = new THREE.Vector3(x, y, z);
@@ -50,6 +50,8 @@ export class Duel {
   name(id) {
     const g = this.game;
     if (id === g.myId) return g.mp ? g.mp.name : 'You';
+    const bot = g.bots.find((b) => b.id === id);
+    if (bot) return bot.name;
     const r = g.mp && g.mp.remotes.get(id);
     return r ? r.name : 'Someone';
   }
@@ -63,7 +65,9 @@ export class Duel {
     if (this.over || by === victim) return;
     this.scores.set(by, this.score(by) + 1);
     const verb = VERBS[Math.floor(Math.random() * VERBS.length)];
-    if (g.mp) g.mp.system(`${this.name(by)} ${verb} ${this.name(victim)}`);
+    const line = `${this.name(by)} ${verb} ${this.name(victim)}`;
+    if (g.mp) g.mp.system(line);
+    else g.hud.feed(line, by === g.myId ? 'me' : victim === g.myId ? 'bad' : '');
     if (by === g.myId) {
       g.stats.kills++;
       g.hud.popup('Knockout!', 'head');
@@ -86,6 +90,13 @@ export class Duel {
       g.sound.cleared();
       g.gainCoins(100);
     } else g.sound.death();
+    if (!g.mp) {
+      // Practice against bots: new round on a fresh map.
+      setTimeout(() => {
+        if (g.duel === this && g.botDuel) g.startBotDuel(g.botDuel);
+      }, 6000);
+      return;
+    }
     // The host starts the rematch on a fresh copy of the map.
     if (g.authority) {
       setTimeout(() => {
@@ -101,7 +112,7 @@ export class Duel {
   // The top-left of the HUD: the score.
   hud() {
     const g = this.game;
-    const others = g.mp ? g.mp.remotes.list() : [];
+    const others = [...(g.mp ? g.mp.remotes.list() : []), ...g.bots];
     if (!others.length) return ['Duel', `Waiting for an opponent. Share your join code!`];
     const me = this.score(g.myId);
     if (others.length === 1) {

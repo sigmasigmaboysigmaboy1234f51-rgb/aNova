@@ -122,6 +122,7 @@ export class Hud {
     this.toastEl = $('#toast');
     this.hitEl = $('#hitmarker');
     this.popups = $('#popups');
+    this.feedEl = $('#feed');
     this.vignette = $('#vignette');
     this.lowEl = $('#lowhp');
     this.cache = {};
@@ -315,6 +316,17 @@ export class Hud {
     this.toastT = 3.2;
   }
 
+  // A short line in the kill feed on the right.
+  feed(text, cls = '') {
+    const el = document.createElement('div');
+    el.className = 'feed-line ' + cls;
+    el.textContent = text;
+    this.feedEl.appendChild(el);
+    while (this.feedEl.children.length > 5) this.feedEl.firstChild.remove();
+    setTimeout(() => el.classList.add('old'), 5000);
+    setTimeout(() => el.remove(), 5600);
+  }
+
   // Story mode's top-left: chapter name and what to do right now.
   setObjective(title, line) {
     if (this.changed('wave', title)) this.waveEl.textContent = title;
@@ -335,6 +347,7 @@ export class Hud {
     this.scopeEl.hidden = true;
     this.root.classList.remove('scoped');
     this.popups.textContent = '';
+    this.feedEl.textContent = '';
     this.vignette.classList.remove('on');
   }
 

@@ -15,6 +15,7 @@
   <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="popups" aria-live="polite"></div>
+  <div id="feed" class="feed" aria-live="polite"></div>
   <div class="hud-top">
     <div>
       <div id="hud-wave" class="hud-wave">Get ready</div>
@@ -96,7 +97,7 @@
         </div>
         <button id="btn-story" class="btn btn-go" type="button">Story</button>
         <div class="btn-row">
-          <button id="btn-play" class="btn" type="button">Endless waves</button>
+          <button id="btn-play" class="btn" type="button">More modes</button>
           <button id="btn-mp" class="btn" type="button">Multiplayer</button>
         </div>
         <div class="btn-row">
@@ -314,6 +315,27 @@
       <p>Every shard turns whoever holds it into a huge, muscly boss, and its glow is waking up the mobs. You are the last Blockfire: a builder who can shape blocks and fire Ember. With Grandma Brick and her lantern-bot Pip, go and get the shards back.</p>
     </div>
     <div id="story-list" class="story-list"></div>
+  </div>
+</section>
+
+<section id="modes" class="screen armory modes" hidden aria-label="More modes">
+  <header class="arm-head">
+    <h2 class="arm-title">More modes</h2>
+    <p class="arm-msg">Pick how you want to play.</p>
+    <button id="modes-back" class="btn btn-go" type="button">Back</button>
+  </header>
+  <div class="modes-body">
+    <div id="modes-list" class="modes-list"></div>
+    <div class="panel mode-card bot-card">
+      <h3 class="mode-name">Bot Duel</h3>
+      <p class="mode-desc">Practise duels against computer players. They strafe, jump, reload, throw grenades and, on Hard, build cover when they are hurt. First to 10 knockouts wins.</p>
+      <div class="bd-grid">
+        <label class="field" for="bd-map"><span>Map</span><select id="bd-map"></select></label>
+        <label class="field" for="bd-level"><span>Bots</span><select id="bd-level"></select></label>
+        <label class="field" for="bd-count"><span>How many</span><select id="bd-count"><option value="1">1 bot (1v1)</option><option value="2">2 bots</option><option value="3">3 bots</option></select></label>
+      </div>
+      <button id="bd-go" class="btn btn-go" type="button">Fight the bots</button>
+    </div>
   </div>
 </section>
 

@@ -11,7 +11,7 @@ import { loadImage, clamp, wrapAngle } from './util.js';
 
 export const F = { crouch: 1, sprint: 2, ground: 4, dead: 8, hurt: 16, water: 32 };
 
-function nameplate(name) {
+export function nameplate(name) {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
   const font = "600 30px 'Pixelify Sans', ui-monospace, monospace";
