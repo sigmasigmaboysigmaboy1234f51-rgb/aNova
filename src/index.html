@@ -15,6 +15,7 @@
   <div id="scope" class="scope" hidden aria-hidden="true"><div class="scope-glass"><i></i><i></i></div></div>
   <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="cheat-gun" class="cheat-gun" hidden></div>
   <div id="dnums" class="dnums" aria-hidden="true"></div>
   <div id="popups" aria-live="polite"></div>
   <div id="combo" class="combo" hidden><b id="combo-n">×2</b><span>combo</span><i><i id="combo-bar"></i></i></div>
@@ -119,6 +120,7 @@
         </div>
         <div class="btn-row">
           <button id="btn-settings" class="btn btn-quiet" type="button">Settings</button>
+          <button id="btn-cheats" class="btn btn-quiet btn-cheat" type="button">Cheats</button>
           <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
           <button id="btn-quit-app" class="btn btn-quiet" type="button" hidden>Quit</button>
         </div>
@@ -144,6 +146,7 @@
         <dt><kbd>V</kbd> or <kbd>F5</kbd></dt><dd>Third person</dd>
         <dt><kbd>T</kbd> / <kbd>Tab</kbd></dt><dd>Chat / player list (multiplayer)</dd>
         <dt><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>H</kbd></dt><dd>Emotes: wave, dance, flex, dab</dd>
+        <dt><kbd>`</kbd></dt><dd>Cheat menu</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>
       </details>
@@ -465,6 +468,56 @@
   </div>
 </section>
 
+<section id="cheats" class="screen overlay cheats" hidden aria-label="Cheats">
+  <div class="panel ch-panel">
+    <header class="ch-head">
+      <h2 class="overlay-title ch-title">Cheats</h2>
+      <p id="cz-status" class="note"></p>
+      <button id="cz-close" class="btn btn-go" type="button">Done</button>
+    </header>
+    <p id="cz-msg" class="ch-msg" role="status" aria-live="polite"></p>
+    <div class="ch-body">
+      <section class="ch-sec ch-sec-guns">
+        <h3>Cheat guns</h3>
+        <div id="cz-guns" class="ch-guns"></div>
+        <p id="cz-gun-desc" class="note"></p>
+      </section>
+      <section class="ch-sec">
+        <h3>You</h3>
+        <div id="cz-you" class="ch-toggles"></div>
+      </section>
+      <section class="ch-sec">
+        <h3>World</h3>
+        <p id="cz-world-note" class="note">Start a game to use these.</p>
+        <div id="cz-world-t" class="ch-toggles"></div>
+        <div class="ch-actions">
+          <button id="cz-killall" class="btn btn-small" type="button">Knock out every mob</button>
+          <button id="cz-skip" class="btn btn-small" type="button">Skip this wave</button>
+          <div class="ch-pick"><select id="cz-boss" aria-label="Boss"></select><button id="cz-spawnboss" class="btn btn-small" type="button">Summon boss</button></div>
+          <div class="ch-pick"><select id="cz-mob" aria-label="Mob"></select><button id="cz-spawnmob" class="btn btn-small" type="button">Spawn 5</button></div>
+          <button id="cz-day" class="btn btn-small" type="button">Make it day</button>
+          <button id="cz-night" class="btn btn-small" type="button">Make it night</button>
+          <div class="ch-pick"><select id="cz-weather-sel" aria-label="Weather"><option value="clear">Clear</option><option value="rain">Rain</option><option value="storm">Thunderstorm</option><option value="snow">Snow</option></select><button id="cz-weather" class="btn btn-small" type="button">Set weather</button></div>
+          <button id="cz-addbot" class="btn btn-small" type="button" hidden>Add a bot</button>
+          <button id="cz-unban" class="btn btn-small" type="button">Unban everything</button>
+          <button id="cz-heal" class="btn btn-small" type="button">Full health and ammo</button>
+          <button id="cz-power" class="btn btn-small" type="button">Every power-up</button>
+        </div>
+      </section>
+      <section class="ch-sec">
+        <h3>Goodies</h3>
+        <div class="ch-actions">
+          <button id="cz-coins" class="btn btn-small btn-gold" type="button">+10,000 coins</button>
+          <button id="cz-unlock" class="btn btn-small" type="button">Unlock every gun and part</button>
+          <button id="cz-style" class="btn btn-small" type="button">Unlock every Style item</button>
+          <button id="cz-level" class="btn btn-small" type="button">Level up</button>
+          <button id="cz-spin" class="btn btn-small" type="button">Free Lucky Wheel spin</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
 <section id="pause" class="screen overlay" hidden aria-label="Paused">
   <div class="panel overlay-panel">
     <h2 class="overlay-title">Paused</h2>
@@ -480,6 +533,7 @@
       <button id="btn-pause-armory" class="btn btn-gold" type="button">Armory <kbd>B</kbd></button>
       <button id="btn-pause-skin" class="btn" type="button">Edit skin</button>
       <button id="btn-pause-settings" class="btn" type="button">Settings</button>
+      <button id="btn-pause-cheats" class="btn btn-cheat" type="button">Cheats <kbd>`</kbd></button>
       <button id="btn-quit" class="btn" type="button">Quit to title</button>
     </div>
   </div>

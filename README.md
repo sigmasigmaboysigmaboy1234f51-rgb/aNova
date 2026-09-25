@@ -34,6 +34,7 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Switch to third person to see your skin |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
+| ` (under Esc) | Cheat menu |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
 | F11 | Full screen (app) |
@@ -84,6 +85,25 @@ Other players see your whole look online.
 - **Combos:** beat mobs quickly one after another to multiply your points, up to double.
 - **Kill streaks:** 5, 10, 15, 20, 30, 50 and 100 in a row without getting cubed get big callouts and bonus coins.
 - **Damage numbers** pop out of mobs when you hit them (you can turn them off in Settings).
+
+## Cheats
+
+Press **`** (the key under Esc) in a game, or click **Cheats** on the title screen or the pause menu.
+
+- **Cheat guns.** Pick one, then shoot with any gun:
+  - **Kill Gun** knocks out anything instantly.
+  - **Kick Gun** punts mobs into the sky and kicks bots out of the match.
+  - **Ban Gun** banishes a mob and stops that kind of mob from coming back for the rest of the game.
+  - **Freeze Gun** freezes mobs, bosses and bots for 10 seconds.
+  - **Nuke Gun** makes a giant explosion wherever you point.
+  - **Launch Gun** blasts you toward wherever you point.
+- **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks.
+- **World:** freeze every mob, pause the waves, knock out every mob, skip a wave, summon any boss, spawn any mob, day or night, any weather, add bots to a Bot Duel, full health, every power-up at once.
+- **Goodies:** +10,000 coins, unlock every gun and part, unlock every Style item, level up, a free Lucky Wheel spin.
+
+Runs with cheats on don't count for your best score.
+
+**Online, only the host can use cheats**, and everyone in the game is told when the host turns them on. The host's Kill Gun knocks out other players (they come back like normal). The Kick Gun kicks the player you hit out of your game. The Ban Gun kicks them and stops them rejoining that game, even if they change their name.
 
 ## Settings
 
@@ -265,6 +285,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/sky.js` | Day and night, rain, storms and snow |
 | `src/wheel.js` | The Lucky Wheel |
 | `src/settings.js` | The Settings screen |
+| `src/cheats.js` | The cheat menu and cheat guns |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |

@@ -439,6 +439,7 @@ export class Boss extends Mob {
   update(dt) {
     const g = this.game;
     this.tickTimers(dt);
+    if (this.cheatState(dt)) return;
     if (this.state === 'spawn') {
       if (!this.roared) {
         this.roared = true;

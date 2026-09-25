@@ -230,6 +230,13 @@ export class Bot {
     this.nadeCd -= dt;
     this.buildCd -= dt;
     this.sinceHurt += dt;
+    // Hit by the Freeze Gun: stand still, tinted icy blue.
+    if (this.frozenT > 0 && !this.dead) {
+      this.frozenT -= dt;
+      this.sync(dt);
+      for (const mat of this.model.materials) mat.emissive.setRGB(0.08, 0.3, 0.55);
+      return;
+    }
     if (this.dead) {
       this.deadT += dt;
       this.respawnT -= dt;

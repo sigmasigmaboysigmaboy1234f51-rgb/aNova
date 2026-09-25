@@ -473,7 +473,9 @@ export class Player {
 
     const weapon = this.weapon;
     const k = inp.keys;
-    const wantCrouch = k.has('ShiftLeft') || k.has('ShiftRight');
+    const cheats = g.cheats;
+    const flying = cheats.has('fly');
+    const wantCrouch = (k.has('ShiftLeft') || k.has('ShiftRight')) && !flying;
     if (wantCrouch) this.crouch = true;
     else if (this.crouch && this.canStand()) this.crouch = false;
     this.h = this.crouch ? H_CROUCH : H_STAND;
@@ -501,6 +503,8 @@ export class Player {
     this.inWater = this.pos.y < SEA - 0.35;
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
     if (this.buff('speed')) speed *= 1.45;
+    if (cheats.has('speed')) speed *= 2;
+    if (flying) speed *= 1.6;
     if (this.slowT > 0) speed *= 1 - this.slowAmt;
     if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
     if (this.inWater) speed *= 0.55;
@@ -509,14 +513,18 @@ export class Player {
     this.vel.x += (wx * speed - this.vel.x) * a;
     this.vel.z += (wz * speed - this.vel.z) * a;
     const jump = k.has('Space');
-    if (this.inWater) {
+    if (flying) {
+      // Fly cheat: no gravity. Space goes up, Shift goes down.
+      const down = k.has('ShiftLeft') || k.has('ShiftRight');
+      this.vel.y += ((jump ? 9 : 0) - (down ? 9 : 0) - this.vel.y) * Math.min(1, dt * 10);
+    } else if (this.inWater) {
       this.vel.y = Math.max(this.vel.y - 12 * dt, -3);
       if (jump) this.vel.y = Math.min(this.vel.y + 30 * dt, 4);
       if (jump && (this.hitX || this.hitZ)) this.vel.y = 6.5;
     } else {
       this.vel.y = Math.max(this.vel.y - 30 * dt, -45);
       if (jump && this.onGround) {
-        this.vel.y = 9;
+        this.vel.y = cheats.has('jump') ? 19 : 9;
         g.sound.jump();
       }
     }
@@ -579,7 +587,7 @@ export class Player {
     if (k.has('KeyF') && this.placeCd <= 0) this.tryPlace();
     if (inp.pressed.has('KeyG') && this.nadeCd <= 0) {
       if (this.grenades > 0) {
-        this.grenades--;
+        if (!cheats.has('nades')) this.grenades--;
         this.nadeCd = 0.8;
         this.swing = 1;
         g.combat.throwGrenade(this);
@@ -609,6 +617,20 @@ export class Player {
     const g = this.game;
     const inp = g.input;
     const s = w.stats;
+    // A cheat gun replaces whatever the gun normally shoots.
+    if (g.cheats.gunOn()) {
+      g.combat.beamTick(this, null, 0, false);
+      this.cheatCd = (this.cheatCd || 0) - dt;
+      if (inp.left && this.cheatCd <= 0 && this.equip > 0.6) {
+        this.cheatCd = 0.22;
+        this.recoil = 1;
+        this.sinceShot = 0;
+        this.kick += 0.02;
+        w.flashT = 0.05;
+        g.cheats.fire(this);
+      }
+      return;
+    }
     if (w.reloadT > 0) {
       w.reloadT -= dt;
       if (w.reloadT <= 0) w.ammo = s.mag;
@@ -637,7 +659,7 @@ export class Player {
   }
 
   startReload(w) {
-    if (this.buff('ammo')) return;
+    if (this.infiniteAmmo()) return;
     w.reloadT = w.stats.reload * (this.buff('rapid') ? 0.5 : 1);
     this.sprintLatch = false;
     this.game.sound.reload(w.stats.reload);
@@ -654,10 +676,10 @@ export class Player {
         w.fireCd = 0.3;
         return;
       }
-      this.blocks--;
+      if (!g.cheats.has('blocks')) this.blocks--;
     }
-    if (!this.buff('ammo')) w.ammo--;
-    w.fireCd = this.buff('rapid') ? s.gap / 1.7 : s.gap;
+    if (!this.infiniteAmmo()) w.ammo--;
+    w.fireCd = (this.buff('rapid') ? s.gap / 1.7 : s.gap) / (g.cheats.has('rapid') ? 3 : 1);
     this.sprintLatch = false;
     this.sinceShot = 0;
     g.combat.fire(this, w);
@@ -740,7 +762,7 @@ export class Player {
     if (g.combat.occupied(x, y, z)) return;
     const id = this.blockType();
     w.set(x, y, z, id);
-    this.blocks--;
+    if (!g.cheats.has('blocks')) this.blocks--;
     g.stats.placed++;
     g.progress.event('place');
     g.sound.place();
@@ -823,7 +845,7 @@ export class Player {
   // Duels: another player hit us. No invulnerability window, so fast guns
   // work, but a small knockback away from the shooter.
   pvpHit(amount, from, byId, fx, head) {
-    if (this.dead || this.invuln > 0.6) return;
+    if (this.dead || this.invuln > 0.6 || this.game.cheats.has('god')) return;
     const g = this.game;
     this.hp -= Math.max(1, Math.round(amount));
     this.sinceHurt = 0;
@@ -965,8 +987,13 @@ export class Player {
     return (this.buffs[id] || 0) > 0;
   }
 
+  infiniteAmmo() {
+    return this.buff('ammo') || this.game.cheats.has('ammo');
+  }
+
   // The shield soaks a hit and sparkles.
   shielded() {
+    if (this.game.cheats.has('god')) return true;
     if (!this.buff('shield')) return false;
     if ((this.shieldFx || 0) <= 0) {
       this.shieldFx = 0.25;
@@ -985,7 +1012,7 @@ export class Player {
     }
     // Infinite ammo keeps the magazine full.
     const w = this.weapon;
-    if (w && this.buff('ammo')) {
+    if (w && this.infiniteAmmo()) {
       w.ammo = w.stats.mag;
       w.reloadT = 0;
     }

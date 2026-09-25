@@ -24,6 +24,7 @@ import { DamageNumbers } from './popnums.js';
 import { SettingsScreen, loadSettings } from './settings.js';
 import { Sky } from './sky.js';
 import { Wheel } from './wheel.js';
+import { Cheats } from './cheats.js';
 import { POWER_ORDER } from './powerups.js';
 import { Wardrobe } from './wardrobe.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
@@ -105,6 +106,7 @@ const DEATH_LINES = {
   boss: 'Crushed by a boss.',
   self: 'Caught in your own explosion.',
   lava: 'Went for a swim in lava.',
+  cheat: 'Zapped by the host\u2019s Kill Gun.',
 };
 
 function randomSeed() {
@@ -177,6 +179,8 @@ class Game {
     this.editor = new SkinEditor(this);
     this.wardrobe = new Wardrobe(this);
     this.wheel = new Wheel(this);
+    this.cheats = new Cheats(this);
+    this.cheatRun = false;
     this.preview.dress(this.profile.style);
     let styleKey = this.profile.styleCode();
     this.profile.listeners.add(() => {
@@ -309,6 +313,8 @@ class Game {
     $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
     $('#btn-style').addEventListener('click', () => this.setState('style'));
     $('#btn-wheel').addEventListener('click', () => this.setState('wheel'));
+    $('#btn-cheats').addEventListener('click', () => this.cheats.open('menu'));
+    $('#btn-pause-cheats').addEventListener('click', () => this.cheats.open('paused'));
     $('#btn-story').addEventListener('click', () => this.setState('story'));
     $('#btn-challenges').addEventListener('click', () => this.setState('challenges'));
     $('#sw-next').addEventListener('click', () => {
@@ -479,6 +485,8 @@ class Game {
     else this.settingsScreen.hide();
     if (s === 'wheel') this.wheel.show();
     else if (this.wheel.open) this.wheel.hide();
+    if (s === 'cheats') this.cheats.show();
+    else this.cheats.hide();
     $('#storywin').hidden = s !== 'storywin';
     $('#storyfail').hidden = s !== 'storyfail';
     $('#pause').hidden = s !== 'paused';
@@ -650,6 +658,19 @@ class Game {
     return [...(this.duel && this.mp ? this.mp.remotes.list() : []), ...this.bots];
   }
 
+  addBot(name, level) {
+    const b = new Bot(this, name, level, (Math.random() * 1e9) | 0);
+    this.bots.push(b);
+    const s = this.duel.spawnFor(b.id);
+    b.spawn(s.pos, s.yaw);
+    return b;
+  }
+
+  removeBot(b) {
+    b.dispose();
+    this.bots = this.bots.filter((x) => x !== b);
+  }
+
   clearBots() {
     for (const b of this.bots) b.dispose();
     this.bots = [];
@@ -698,6 +719,7 @@ class Game {
     this.combo = 0;
     this.comboT = 0;
     this.streak = 0;
+    this.cheatRun = false;
     this.dnums.clear();
     this.wave = 0;
     this.waveState = 'rest';
@@ -754,6 +776,7 @@ class Game {
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
+    this.cheats.reset();
     if (this.pet) this.pet.dispose();
     this.pet = null;
     this.duel = null;
@@ -955,9 +978,14 @@ class Game {
     if (horde) count = Math.round(count * 3.2);
     const q = [];
     for (let i = 0; i < count; i++) {
-      const t = pickMob(horde ? n + 4 : n);
-      // The Horde is all tiny mobs.
-      q.push(horde ? `${t.split(':')[0]}:mini` : t);
+      // The Horde is all tiny mobs. Mobs hit by the Ban Gun don't come back.
+      const pick = () => {
+        const t = pickMob(horde ? n + 4 : n);
+        return horde ? `${t.split(':')[0]}:mini` : t;
+      };
+      let t = pick();
+      for (let k = 0; k < 12 && this.cheats.banned.has(t); k++) t = pick();
+      if (!this.cheats.banned.has(t)) q.push(t);
     }
     this.queue = q;
     this.bossPending = null;
@@ -967,6 +995,7 @@ class Game {
       const k = rush ? n - 1 : n / 5 - 1;
       const loop = Math.floor(k / BOSSES.length);
       this.bossPending = { index: k % BOSSES.length, boost: crowd * (1 + loop * 0.8) * (1 + k * 0.04), t: 2.5 };
+      if (this.cheats.banned.has(BOSSES[k % BOSSES.length].type)) this.bossPending = null;
     }
     this.mul = this.waveMul(n);
     this.spawnTimer = 0.5;
@@ -987,6 +1016,7 @@ class Game {
 
   updateWaves(dt) {
     if (this.waveState === 'rest') {
+      if (this.cheats.has('peace')) return;
       this.waveTimer -= dt;
       if (this.waveTimer <= 0) this.beginWave(this.wave + 1);
       return;
@@ -1196,13 +1226,15 @@ class Game {
     $('#go-streak').textContent = String(s.bestStreak || 0);
     const key = this.variant === 'endless' ? 'best' : `best:${this.variant}`;
     const prev = bestFor(this.variant);
-    const better = s.score > 0 && (!prev || s.score > prev.score);
+    const better = s.score > 0 && (!prev || s.score > prev.score) && !this.cheatRun;
     if (better) {
       store.set(key, JSON.stringify({ wave: this.wave, score: s.score }));
       if (this.variant === 'endless') this.best = { wave: this.wave, score: s.score };
     }
     const shown = better ? null : prev;
-    $('#go-best').textContent = better
+    $('#go-best').textContent = this.cheatRun
+      ? 'Cheats were on, so this run doesn\u2019t count for your best score.'
+      : better
       ? `New best ${VARIANTS[this.variant].name} run!`
       : shown
         ? `Best ${VARIANTS[this.variant].name} run: wave ${shown.wave}, ${shown.score.toLocaleString('en-US')} points`
@@ -1260,6 +1292,9 @@ class Game {
       this.mp.openChat();
     }
     if (this.state === 'playing' && this.input.pressed.has('KeyB')) this.openArmory('playing');
+    if (this.state === 'playing' && this.input.pressed.has('Backquote')) this.cheats.open('playing');
+    if (this.cheats.any()) this.cheatRun = true;
+    this.cheats.updateHud();
     if (this.authority) {
       if (this.duel) {
         // No mobs in a duel.

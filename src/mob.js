@@ -233,6 +233,7 @@ export class Mob {
   update(dt) {
     const g = this.game;
     this.tickTimers(dt);
+    if (this.cheatState(dt)) return;
 
     if (this.state === 'spawn') {
       this.spawnT += dt / 0.9;
@@ -904,6 +905,40 @@ export class Mob {
     }
     if (this.deathT > this.def.death) this.remove(true);
     else this.sync(dt);
+  }
+
+  // Cheats: kicked into the sky, banished by the Ban Gun, or frozen.
+  cheatState(dt) {
+    const g = this.game;
+    const root = this.model.root;
+    if (this.yeet) {
+      const y = this.yeet;
+      y.t += dt;
+      y.v.y -= 20 * dt;
+      this.pos.addScaledVector(y.v, dt);
+      this.sync(dt);
+      root.rotation.x = y.t * 11;
+      root.rotation.z = y.t * 6;
+      if (y.t > 1.4) this.remove(true);
+      return true;
+    }
+    if (this.banish) {
+      this.banish.t += dt;
+      this.sync(dt);
+      const k = Math.max(0, 1 - this.banish.t / 0.45);
+      root.scale.setScalar(this.def.scale * k);
+      root.rotation.y += this.banish.t * 30;
+      if (k <= 0) this.remove(false);
+      return true;
+    }
+    if (this.state === 'live' && (this.frozenT > 0 || g.cheats.has('freeze'))) {
+      this.frozenT = Math.max(0, (this.frozenT || 0) - dt);
+      this.vel.set(0, 0, 0);
+      this.sync(dt);
+      for (const mat of this.emissives.length ? this.emissives : this.model.materials) if (mat.emissive) mat.emissive.setRGB(0.08, 0.3, 0.55);
+      return true;
+    }
+    return false;
   }
 
   remove(withPuff) {

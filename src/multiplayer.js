@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { NetClient } from './net.js';
 import { PeerHost, PeerClient } from './p2p.js';
 import { RemotePlayers, F } from './remote.js';
-import { $ } from './util.js';
+import { $, store } from './util.js';
 
 // Glue between the network and the game: decides who runs the mobs, sends
 // our state out, applies everyone else's, and runs chat and the player list.
@@ -36,6 +36,16 @@ export const DEATH_VERBS = {
   boss: 'was crushed by a boss',
   self: 'blew themselves up',
 };
+
+// A random id for this computer, so a ban sticks even with a new name.
+function deviceId() {
+  let id = store.get('dev', '');
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    store.set('dev', id);
+  }
+  return id;
+}
 
 export class Multiplayer {
   // kind: 'host' (online, peer to peer), 'join' (by code) or 'server'
@@ -81,7 +91,7 @@ export class Multiplayer {
     game.skin.listeners.add(this.onSkin);
     game.world.onEdit = (x, y, z, b) => this.net.send({ t: 'block', x, y, z, b });
 
-    const hello = { name, skin: game.skin.canvas.toDataURL('image/png'), slim: game.skin.slim };
+    const hello = { name, skin: game.skin.canvas.toDataURL('image/png'), slim: game.skin.slim, dev: deviceId() };
     const on = this.handlers();
     if (kind === 'host') {
       this.net = new PeerHost(hello, on, {
@@ -207,11 +217,16 @@ export class Multiplayer {
         if (m.sound === 'wave') g.sound.wave();
       },
       cleared: (m) => g.onWaveCleared(m.n, m.bonus),
-      hurt: (m) => g.player.hurt(m.d, m.f ? { x: m.f[0], y: m.f[1], z: m.f[2] } : null, m.s, cleanFx(m.fx)),
+      hurt: (m) => {
+        // The host's Kill Gun goes straight through the short safe time after a hit.
+        if (m.s === 'cheat') g.player.invuln = 0;
+        g.player.hurt(m.d, m.f ? { x: m.f[0], y: m.f[1], z: m.f[2] } : null, m.s, cleanFx(m.fx));
+      },
       kill: (m) => g.creditKill(m.pts, m.head, typeof m.mt === 'string' ? m.mt : null),
       error: (m) => {
         this.errorMsg = m.msg;
       },
+      notice: (m) => this.system(String(m.text || '').slice(0, 120)),
       close: (reason) => g.onDisconnected(reason, this.errorMsg),
     };
   }

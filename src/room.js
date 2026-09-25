@@ -7,13 +7,13 @@
 //   - in server/server.cjs for dedicated servers joined by address.
 // A transport is anything with send(text) and close().
 
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;
 export const MAX_PLAYERS = 8;
 
 // Messages any player may send, and what the room does with them.
 const RELAY = new Set(['state', 'shot', 'died', 'proj', 'boom', 'pvp']);
 // Messages only the host may send; they go to everyone else.
-const HOST_RELAY = new Set(['mobs', 'bolt', 'mboom', 'bfx', 'pickupAdd', 'pickupGone', 'banner', 'cleared', 'duel']);
+const HOST_RELAY = new Set(['mobs', 'bolt', 'mboom', 'bfx', 'pickupAdd', 'pickupGone', 'banner', 'cleared', 'duel', 'notice']);
 // Messages for the host's eyes only.
 const TO_HOST = new Set(['hitMob', 'pickup']);
 // Messages the host sends to one player.
@@ -46,6 +46,9 @@ export class Room {
     this.mode = null;
     this.edits = new Map();
     this.wave = null;
+    // Players the host banned: by device and by name.
+    this.bannedDevs = new Set();
+    this.bannedNames = new Set();
   }
 
   get size() {
@@ -91,7 +94,7 @@ export class Room {
     }
     if (!m || typeof m.t !== 'string') return;
     if (session.me) {
-      this.handle(session.me, m);
+      if (!session.me.kicked) this.handle(session.me, m);
       return;
     }
     if (m.t !== 'hello') return;
@@ -104,9 +107,11 @@ export class Room {
       setTimeout(() => transport.close(), 50);
     };
     if (m.v !== PROTOCOL) return reject('This game runs a different version of Blockfire. Update the game and try again.');
+    const dev = typeof m.dev === 'string' ? m.dev.slice(0, 40) : '';
+    if ((dev && this.bannedDevs.has(dev)) || this.bannedNames.has(cleanName(m.name).toLowerCase())) return reject('The host banned you from this game.');
     if (this.players.size >= this.maxPlayers) return reject(`The game is full (${this.maxPlayers} players).`);
     if (!this.migrate && this.hostId === null && this.closed) return reject('The host closed the game.');
-    const me = { t: transport, id: this.nextId++, name: cleanName(m.name), skin: cleanSkin(m.skin), slim: !!m.slim, state: null };
+    const me = { t: transport, id: this.nextId++, name: cleanName(m.name), skin: cleanSkin(m.skin), slim: !!m.slim, state: null, dev };
     session.me = me;
     this.players.set(me.id, me);
     if (this.hostId === null) this.hostId = me.id;
@@ -186,7 +191,30 @@ export class Room {
       this.broadcast(m, me.id);
     } else if (DIRECT.has(t)) {
       this.send(this.players.get(m.to), m);
+    } else if (t === 'kick') {
+      this.kick(me, this.players.get(m.to), !!m.ban);
     }
+  }
+
+  // The host's Kick Gun and Ban Gun.
+  kick(host, p, ban) {
+    if (!p || p === host || p.kicked) return;
+    p.kicked = true;
+    if (ban) {
+      if (p.dev) this.bannedDevs.add(p.dev);
+      this.bannedNames.add(p.name.toLowerCase());
+    }
+    this.send(p, { t: 'error', msg: ban ? `${host.name} banned you from their game.` : `${host.name} kicked you from their game.` });
+    setTimeout(() => {
+      try {
+        p.t.close();
+      } catch {
+        /* already closed */
+      }
+    }, 200);
+    this.leave(p);
+    this.broadcast({ t: 'notice', text: `${p.name} was ${ban ? 'banned' : 'kicked'} by ${host.name}` });
+    this.log(`${p.name} was ${ban ? 'banned' : 'kicked'}`);
   }
 
   close(msg = 'The host closed the game.') {
