@@ -89,7 +89,8 @@ export class SkinPreview {
     if (was !== editing) this.dress(this.style);
     this.visible = true;
     this.autoRotate = !editing && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.dist = editing ? 4.6 : 5.2;
+    // A little further back on the title screen so tall hats fit.
+    this.dist = editing ? 4.6 : 5.9;
     this.canvas.style.cursor = editing ? 'crosshair' : 'grab';
     this.applyLayers();
     this.resize();
@@ -198,8 +199,9 @@ export class SkinPreview {
     }
     animateCosmetics(this.cos, this.t, 0, dt);
     if (this.petObj && PETS[this.petObj.userData.id].fly) this.petObj.position.y = 0.12 + Math.sin(this.t * 2.2) * 0.06;
-    this.camera.position.set(0, 0.05, this.dist);
-    this.camera.lookAt(0, 0.02, 0);
+    const lift = this.editing ? 0 : 0.14;
+    this.camera.position.set(0, 0.05 + lift, this.dist);
+    this.camera.lookAt(0, 0.02 + lift, 0);
     this.renderer.render(this.scene, this.camera);
   }
 }

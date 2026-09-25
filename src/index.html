@@ -10,6 +10,7 @@
 <body>
 <canvas id="game" aria-label="Blockfire game view"></canvas>
 
+<div id="fps" class="fps" hidden></div>
 <div id="hud" hidden>
   <div id="scope" class="scope" hidden aria-hidden="true"><div class="scope-glass"><i></i><i></i></div></div>
   <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
@@ -113,9 +114,11 @@
           <button id="btn-challenges" class="btn" type="button">Challenges</button>
         </div>
         <div class="btn-row">
+          <button id="btn-wheel" class="btn btn-gold" type="button">Lucky Wheel <span id="wheel-dot" class="dot" hidden></span></button>
           <button id="btn-skin" class="btn" type="button">Edit skin</button>
         </div>
         <div class="btn-row">
+          <button id="btn-settings" class="btn btn-quiet" type="button">Settings</button>
           <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
           <button id="btn-quit-app" class="btn btn-quiet" type="button" hidden>Quit</button>
         </div>
@@ -140,10 +143,10 @@
         <dt><kbd>B</kbd></dt><dd>Armory: guns and parts</dd>
         <dt><kbd>V</kbd> or <kbd>F5</kbd></dt><dd>Third person</dd>
         <dt><kbd>T</kbd> / <kbd>Tab</kbd></dt><dd>Chat / player list (multiplayer)</dd>
+        <dt><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>H</kbd></dt><dd>Emotes: wave, dance, flex, dab</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
       </dl>
       </details>
-      <label class="slider" for="sens"><span>Mouse speed</span><input id="sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
     </div>
     <p class="copyright">© 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved. Blockfire and everything in it may not be copied or re-uploaded without permission.</p>
   </div>
@@ -337,6 +340,30 @@
   </div>
 </section>
 
+<section id="wheel" class="screen armory wheel-screen" hidden aria-label="Lucky Wheel">
+  <header class="arm-head">
+    <h2 class="arm-title">Lucky Wheel</h2>
+    <div class="arm-wallet"><img id="wh-coin-icon" alt="Coins"><span id="wh-coins">0</span></div>
+    <p class="arm-msg"></p>
+    <button id="wh-done" class="btn btn-go" type="button">Done</button>
+  </header>
+  <div class="wh-body">
+    <canvas id="wheel-canvas" class="wheel-canvas" width="440" height="440" aria-label="The Lucky Wheel"></canvas>
+    <div class="panel wh-side">
+      <p id="wh-msg" class="wh-msg" role="status" aria-live="polite"></p>
+      <button id="wh-spin" class="btn btn-gold wh-spin" type="button">Spin!</button>
+      <p id="wh-note" class="note"></p>
+      <ul class="wh-prizes">
+        <li>Coins: 50, 100, 250 or 500</li>
+        <li>PART: a random gun part</li>
+        <li>STYLE: a hat, cape or kill effect you don't have</li>
+        <li>XP: 400 experience</li>
+        <li>JACKPOT: 2,000 coins!</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <section id="story" class="screen armory story" hidden aria-label="Story">
   <header class="arm-head">
     <h2 class="arm-title">Story</h2>
@@ -417,6 +444,27 @@
   </div>
 </section>
 
+<section id="settings" class="screen overlay" hidden aria-label="Settings">
+  <div class="panel overlay-panel settings-panel">
+    <h2 class="overlay-title">Settings</h2>
+    <div class="set-grid">
+      <label class="slider" for="set-sens"><span>Mouse speed</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05"><output></output></label>
+      <label class="slider" for="set-fov"><span>Field of view</span><input id="set-fov" type="range" min="60" max="100" step="1"><output></output></label>
+      <label class="slider" for="set-volume"><span>Volume</span><input id="set-volume" type="range" min="0" max="100" step="5"><output></output></label>
+      <label class="field set-row" for="set-quality"><span>Graphics</span><select id="set-quality"><option value="high">High (sharpest)</option><option value="medium">Medium</option><option value="low">Low (fastest)</option></select></label>
+      <label class="check" for="set-invert"><input id="set-invert" type="checkbox"><span>Invert mouse up and down</span></label>
+      <label class="check" for="set-dmg"><input id="set-dmg" type="checkbox"><span>Show damage numbers</span></label>
+      <label class="check" for="set-fps"><input id="set-fps" type="checkbox"><span>Show FPS</span></label>
+      <label class="check" for="set-daynight"><input id="set-daynight" type="checkbox"><span>Day and night in Endless</span></label>
+      <label class="check" for="set-weather"><input id="set-weather" type="checkbox"><span>Rain, storms and snow</span></label>
+    </div>
+    <div class="btn-row">
+      <button id="set-done" class="btn btn-go" type="button">Done</button>
+      <button id="set-reset" class="btn btn-quiet" type="button">Reset to defaults</button>
+    </div>
+  </div>
+</section>
+
 <section id="pause" class="screen overlay" hidden aria-label="Paused">
   <div class="panel overlay-panel">
     <h2 class="overlay-title">Paused</h2>
@@ -431,6 +479,7 @@
       <button id="btn-resume" class="btn btn-go" type="button">Resume</button>
       <button id="btn-pause-armory" class="btn btn-gold" type="button">Armory <kbd>B</kbd></button>
       <button id="btn-pause-skin" class="btn" type="button">Edit skin</button>
+      <button id="btn-pause-settings" class="btn" type="button">Settings</button>
       <button id="btn-quit" class="btn" type="button">Quit to title</button>
     </div>
   </div>

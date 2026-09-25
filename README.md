@@ -33,6 +33,7 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | R | Reload |
 | B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Switch to third person to see your skin |
+| Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
 | F11 | Full screen (app) |
@@ -48,9 +49,45 @@ There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloo
 
 - Everything you do earns **XP**. Each level pays out coins.
 - **3 daily challenges** that change every day, like "Beat 15 Skitters" or "Reach wave 10 in Endless".
-- **24 achievements**, from First Blood to beating all 10 bosses and finding every mob.
+- **32 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
+- **Weapon mastery:** every gun ranks up as you beat mobs with it, from Iron to Master. Ranks pay coins, and Bronze, Diamond and Lava paints can only be earned this way. The Armory shows each gun's rank.
+- **Lucky Wheel:** one free spin every day, more for 200 coins. Win coins, XP, gun parts, Style items or the 2,000 coin jackpot.
 
 Click **Challenges** on the title screen to see them all.
+
+## More modes
+
+Click **More modes** on the title screen.
+
+- **Endless Waves:** the classic. Waves get bigger and every fifth wave is a boss.
+- **Boss Rush:** all ten bosses in a row.
+- **Horde:** three times the mobs, all of them tiny.
+- **Hardcore:** one life, no healing over time, no heart drops, mobs hit harder. Double coins.
+- **Bot Duel:** practise duels against 1 to 3 computer players on Easy, Normal or Hard. Bots strafe, jump, reload, throw grenades and, on Hard, build cover. They dress up too, and dance when they win.
+
+In Endless and co-op there is **day and night** (nights are darker and mobs drop 25% more coins) and **weather**: rain, thunderstorms and snow. You can turn both off in Settings.
+
+## Style shop
+
+Spend coins on looks. Click **Style** on the title screen and try anything on before you buy it.
+
+- **16 hats**, from a Red Cap and a Traffic Cone to a Halo, a Space Helmet and the Royal Crown.
+- **6 capes** that flap as you run, including Rainbow and Galaxy.
+- **4 kill effects**: confetti, hearts, gold sparkles or a void pop every time you beat a mob.
+- **6 pets** that follow you and help: **Mini Pip** zaps mobs, **Bat Buddy** bites them, **Mini Golem** punches them, **Baby Dragon** sets them on fire, **Coin Cat** pulls coins in from far away (and gives 10% more), and **Heal Slime** slowly heals you.
+
+Other players see your whole look online.
+
+## In a fight
+
+- **Power-ups** sometimes drop from mobs, and bosses always drop one: Double Damage, Speed Boost, Shield, Rapid Fire and Infinite Ammo. Timers show above your hearts.
+- **Combos:** beat mobs quickly one after another to multiply your points, up to double.
+- **Kill streaks:** 5, 10, 15, 20, 30, 50 and 100 in a row without getting cubed get big callouts and bonus coins.
+- **Damage numbers** pop out of mobs when you hit them (you can turn them off in Settings).
+
+## Settings
+
+Mouse speed, invert mouse, field of view, volume, graphics quality (use Low on slow laptops), damage numbers, an FPS counter, and day/night and weather. Open it from the title screen or the pause menu.
 
 ## How it works
 
@@ -122,7 +159,7 @@ Every gun has slots for **parts**: barrel, muzzle, sight, magazine, stock, under
 - **Scopes** (2x, 4x) zoom in when you aim with right click.
 - **Cores** change the gun's glow and add an effect: Inferno sets mobs on fire, Frost slows them, Shock chains lightning, Blast makes shots explode, Leech heals you.
 - **Twin Barrel** fires two bolts every shot. **Suppressor** makes you silent. **Laser** makes hip fire accurate. **Bipod** steadies your aim when you crouch.
-- **Paints** from Steel to Solid Gold.
+- **Paints** from Steel to Solid Gold, plus three mastery paints you earn.
 
 You carry three guns. Pick them in the Armory with **Carry in slot 1/2/3**.
 
@@ -221,6 +258,13 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/multiplayer.js`, `src/remote.js` | Multiplayer: other players, chat, syncing |
 | `src/room.js`, `src/p2p.js`, `src/net.js` | The game room, join codes and peer-to-peer connections, dedicated-server connections |
 | `src/duel.js`, `src/maps.js` | 1v1 duels and the duel maps |
+| `src/bots.js`, `src/modes.js` | Duel bots and the More modes screen |
+| `src/cosmetics.js`, `src/pets.js`, `src/wardrobe.js` | Hats, capes, kill effects, pets and the Style shop |
+| `src/powerups.js`, `src/popnums.js` | Power-ups and floating damage numbers |
+| `src/emotes.js` | Emote animations |
+| `src/sky.js` | Day and night, rain, storms and snow |
+| `src/wheel.js` | The Lucky Wheel |
+| `src/settings.js` | The Settings screen |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |

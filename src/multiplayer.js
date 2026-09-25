@@ -222,6 +222,7 @@ export class Multiplayer {
 
   applyWave(m) {
     const g = this.game;
+    if (m.n !== g.wave && !m.rest) g.sky.onWave(m.n, g.world.seed);
     g.wave = m.n;
     g.netLeft = m.left;
     g.waveState = m.rest ? 'rest' : 'fight';
@@ -349,6 +350,7 @@ export class Multiplayer {
         sc: g.stats.score,
         k: g.stats.kills,
         st: g.profile.styleCode(),
+        em: p.emote || '',
       });
     }
 

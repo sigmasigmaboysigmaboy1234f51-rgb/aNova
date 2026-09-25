@@ -4,6 +4,7 @@ export class Sound {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.volume = 1;
     this.last = {};
   }
 
@@ -13,7 +14,7 @@ export class Sound {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.55;
+      this.master.gain.value = this.muted ? 0 : 0.55 * this.volume;
       this.master.connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -25,7 +26,12 @@ export class Sound {
 
   setMuted(m) {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.55;
+    if (this.master) this.master.gain.value = m ? 0 : 0.55 * this.volume;
+  }
+
+  setVolume(v) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.55 * this.volume;
   }
 
   ready(name, gapMs) {
@@ -456,6 +462,13 @@ export class Sound {
   cleared() {
     if (!this.ready('cleared')) return;
     [523, 659, 784, 1046].forEach((f, i) => this.tone({ type: 'triangle', f0: f, dur: 0.16, vol: 0.14, delay: i * 0.08 }));
+  }
+
+  thunder(vol = 0.6, delay = 0.5) {
+    if (!this.ready('thunder', 800)) return;
+    this.noise({ dur: 2.4, vol: 0.5 * vol, type: 'lowpass', f0: 700, f1: 60, delay });
+    this.noise({ dur: 0.5, vol: 0.35 * vol, type: 'lowpass', f0: 2600, f1: 300, delay });
+    this.tone({ type: 'sine', f0: 55, f1: 30, dur: 1.8, vol: 0.3 * vol, delay });
   }
 
   powerup() {

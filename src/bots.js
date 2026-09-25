@@ -12,6 +12,7 @@ import { CORES } from './gun.js';
 import { mulberry32 } from './rng.js';
 import { wrapAngle, clamp } from './util.js';
 import { attachCosmetics, animateCosmetics, randomStyle } from './cosmetics.js';
+import { poseEmote } from './emotes.js';
 
 // Computer players for practice duels. They find their way around the
 // map, strafe, aim like a person (late and a bit off), reload, jump,
@@ -526,6 +527,13 @@ export class Bot {
       },
       dt,
     );
+    // When the duel is over the bots celebrate (or sulk with a flex).
+    const g = this.game;
+    if (g.duel && g.duel.over && !this.dead) {
+      this.partyT = (this.partyT || 0) + dt;
+      const won = g.duel.score(this.id) >= g.duel.score(g.myId);
+      poseEmote(m, won ? 'dance' : 'flex', this.partyT, Math.min(1, this.partyT * 4));
+    } else this.partyT = 0;
     const u = this.gun.userData;
     u.showFlash(this.flashT > 0);
     u.shroud.position.z = this.recoil * 0.03;

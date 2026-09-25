@@ -178,6 +178,15 @@ body[data-state="dead"] #crosshair, body[data-state="paused"] #crosshair { displ
 .controls dd { margin: 0; color: var(--paper); }
 .slider { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; font-size: 14px; color: var(--muted); }
 .slider input { width: 100%; accent-color: var(--gold); }
+.settings-panel { width: min(560px, 100%); }
+.set-grid { display: grid; gap: 12px; }
+.set-grid .slider { grid-template-columns: 130px 1fr 52px; }
+.set-grid output { color: var(--paper); font-variant-numeric: tabular-nums; text-align: right; }
+.set-row { grid-template-columns: 130px 1fr; align-items: center; }
+.check { display: flex; gap: 10px; align-items: center; font-size: 15px; color: var(--paper); cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--gold); }
+.fps { position: fixed; left: 8px; bottom: 6px; z-index: 50; font: 600 12px/1 var(--font-ui); color: #8fe070; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+.dot { display: inline-block; width: 10px; height: 10px; margin-left: 6px; background: #ff4a3a; border: 2px solid #000; vertical-align: middle; animation: blink 0.8s steps(2) infinite; }
 .menu-char { display: grid; gap: 8px; justify-items: center; }
 .preview-slot { width: 100%; max-width: 100%; aspect-ratio: 4 / 5; position: relative; }
 .preview-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
@@ -727,6 +736,16 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
   .st-body { grid-template-columns: minmax(0, 1fr); }
   .st-main { max-height: none; }
 }
+
+/* ---- Lucky Wheel ---- */
+.wh-body { display: grid; grid-template-columns: minmax(0, 480px) minmax(240px, 380px); gap: 20px; justify-content: center; align-items: center; }
+.wheel-canvas { width: 100%; max-width: 480px; aspect-ratio: 1; justify-self: center; }
+.wh-side { display: grid; gap: 12px; padding: 18px; }
+.wh-msg { margin: 0; min-height: 2.6em; font: 400 26px/1.1 var(--font-display); color: var(--gold); text-shadow: 2px 2px 0 #000; }
+.wh-msg.in { animation: bump 0.3s steps(3); }
+.wh-spin { font-size: 22px; padding: 14px; }
+.wh-prizes { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+@media (max-width: 760px) { .wh-body { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---- Kill feed ---- */
 .feed { position: absolute; right: 18px; top: 150px; display: grid; gap: 3px; justify-items: end; max-width: min(360px, 60vw); }

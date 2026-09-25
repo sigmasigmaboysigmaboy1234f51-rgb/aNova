@@ -8,6 +8,7 @@ import { TILE_UV } from './textures.js';
 import { Rig, posePlayer, ease } from './anim.js';
 import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
 import { POWERS } from './powerups.js';
+import { EMOTES, EMOTE_KEYS, emoteWeight, poseEmote } from './emotes.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
 
@@ -315,6 +316,7 @@ export class Player {
     this.deadT = 0;
     this.killer = null;
     this.buffs = {};
+    this.stopEmote();
     for (const w of this.weapons) {
       if (!w) continue;
       w.ammo = w.stats.mag;
@@ -453,7 +455,7 @@ export class Player {
     const [mx, my] = inp.takeMouse();
     const sens = (0.0024 * g.settings.sens) / zoom;
     this.yaw -= mx * sens;
-    this.pitch = clamp(this.pitch - my * sens, -1.55, 1.55);
+    this.pitch = clamp(this.pitch - my * sens * (g.settings.invertY ? -1 : 1), -1.55, 1.55);
     this.swayX = clamp(this.swayX + mx * 0.00022, -0.05, 0.05);
     this.swayY = clamp(this.swayY + my * 0.00022, -0.05, 0.05);
 
@@ -461,7 +463,12 @@ export class Player {
     for (let i = 0; i < 7; i++) if (inp.pressed.has('Digit' + (i + 1))) this.select(i);
     if (inp.wheel) this.cycle(inp.wheel > 0 ? 1 : -1);
     if (inp.pressed.has('KeyQ')) this.select(this.lastHeld);
-    if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) this.thirdPerson = !this.thirdPerson;
+    if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) {
+      this.thirdPerson = !this.thirdPerson;
+      this.emoteView = false;
+    }
+    for (const [key, id] of EMOTE_KEYS) if (inp.pressed.has(key)) this.startEmote(id);
+    this.updateEmote(dt);
     if (this.held >= 3) this.blockSlot = this.held - 3;
 
     const weapon = this.weapon;
@@ -908,6 +915,39 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + n);
   }
 
+  // --- Emotes ------------------------------------------------------------
+
+  startEmote(id) {
+    if (this.dead || !this.onGround || !EMOTES[id]) return;
+    this.emote = id;
+    this.emoteT = 0;
+    // Swing the camera round so you can see yourself.
+    if (!this.thirdPerson) {
+      this.thirdPerson = true;
+      this.emoteView = true;
+    }
+    this.game.progress.event('emote', { id });
+  }
+
+  stopEmote() {
+    if (!this.emote) return;
+    this.emote = null;
+    if (this.emoteView) this.thirdPerson = false;
+    this.emoteView = false;
+  }
+
+  updateEmote(dt) {
+    const inp = this.game.input;
+    const k = inp.keys;
+    if (this.emote) {
+      this.emoteT += dt;
+      const moved = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((c) => k.has(c));
+      if (moved || inp.left || inp.right || this.dead || this.emoteT >= EMOTES[this.emote].time) this.stopEmote();
+    }
+    const want = this.emote && this.emoteView ? 1 : 0;
+    this.emoteCam = damp(this.emoteCam || 0, want, 6, dt);
+  }
+
   // --- Power-ups ---------------------------------------------------------
 
   addBuff(id) {
@@ -972,17 +1012,16 @@ export class Player {
       eye.y += Math.abs(Math.sin(this.walkPhase)) * 0.06 * bob - 0.03 * bob;
     }
     const s = this.shake;
-    cam.rotation.set(
-      this.pitch + this.kick + (Math.random() - 0.5) * s * 0.3,
-      this.yaw + (Math.random() - 0.5) * s * 0.3,
-      roll,
-      'YXZ',
-    );
+    // During an emote the camera circles to your front.
+    const ew = this.emoteCam || 0;
+    const cy = this.yaw + Math.PI * ew;
+    const cp = (this.pitch + this.kick) * (1 - ew) - 0.18 * ew;
+    cam.rotation.set(cp + (Math.random() - 0.5) * s * 0.3, cy + (Math.random() - 0.5) * s * 0.3, roll, 'YXZ');
     if (this.thirdPerson && !this.dead) {
-      const d = this.aimDir(vB);
-      const want = vC.copy(eye).addScaledVector(d, -4.2);
-      want.x += Math.cos(this.yaw) * 0.55;
-      want.z -= Math.sin(this.yaw) * 0.55;
+      const d = ew > 0.001 ? vB.set(-Math.sin(cy) * Math.cos(cp), Math.sin(cp), -Math.cos(cy) * Math.cos(cp)) : this.aimDir(vB);
+      const want = vC.copy(eye).addScaledVector(d, -4.2 + ew * 0.8);
+      want.x += Math.cos(cy) * 0.55 * (1 - ew);
+      want.z -= Math.sin(cy) * 0.55 * (1 - ew);
       want.y += 0.3;
       const dirB = want.sub(eye);
       const total = dirB.length();
@@ -998,7 +1037,7 @@ export class Player {
       cam.position.copy(eye);
     }
     const moving = Math.hypot(this.vel.x, this.vel.z) > 2;
-    const target = (BASE_FOV + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0)) / (this.thirdPerson ? 1 : this.zoom());
+    const target = ((this.game.settings.fov || BASE_FOV) + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0)) / (this.thirdPerson ? 1 : this.zoom());
     this.fov = damp(this.fov, target, 12, dt);
     if (Math.abs(cam.fov - this.fov) > 0.01) {
       cam.fov = this.fov;
@@ -1048,6 +1087,7 @@ export class Player {
       m.root.rotation.y = this.yaw + Math.PI;
       posePlayer(this.rig, this.animState(), dt);
       if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
+      if (this.emote) poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
       animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     }
     this.landed = 0;

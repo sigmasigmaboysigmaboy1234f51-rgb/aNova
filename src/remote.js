@@ -8,6 +8,7 @@ import { makeSkinTexture, paintOutfit, DEFAULT_OUTFIT } from './skin.js';
 import { loadImage, clamp, wrapAngle } from './util.js';
 import { attachCosmetics, animateCosmetics, removeCosmetics, parseStyle } from './cosmetics.js';
 import { Pet, PETS } from './pets.js';
+import { EMOTES, emoteWeight, poseEmote } from './emotes.js';
 
 // Other players in a multiplayer game, drawn with their own skins.
 
@@ -164,6 +165,11 @@ class RemotePlayer {
     this.buf.push({ t: performance.now(), x: s.p[0], y: s.p[1], z: s.p[2], yaw: s.y, pitch: s.pi, f: s.f | 0, r: s.r ?? -1, a: s.a || 0 });
     if (typeof s.w === 'string') this.setHeld(s.w, s.wb, s.bk | 0);
     if (typeof s.st === 'string' && s.st !== this.styleKey) this.setStyle(s.st.slice(0, 80));
+    const em = EMOTES[s.em] ? s.em : null;
+    if (em !== this.emote) {
+      this.emote = em;
+      this.emoteT = 0;
+    }
     if (s.sw) this.swing = 1;
     if (this.buf.length > 30) this.buf.shift();
     this.score = s.sc | 0;
@@ -315,6 +321,10 @@ class RemotePlayer {
       dt,
     );
     if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
+    if (this.emote) {
+      this.emoteT += dt;
+      poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
+    }
     animateCosmetics(this.cos, performance.now() / 1000, Math.hypot(this.vel.x, this.vel.z), dt);
     this.visible = m.root.visible;
     if (this.pet) this.pet.update(dt);

@@ -21,6 +21,9 @@ import { Bot, BOT_NAMES } from './bots.js';
 import { Modes, VARIANTS, bestFor } from './modes.js';
 import { Pet } from './pets.js';
 import { DamageNumbers } from './popnums.js';
+import { SettingsScreen, loadSettings } from './settings.js';
+import { Sky } from './sky.js';
+import { Wheel } from './wheel.js';
 import { POWER_ORDER } from './powerups.js';
 import { Wardrobe } from './wardrobe.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
@@ -150,10 +153,7 @@ class Game {
     this.input = new Input(this.canvas);
     this.hud = new Hud(this);
     this.dnums = new DamageNumbers(this, $('#dnums'));
-    this.settings = {
-      sens: parseFloat(store.get('sens', '1')) || 1,
-      muted: store.get('muted', '0') === '1',
-    };
+    this.settings = loadSettings();
     this.sound.setMuted(this.settings.muted);
     this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0 };
     this.profile = new Profile();
@@ -176,6 +176,7 @@ class Game {
     this.preview = new SkinPreview(this.skin);
     this.editor = new SkinEditor(this);
     this.wardrobe = new Wardrobe(this);
+    this.wheel = new Wheel(this);
     this.preview.dress(this.profile.style);
     let styleKey = this.profile.styleCode();
     this.profile.listeners.add(() => {
@@ -296,6 +297,7 @@ class Game {
     this.clouds = clouds;
     this.cloudSpan = N * CELL;
     this.scene.add(clouds);
+    this.sky = new Sky(this);
   }
 
   setupUI() {
@@ -306,6 +308,7 @@ class Game {
     $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
     $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
     $('#btn-style').addEventListener('click', () => this.setState('style'));
+    $('#btn-wheel').addEventListener('click', () => this.setState('wheel'));
     $('#btn-story').addEventListener('click', () => this.setState('story'));
     $('#btn-challenges').addEventListener('click', () => this.setState('challenges'));
     $('#sw-next').addEventListener('click', () => {
@@ -364,12 +367,13 @@ class Game {
       modes.appendChild(o);
     }
 
-    const sens = $('#sens');
-    sens.value = String(this.settings.sens);
-    sens.addEventListener('input', () => {
-      this.settings.sens = parseFloat(sens.value) || 1;
-      store.set('sens', this.settings.sens);
-    });
+    this.settingsScreen = new SettingsScreen(this);
+    $('#btn-settings').addEventListener('click', () => this.settingsScreen.open('menu'));
+    $('#btn-pause-settings').addEventListener('click', () => this.settingsScreen.open('paused'));
+    this.fpsEl = $('#fps');
+    this.fpsN = 0;
+    this.fpsT = 0;
+    this.applySettings();
     for (const b of document.querySelectorAll('.btn, .seg-btn')) {
       b.addEventListener('click', () => {
         this.sound.unlock();
@@ -426,6 +430,22 @@ class Game {
     b.setAttribute('aria-pressed', String(!this.settings.muted));
   }
 
+  // Things the Settings screen changes.
+  applySettings() {
+    const s = this.settings;
+    const dpr = window.devicePixelRatio || 1;
+    const ratio = s.quality === 'low' ? 0.6 : s.quality === 'medium' ? Math.min(dpr, 1) : Math.min(dpr, 1.75);
+    if (this.renderer.getPixelRatio() !== ratio) {
+      this.renderer.setPixelRatio(ratio);
+      this.resize();
+    }
+    this.sound.setVolume(s.volume / 100);
+    this.dnums.enabled = s.dmgNums;
+    if (!s.dmgNums) this.dnums.clear();
+    if (this.fpsEl) this.fpsEl.hidden = !s.showFps;
+    if (this.sky) this.sky.setEnabled(s.dayNight, s.weather);
+  }
+
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -455,6 +475,10 @@ class Game {
     else this.modes.hide();
     if (s === 'style') this.wardrobe.show();
     else this.wardrobe.hide();
+    if (s === 'settings') this.settingsScreen.show();
+    else this.settingsScreen.hide();
+    if (s === 'wheel') this.wheel.show();
+    else if (this.wheel.open) this.wheel.hide();
     $('#storywin').hidden = s !== 'storywin';
     $('#storyfail').hidden = s !== 'storyfail';
     $('#pause').hidden = s !== 'paused';
@@ -467,6 +491,7 @@ class Game {
     }
     if (s === 'menu') {
       this.renderLevel();
+      this.refreshWheelDot();
       $('#splash').textContent = SPLASHES[Math.floor(Math.random() * SPLASHES.length)];
       this.renderBest();
       this.preview.mount($('#menu-preview'), false);
@@ -482,6 +507,10 @@ class Game {
     }
   }
 
+  refreshWheelDot() {
+    $('#wheel-dot').hidden = !this.wheel.freeReady();
+  }
+
   renderLevel() {
     const p = this.profile;
     const need = xpForLevel(p.level);
@@ -493,6 +522,7 @@ class Game {
   // Sky, fog and light for the place you are in.
   applyTheme(th) {
     const t = th || THEMES.meadow;
+    this.sky.end();
     const sky = new THREE.Color(t.sky);
     this.renderer.setClearColor(sky);
     this.scene.fog.color.set(t.fogColor || t.sky);
@@ -689,6 +719,7 @@ class Game {
       this.world.flush();
     }
     this.applyTheme(THEMES.meadow);
+    this.sky.begin(THEMES.meadow);
     this.worldUsed = true;
     this.resetRun();
     this.mobs.refreshFlow(true);
@@ -730,6 +761,7 @@ class Game {
     this.inGame = false;
     this.mobs.clear();
     this.gameOverShown = false;
+    if (this.sky.active) this.applyTheme(THEMES.meadow);
     this.setState('menu');
   }
 
@@ -844,6 +876,7 @@ class Game {
     } else {
       this.world.generate(seed, THEMES.meadow);
       this.applyTheme(THEMES.meadow);
+      this.sky.begin(THEMES.meadow);
     }
     for (const [x, y, z, b] of edits) this.world.set(x, y, z, b, true);
     this.world.flush();
@@ -912,6 +945,7 @@ class Game {
 
   beginWave(n) {
     this.wave = n;
+    this.sky.onWave(n, this.world.seed);
     const crowd = 1 + (this.mp ? this.mp.remotes.list().length * 0.5 : 0);
     const rush = this.variant === 'bossrush' && !this.mp;
     const horde = this.variant === 'horde' && !this.mp;
@@ -1048,7 +1082,8 @@ class Game {
     };
     // Coins always, sometimes a bonus coin for headshots.
     const hard = this.variant === 'hardcore' && !this.mp;
-    const value = Math.round((mob.def.coins || 5) * (1 + Math.floor(this.wave / 5) * 0.2) * (hard ? 2 : 1) * (this.variant === 'horde' ? 0.4 : 1));
+    const night = this.sky.isNight() ? 1.25 : 1;
+    const value = Math.round((mob.def.coins || 5) * (1 + Math.floor(this.wave / 5) * 0.2) * (hard ? 2 : 1) * (this.variant === 'horde' ? 0.4 : 1) * night);
     // Big payouts come as a shower of coins.
     const pieces = Math.min(12, Math.max(1, Math.round(value / 12)));
     for (let i = 0; i < pieces; i++) drop('coin', Math.max(1, Math.round(value / pieces)));
@@ -1192,7 +1227,8 @@ class Game {
     if (s === 'armory') this.armory.frame(dt);
     if (s === 'bestiary') this.bestiary.frame(dt);
     if (s === 'style') this.wardrobe.frame(dt);
-    if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes', 'style'].includes(s)) {
+    if (s === 'wheel') this.wheel.frame(dt);
+    if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes', 'style', 'wheel'].includes(s)) {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
@@ -1201,6 +1237,16 @@ class Game {
     }
     this.preview.frame(dt);
     if (this.inGame) this.dnums.update(dt);
+    if (this.settings.showFps) {
+      this.fpsN++;
+      this.fpsT += (now - (this.fpsLast || now)) / 1000;
+      this.fpsLast = now;
+      if (this.fpsT >= 0.5) {
+        this.fpsEl.textContent = `${Math.round(this.fpsN / this.fpsT)} FPS`;
+        this.fpsN = 0;
+        this.fpsT = 0;
+      }
+    }
     this.hud.tick(dt);
     this.dialogue.tick(dt);
     this.input.endFrame();
@@ -1292,6 +1338,7 @@ class Game {
   }
 
   updateSky(dt) {
+    this.sky.update(dt);
     this.waterTex.offset.x = (this.waterTex.offset.x + dt * 0.04) % 1;
     this.waterTex.offset.y = (this.waterTex.offset.y + dt * 0.015) % 1;
     const drift = (this.time * 1.2) % this.cloudSpan;

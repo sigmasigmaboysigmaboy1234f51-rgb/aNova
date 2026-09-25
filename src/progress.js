@@ -48,6 +48,11 @@ export const ACHIEVEMENTS = [
   { id: 'drip', name: 'Fresh Fit', desc: 'Get something from the Style shop', coins: 100, goal: 1, get: (p) => p.cos.size },
   { id: 'fashion', name: 'Fashion Icon', desc: 'Own 12 Style items', coins: 500, goal: 12, get: (p) => p.cos.size },
   { id: 'petpal', name: 'Best Buddies', desc: 'Adopt a pet', coins: 150, goal: 1, get: (p) => [...p.cos].filter((c) => c.startsWith('pet:')).length },
+  { id: 'lucky', name: 'Feeling Lucky', desc: 'Spin the Lucky Wheel 10 times', coins: 300, goal: 10, get: (p) => p.totals.spins || 0 },
+  { id: 'dancer', name: 'Dance Party', desc: 'Do 25 emotes', coins: 150, goal: 25, get: (p) => p.totals.emotes || 0 },
+  { id: 'spree', name: 'On Fire', desc: 'Get a 10 kill streak', coins: 250, goal: 10, get: (p) => p.totals.bestStreak || 0 },
+  { id: 'godlike', name: 'Godlike', desc: 'Get a 20 kill streak', coins: 600, goal: 20, get: (p) => p.totals.bestStreak || 0 },
+  { id: 'master', name: 'Weapon Master', desc: 'Get a gun to Diamond mastery', coins: 800, goal: 250, get: (p) => Math.max(0, ...Object.values(p.gunKills)) },
 ];
 
 // Weapon mastery: beat mobs with one gun to rank it up. Some ranks unlock a
@@ -158,6 +163,13 @@ export class Progress {
       this.daily('coins', data.n);
     } else if (kind === 'goal') {
       xp = 80;
+    } else if (kind === 'spin') {
+      T.spins = (T.spins || 0) + 1;
+    } else if (kind === 'emote') {
+      T.emotes = (T.emotes || 0) + 1;
+    } else if (kind === 'streak') {
+      T.bestStreak = Math.max(T.bestStreak || 0, data.n);
+      xp = data.n * 10;
     } else if (kind === 'chapter') {
       xp = data.first ? 400 : 150;
       this.daily('chapter', 1);
