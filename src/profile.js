@@ -66,7 +66,7 @@ export class Profile {
   }
 
   ownsPart(pid) {
-    return PARTS[pid] && (PARTS[pid].price === 0 || this.parts.has(pid));
+    return PARTS[pid] && ((PARTS[pid].price === 0 && !PARTS[pid].unlock) || this.parts.has(pid));
   }
 
   addCoins(n) {

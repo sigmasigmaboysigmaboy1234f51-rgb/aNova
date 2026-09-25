@@ -152,6 +152,7 @@ export class Combat {
 
   hitMob(p, mob, dmg, dir, head, at, s, color) {
     const g = this.game;
+    if (p.buff && p.buff('dmg')) dmg *= 2;
     mob.damage(dmg, dir, head, at, g.myId, { burn: s.burn, slow: s.slow });
     if (s.leech) {
       this.leechAcc += dmg * s.leech;
@@ -278,7 +279,7 @@ export class Combat {
     g.sound.beam(true);
     w.beamT = (w.beamT || 0) - dt;
     if (w.beamT <= 0) {
-      w.beamT = s.gap;
+      w.beamT = p.buff('rapid') ? s.gap / 1.7 : s.gap;
       w.ammo = Math.max(0, w.ammo - 1);
       const h = res.hits[0];
       if (h && h.remote) {
@@ -572,7 +573,7 @@ export class Combat {
       const f = Math.pow(Math.max(0, 1 - md / (r + m.hw)), 0.6);
       const dir = c.clone().sub(at).normalize();
       if (!Number.isFinite(dir.x)) dir.copy(UP);
-      m.damage(dmg * f, dir, false, c.clone(), g.myId, {});
+      m.damage(dmg * f * (!byBot && p.buff('dmg') ? 2 : 1), dir, false, c.clone(), g.myId, {});
     }
     // Duels: blasts hurt the other players and bots too.
     if (g.duel && dmg > 0) {

@@ -50,6 +50,23 @@ export const ACHIEVEMENTS = [
   { id: 'petpal', name: 'Best Buddies', desc: 'Adopt a pet', coins: 150, goal: 1, get: (p) => [...p.cos].filter((c) => c.startsWith('pet:')).length },
 ];
 
+// Weapon mastery: beat mobs with one gun to rank it up. Some ranks unlock a
+// paint you can't buy.
+export const MASTERY = [
+  { n: 25, name: 'Iron', coins: 50 },
+  { n: 50, name: 'Bronze', coins: 100, paint: 'paint.bronze' },
+  { n: 120, name: 'Silver', coins: 200 },
+  { n: 250, name: 'Diamond', coins: 400, paint: 'paint.diamond' },
+  { n: 600, name: 'Lava', coins: 800, paint: 'paint.lava' },
+  { n: 1000, name: 'Master', coins: 1500 },
+];
+
+export function masteryTier(kills) {
+  let t = null;
+  for (const m of MASTERY) if (kills >= m.n) t = m;
+  return t;
+}
+
 // Daily challenge templates. n is the target; pick picks a family or
 // variant so every day feels different.
 const DAILY = [
@@ -148,6 +165,20 @@ export class Progress {
     if (xp) this.addXp(xp);
     this.checkAchievements();
     p.scheduleSave();
+  }
+
+  gunKill(id) {
+    const p = this.profile;
+    if (!GUNS[id]) return;
+    const n = (p.gunKills[id] || 0) + 1;
+    p.gunKills[id] = n;
+    const tier = MASTERY.find((t) => t.n === n);
+    if (!tier) return;
+    p.addCoins(tier.coins);
+    let sub = `${n} mobs beaten. +${tier.coins} coins`;
+    if (tier.paint && p.givePart(tier.paint)) sub += `. Unlocked ${PARTS[tier.paint].name} paint!`;
+    this.notify('Weapon mastery!', `${GUNS[id].name}: ${tier.name}`, sub, '#ff7a2f');
+    this.game.sound.cleared();
   }
 
   daily(id, amount, key = null) {

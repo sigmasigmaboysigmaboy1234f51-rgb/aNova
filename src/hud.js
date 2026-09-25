@@ -1,3 +1,4 @@
+import { POWERS, POWER_ORDER } from './powerups.js';
 import { $ } from './util.js';
 import { drawBlockIcon } from './textures.js';
 import { BLOCKS } from './world.js';
@@ -125,6 +126,13 @@ export class Hud {
     this.feedEl = $('#feed');
     this.vignette = $('#vignette');
     this.lowEl = $('#lowhp');
+    this.comboEl = $('#combo');
+    this.comboN = $('#combo-n');
+    this.comboBar = $('#combo-bar');
+    this.streakEl = $('#streak');
+    this.streakT = 0;
+    this.buffsEl = $('#buffs');
+    this.buffEls = {};
     this.cache = {};
     this.bannerT = 0;
     this.toastT = 0;
@@ -282,6 +290,64 @@ export class Hud {
     setTimeout(() => el.remove(), 1000);
   }
 
+  // The combo counter on the right: how many mobs in a row, and how long
+  // until it runs out.
+  setCombo(n, frac) {
+    const on = n >= 2 && frac > 0;
+    if (this.comboEl.hidden === on) this.comboEl.hidden = !on;
+    if (!on) return;
+    const text = `×${n}`;
+    if (this.comboN.textContent !== text) {
+      this.comboN.textContent = text;
+      this.comboEl.classList.remove('bump');
+      void this.comboEl.offsetWidth;
+      this.comboEl.classList.add('bump');
+    }
+    this.comboBar.style.width = `${Math.round(frac * 100)}%`;
+  }
+
+  // Big callouts for kill streaks.
+  streak(title, sub) {
+    this.streakEl.innerHTML = '';
+    const t = document.createElement('b');
+    t.textContent = title;
+    const s = document.createElement('span');
+    s.textContent = sub;
+    this.streakEl.append(t, s);
+    this.streakEl.hidden = false;
+    this.streakEl.classList.remove('in');
+    void this.streakEl.offsetWidth;
+    this.streakEl.classList.add('in');
+    this.streakT = 2.2;
+  }
+
+  // Power-ups you have, with a bar that runs down.
+  setBuffs(buffs) {
+    for (const id of POWER_ORDER) {
+      const t = buffs[id] || 0;
+      let el = this.buffEls[id];
+      if (t <= 0) {
+        if (el) el.hidden = true;
+        continue;
+      }
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'buff';
+        el.style.setProperty('--c', POWERS[id].color);
+        const name = document.createElement('span');
+        name.textContent = POWERS[id].short;
+        const bar = document.createElement('i');
+        el.append(name, bar);
+        el.bar = bar;
+        this.buffsEl.appendChild(el);
+        this.buffEls[id] = el;
+      }
+      el.hidden = false;
+      el.bar.style.width = `${Math.round((t / POWERS[id].time) * 100)}%`;
+      el.classList.toggle('ending', t < 2.5);
+    }
+  }
+
   showBanner(title, sub, time = 2.6) {
     this.bannerTitle.textContent = title;
     this.bannerSub.textContent = sub || '';
@@ -359,6 +425,10 @@ export class Hud {
     if (this.vigT > 0) {
       this.vigT -= dt;
       if (this.vigT <= 0) this.vignette.classList.remove('on');
+    }
+    if (this.streakT > 0) {
+      this.streakT -= dt;
+      if (this.streakT <= 0) this.streakEl.hidden = true;
     }
     if (this.bannerT > 0) {
       this.bannerT -= dt;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { killBurst } from './cosmetics.js';
+import { POWERS, POWER_ORDER, powerMesh } from './powerups.js';
 import { FlowField } from './flow.js';
 import { SX, SZ, SEA, B, BLOCKS } from './world.js';
 import { TILE_UV, T } from './textures.js';
@@ -17,7 +18,7 @@ const vB = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
 const cols = (...c) => c.map((x) => new THREE.Color(x));
 const COIN_COLORS = cols('#fff2a8', '#ffd84a', '#e0a526');
-const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120, shard: 1e8 };
+const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120, shard: 1e8, power: 20 };
 const CRATE_DROP = 18;
 const TYPE_INDEX = new Map(TYPE_LIST.map((t, i) => [t, i]));
 const DUST = cols('#8a7a5a', '#6b5a45', '#a89a7a');
@@ -532,6 +533,7 @@ export class Mobs {
     let mesh;
     if (kind === 'crate') mesh = this.makeCrate();
     else if (kind === 'shard') mesh = this.makeShard();
+    else if (kind === 'power') mesh = powerMesh(value);
     else {
       const proto = { heart: this.heartProto, coin: this.coinProto, nade: this.nadeProto }[kind] || this.bundleProto;
       mesh = proto.clone();
@@ -830,6 +832,7 @@ export class Mobs {
           }
         }
         m.rotation.y += dt * (pk.kind === 'coin' ? 5 : 2.2);
+        if (pk.kind === 'power') m.userData.core.rotation.x += dt * 3;
         m.position.set(pk.x, pk.y + Math.sin(pk.t * 3) * (pk.kind === 'coin' ? 0.06 : 0.1) + (pk.kind === 'shard' ? 0.4 : 0), pk.z);
         if (pk.kind === 'shard' && Math.random() < dt * 8) g.fx.burst(pk.x, pk.y + 0.5, pk.z, SHARD_SPARKS, 1, { speed: 1, size: 0.06, up: 1.5, life: 0.6, spread: 0.3, grav: -1 });
       }
@@ -878,6 +881,12 @@ export class Mobs {
       g.openCrate();
     } else if (pk.kind === 'shard') {
       if (g.story) g.story.onShard();
+    } else if (pk.kind === 'power') {
+      const id = POWER_ORDER[pk.value] || 'dmg';
+      p.addBuff(id);
+      g.hud.popup(POWERS[id].name + '!', 'power');
+      g.sound.powerup();
+      g.fx.burst(pk.x, pk.y, pk.z, [new THREE.Color(POWERS[id].color)], 16, { speed: 3, size: 0.08, up: 2, life: 0.5, spread: 0.2 });
     }
     return true;
   }

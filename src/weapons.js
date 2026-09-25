@@ -213,6 +213,9 @@ export const PARTS = {
   'paint.obsidian': { name: 'Obsidian', rarity: 'epic', price: 400, mods: {}, desc: 'Black glass with a purple shine.' },
   'paint.neon': { name: 'Neon', rarity: 'epic', price: 450, mods: {}, desc: 'Glowing edges.' },
   'paint.gold': { name: 'Solid Gold', rarity: 'legendary', price: 1000, mods: {}, desc: 'Show off.' },
+  'paint.bronze': { name: 'Bronze Mastery', rarity: 'rare', price: 0, unlock: 50, mods: {}, desc: 'Earned, not bought.' },
+  'paint.diamond': { name: 'Diamond Mastery', rarity: 'epic', price: 0, unlock: 250, mods: {}, desc: 'Sparkling crystal.' },
+  'paint.lava': { name: 'Lava Mastery', rarity: 'legendary', price: 0, unlock: 600, mods: {}, desc: 'Glowing hot seams.' },
 };
 
 for (const [id, p] of Object.entries(PARTS)) {

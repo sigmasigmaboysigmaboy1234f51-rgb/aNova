@@ -819,6 +819,7 @@ export class Mob {
       }
     }
     if (this.def.armor) amount *= 1 - this.def.armor;
+    if (byId === g.myId && g.dnums) g.dnums.add(at || { x: this.pos.x, y: this.pos.y + this.h * 0.8, z: this.pos.z }, amount, head);
     this.hurtT = 0.2;
     this.wobble = 1;
     this.hitDir.set(dir.x, 0, dir.z).normalize();

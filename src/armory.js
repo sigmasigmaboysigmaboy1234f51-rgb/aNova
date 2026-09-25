@@ -3,6 +3,7 @@ import { $ } from './util.js';
 import { buildGun } from './gun.js';
 import { gunThumb } from './thumbs.js';
 import { COIN_ICON } from './hud.js';
+import { MASTERY, masteryTier } from './progress.js';
 import { GUNS, GUN_ORDER, PARTS, RARITY, SLOTS, partsForSlot, gunStats, statBars } from './weapons.js';
 
 // The Armory: buy guns, buy and fit parts, and pick the three guns you
@@ -211,6 +212,11 @@ export class Armory {
       this.game.sound.empty();
       return;
     }
+    if (!prof.ownsPart(pid) && p.unlock) {
+      this.flash(`Beat ${p.unlock} mobs with one gun to unlock ${p.name}.`);
+      this.game.sound.empty();
+      return;
+    }
     if (!prof.ownsPart(pid)) {
       if (!prof.buyPart(pid)) {
         this.flash(`You need ${(p.price - prof.coins).toLocaleString('en-US')} more coins.`);
@@ -290,6 +296,10 @@ export class Armory {
     $('#arm-name').textContent = g.name;
     $('#arm-kind').textContent = g.kind;
     $('#arm-desc').textContent = g.desc;
+    const kills = prof.gunKills[this.gunId] || 0;
+    const tier = masteryTier(kills);
+    const nextTier = MASTERY.find((t) => t.n > kills);
+    $('#arm-mastery').textContent = `Mastery: ${tier ? tier.name : 'Rookie'}, ${kills.toLocaleString('en-US')} kills` + (nextTier ? `. ${nextTier.name} at ${nextTier.n}` : '. Maxed out!');
     const buy = $('#arm-buy');
     buy.hidden = owned;
     if (!owned) {
@@ -380,6 +390,7 @@ export class Armory {
       state.className = 'arm-part-state';
       if (on) state.textContent = 'Fitted';
       else if (have) state.textContent = 'Fit';
+      else if (p.unlock) state.textContent = `🔒 ${p.unlock} kills`;
       else {
         const coin = document.createElement('img');
         coin.src = COIN_ICON;

@@ -385,6 +385,29 @@ body[data-state="dead"] #crosshair, body[data-state="paused"] #crosshair { displ
 .popup { font: 400 26px/1 var(--font-display); text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75); animation: pop 1s ease-out forwards; white-space: nowrap; }
 .popup.head { color: var(--gold); }
 .popup.heal { color: #ff9d8c; }
+.popup.power { color: #8fe0ff; }
+
+/* ---- Damage numbers, combos, streaks, power-ups ---- */
+.dnums { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.dnum { position: absolute; left: 0; top: 0; font: 400 22px/1 var(--font-display); color: #fff; text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.8); white-space: nowrap; will-change: transform; }
+.dnum.head { color: var(--gold); font-size: 28px; }
+.dnum.big { color: #ff7a5a; font-size: 30px; }
+.combo { position: absolute; right: 22px; top: 57%; display: grid; justify-items: end; gap: 2px; text-shadow: 3px 3px 0 #000; }
+.combo b { font: 400 54px/0.85 var(--font-display); color: var(--gold); }
+.combo span { font: 600 13px/1 var(--font-ui); letter-spacing: 0.2em; text-transform: uppercase; color: var(--paper); }
+.combo > i { display: block; width: 90px; height: 6px; background: rgba(0, 0, 0, 0.5); border: 2px solid #000; }
+.combo > i > i { display: block; height: 100%; background: var(--gold); }
+.combo.bump b { animation: bump 0.25s steps(3); }
+.streak { position: absolute; top: 8%; left: 16px; right: 16px; display: grid; justify-items: center; gap: 4px; text-align: center; pointer-events: none; }
+.streak b { font: 400 64px/0.9 var(--font-display); color: #ff7a2f; text-shadow: 4px 4px 0 #000; }
+.streak span { font: 600 16px/1 var(--font-ui); color: var(--paper); text-shadow: 2px 2px 0 #000; }
+.streak.in b { animation: bump 0.3s steps(3); }
+.buffs { display: flex; gap: 6px; flex-wrap: wrap; }
+.buffs:empty { display: none; }
+.buff { --c: #fff; display: grid; gap: 2px; min-width: 74px; padding: 3px 6px 4px; background: rgba(0, 0, 0, 0.55); border: 2px solid var(--c); font: 600 12px/1 var(--font-ui); letter-spacing: 0.08em; color: var(--c); text-shadow: 1px 1px 0 #000; }
+.buff i { display: block; height: 4px; background: var(--c); }
+.buff.ending { animation: blink 0.4s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.45; } }
 @keyframes pop {
   0% { transform: scale(1.3); }
   15% { transform: scale(1); }
@@ -510,6 +533,7 @@ body:not(.desktop) .app-only { display: none; }
 .arm-name { margin: 0; font: 400 40px/0.9 var(--font-display); }
 .arm-kind { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 .arm-desc { margin: 0; color: var(--paper); font-size: 15px; }
+.arm-mastery { margin: 0; color: var(--gold); font-size: 13px; }
 .arm-carry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .arm-carry .btn[aria-pressed="true"] { --b: #4d6a2c; --hi: #7fa257; --lo: #243614; --hov: #5a7b35; }
 .arm-carry .btn { font-size: 14px; padding: 8px 6px; }
@@ -742,6 +766,6 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
   .overlay-title { font-size: 54px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .splash, .hearts.low img, .lowhp.on, .banner.in, .popup { animation: none; }
+  .splash, .hearts.low img, .lowhp.on, .banner.in, .popup, .buff.ending, .streak.in b, .combo.bump b { animation: none; }
   .lowhp.on { opacity: 0.6; }
 }

@@ -458,6 +458,24 @@ export class Sound {
     [523, 659, 784, 1046].forEach((f, i) => this.tone({ type: 'triangle', f0: f, dur: 0.16, vol: 0.14, delay: i * 0.08 }));
   }
 
+  powerup() {
+    if (!this.ready('powerup', 100)) return;
+    this.tone({ type: 'square', f0: 440, f1: 1320, dur: 0.25, vol: 0.08 });
+    [880, 1109, 1319].forEach((f, i) => this.tone({ type: 'triangle', f0: f, dur: 0.1, vol: 0.12, delay: 0.2 + i * 0.06 }));
+  }
+
+  // Kill streak callouts: a rising fanfare, higher for bigger streaks.
+  streak(level) {
+    if (!this.ready('streak', 200)) return;
+    const base = 392 * Math.pow(1.12, Math.min(6, level));
+    [1, 1.25, 1.5, 2].forEach((k, i) => this.tone({ type: 'square', f0: base * k, dur: 0.12, vol: 0.07, delay: i * 0.07 }));
+  }
+
+  combo(n) {
+    if (!this.ready('combo', 40)) return;
+    this.tone({ type: 'triangle', f0: 520 + Math.min(12, n) * 60, dur: 0.08, vol: 0.08 });
+  }
+
   death() {
     if (!this.ready('death')) return;
     this.tone({ type: 'sawtooth', f0: 300, f1: 55, dur: 0.9, vol: 0.22 });

@@ -14,7 +14,10 @@
   <div id="scope" class="scope" hidden aria-hidden="true"><div class="scope-glass"><i></i><i></i></div></div>
   <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="dnums" class="dnums" aria-hidden="true"></div>
   <div id="popups" aria-live="polite"></div>
+  <div id="combo" class="combo" hidden><b id="combo-n">×2</b><span>combo</span><i><i id="combo-bar"></i></i></div>
+  <div id="streak" class="streak" hidden aria-live="polite"></div>
   <div id="feed" class="feed" aria-live="polite"></div>
   <div class="hud-top">
     <div>
@@ -37,6 +40,7 @@
   </div>
   <div class="hud-bottom">
     <div class="hud-stack">
+      <div id="buffs" class="buffs"></div>
       <div id="hearts" class="hearts"></div>
       <div id="hotbar" class="hotbar"></div>
       <div id="slot-name" class="slot-name">Ember Blaster</div>
@@ -270,6 +274,7 @@
       <div class="panel arm-info">
         <div class="arm-name-row"><h3 id="arm-name" class="arm-name"></h3><span id="arm-kind" class="arm-kind"></span></div>
         <p id="arm-desc" class="arm-desc"></p>
+        <p id="arm-mastery" class="arm-mastery"></p>
         <button id="arm-buy" class="btn btn-go" type="button">Buy</button>
         <div id="arm-carry" class="arm-carry">
           <button class="btn btn-small" type="button" data-slot="0">Carry in slot 1</button>
@@ -442,6 +447,8 @@
       <div><dt>Headshots</dt><dd id="go-heads">0</dd></div>
       <div><dt>Blocks placed</dt><dd id="go-placed">0</dd></div>
       <div><dt>Coins earned</dt><dd id="go-coins">0</dd></div>
+      <div><dt>Best combo</dt><dd id="go-combo">×0</dd></div>
+      <div><dt>Best streak</dt><dd id="go-streak">0</dd></div>
     </dl>
     <p id="go-best" class="best"></p>
     <div class="menu-buttons">

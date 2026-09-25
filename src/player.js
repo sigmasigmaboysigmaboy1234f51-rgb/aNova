@@ -7,6 +7,7 @@ import { GUNS, gunStats, cleanBuild, buildCode } from './weapons.js';
 import { TILE_UV } from './textures.js';
 import { Rig, posePlayer, ease } from './anim.js';
 import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
+import { POWERS } from './powerups.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
 
@@ -19,6 +20,7 @@ const H_CROUCH = 1.5;
 const EYE_STAND = 1.62;
 const EYE_CROUCH = 1.27;
 const BASE_FOV = 75;
+const SHIELD_COLORS = [new THREE.Color('#6f8cff'), new THREE.Color('#bfe8ff'), new THREE.Color('#ffffff')];
 const VIEW_SCALE = 0.6;
 const VIEW_REST = new THREE.Vector3(0.22, -0.2, -0.45);
 
@@ -312,6 +314,7 @@ export class Player {
     this.dead = false;
     this.deadT = 0;
     this.killer = null;
+    this.buffs = {};
     for (const w of this.weapons) {
       if (!w) continue;
       w.ammo = w.stats.mag;
@@ -417,6 +420,7 @@ export class Player {
     const inp = g.input;
     const w = g.world;
     this.time += dt;
+    this.updateBuffs(dt);
     this.kick *= Math.exp(-10 * dt);
     this.shake *= Math.exp(-9 * dt);
     this.recoil *= Math.exp(-14 * dt);
@@ -489,6 +493,7 @@ export class Player {
     }
     this.inWater = this.pos.y < SEA - 0.35;
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
+    if (this.buff('speed')) speed *= 1.45;
     if (this.slowT > 0) speed *= 1 - this.slowAmt;
     if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
     if (this.inWater) speed *= 0.55;
@@ -625,7 +630,8 @@ export class Player {
   }
 
   startReload(w) {
-    w.reloadT = w.stats.reload;
+    if (this.buff('ammo')) return;
+    w.reloadT = w.stats.reload * (this.buff('rapid') ? 0.5 : 1);
     this.sprintLatch = false;
     this.game.sound.reload(w.stats.reload);
     this.game.combat.beamTick(this, null, 0, false);
@@ -643,8 +649,8 @@ export class Player {
       }
       this.blocks--;
     }
-    w.ammo--;
-    w.fireCd = s.gap;
+    if (!this.buff('ammo')) w.ammo--;
+    w.fireCd = this.buff('rapid') ? s.gap / 1.7 : s.gap;
     this.sprintLatch = false;
     this.sinceShot = 0;
     g.combat.fire(this, w);
@@ -782,7 +788,7 @@ export class Player {
 
   // Damage over time: no knockback, no invulnerability window.
   dot(n, source) {
-    if (this.dead) return;
+    if (this.dead || this.shielded()) return;
     this.hp -= n;
     this.sinceHurt = 0;
     this.regenT = 0;
@@ -854,6 +860,7 @@ export class Player {
   hurt(amount, from, source, fx) {
     if (this.dead || this.invuln > 0) return;
     const g = this.game;
+    if (this.shielded()) return;
     if (fx && fx.shock) {
       amount += fx.shock;
       this.shake = Math.max(this.shake, 0.25);
@@ -899,6 +906,49 @@ export class Player {
 
   heal(n) {
     this.hp = Math.min(this.maxHp, this.hp + n);
+  }
+
+  // --- Power-ups ---------------------------------------------------------
+
+  addBuff(id) {
+    this.buffs[id] = Math.max(this.buffs[id] || 0, POWERS[id].time);
+    if (id === 'ammo') {
+      const w = this.weapon;
+      if (w) {
+        w.reloadT = 0;
+        w.ammo = w.stats.mag;
+      }
+    }
+  }
+
+  buff(id) {
+    return (this.buffs[id] || 0) > 0;
+  }
+
+  // The shield soaks a hit and sparkles.
+  shielded() {
+    if (!this.buff('shield')) return false;
+    if ((this.shieldFx || 0) <= 0) {
+      this.shieldFx = 0.25;
+      this.game.fx.burst(this.pos.x, this.pos.y + 1, this.pos.z, SHIELD_COLORS, 10, { speed: 3, size: 0.07, up: 1, life: 0.35, spread: 0.4 });
+      this.game.sound.clank(0.6);
+    }
+    return true;
+  }
+
+  updateBuffs(dt) {
+    this.shieldFx = (this.shieldFx || 0) - dt;
+    for (const k of Object.keys(this.buffs)) {
+      const before = this.buffs[k];
+      this.buffs[k] = Math.max(0, before - dt);
+      if (before > 0 && this.buffs[k] === 0) this.game.hud.popup(`${POWERS[k].name} wore off`);
+    }
+    // Infinite ammo keeps the magazine full.
+    const w = this.weapon;
+    if (w && this.buff('ammo')) {
+      w.ammo = w.stats.mag;
+      w.reloadT = 0;
+    }
   }
 
   scoped() {

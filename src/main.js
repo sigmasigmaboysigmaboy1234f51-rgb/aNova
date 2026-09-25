@@ -20,6 +20,8 @@ import { MAPS, MAP_ORDER } from './maps.js';
 import { Bot, BOT_NAMES } from './bots.js';
 import { Modes, VARIANTS, bestFor } from './modes.js';
 import { Pet } from './pets.js';
+import { DamageNumbers } from './popnums.js';
+import { POWER_ORDER } from './powerups.js';
 import { Wardrobe } from './wardrobe.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
@@ -34,6 +36,16 @@ import { cleanCode } from './p2p.js';
 import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
 
+const COMBO_TIME = 3;
+const STREAKS = [
+  { n: 5, name: 'Killing spree!' },
+  { n: 10, name: 'Rampage!' },
+  { n: 15, name: 'Unstoppable!' },
+  { n: 20, name: 'Godlike!' },
+  { n: 30, name: 'LEGENDARY!' },
+  { n: 50, name: 'BLOCK MASTER!' },
+  { n: 100, name: 'ARE YOU EVEN HUMAN?!' },
+];
 const SKY = new THREE.Color('#8fc6ea');
 
 const SPLASHES = [
@@ -137,6 +149,7 @@ class Game {
     this.skin = new SkinState();
     this.input = new Input(this.canvas);
     this.hud = new Hud(this);
+    this.dnums = new DamageNumbers(this, $('#dnums'));
     this.settings = {
       sens: parseFloat(store.get('sens', '1')) || 1,
       muted: store.get('muted', '0') === '1',
@@ -650,8 +663,12 @@ class Game {
     this.fx.clear();
     this.player.reset(this.world.spawnPoint());
     this.player.thirdPerson = false;
-    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0 };
+    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0, bestCombo: 0, bestStreak: 0 };
     this.combat.clear();
+    this.combo = 0;
+    this.comboT = 0;
+    this.streak = 0;
+    this.dnums.clear();
     this.wave = 0;
     this.waveState = 'rest';
     this.waveTimer = 3;
@@ -1043,6 +1060,7 @@ class Game {
       if (this.mp) this.mp.pickupAdded(pk);
       drop('heart');
       drop('nade');
+      drop('power', Math.floor(Math.random() * POWER_ORDER.length));
       const sub = 'It dropped a supply crate!';
       this.hud.showBanner(`${mob.def.name} defeated!`, sub, 3.5);
       this.sound.cleared();
@@ -1054,19 +1072,44 @@ class Game {
       if (!hard) drop('heart');
     } else if (r < 0.34) drop('blocks');
     else if (r < 0.4) drop('nade');
+    else if (r < 0.46 || (this.variant === 'horde' && r < 0.43)) drop('power', Math.floor(Math.random() * POWER_ORDER.length));
   }
 
   creditKill(pts, head, type) {
     if (type) this.profile.addKill(type);
     this.progress.event('kill', { type, head });
+    const w = this.player.weapon;
+    if (w) this.progress.gunKill(w.id);
     this.stats.kills++;
     if (head) this.stats.heads++;
+    // Combos: kills close together multiply your points, up to double.
+    this.combo = this.comboT > 0 ? (this.combo || 0) + 1 : 1;
+    this.comboT = COMBO_TIME;
+    this.stats.bestCombo = Math.max(this.stats.bestCombo || 0, this.combo);
+    if (this.combo >= 2) this.sound.combo(this.combo);
+    const mult = Math.min(2, 1 + (this.combo - 1) * 0.1);
+    pts = Math.round(pts * mult);
     this.stats.score += pts;
     this.hud.popup(head ? `Headshot +${pts}` : `+${pts}`, head ? 'head' : '');
+    // Streaks: kills without dying.
+    this.streak = (this.streak || 0) + 1;
+    this.stats.bestStreak = Math.max(this.stats.bestStreak || 0, this.streak);
+    const call = STREAKS.find((x) => x.n === this.streak);
+    if (call) {
+      const coins = call.n * 4;
+      this.hud.streak(call.name, `${call.n} in a row without getting cubed. +${coins} coins`);
+      this.sound.streak(STREAKS.indexOf(call));
+      this.gainCoins(coins);
+      this.progress.event('streak', { n: call.n });
+      if (this.mp) this.mp.system(`${this.mp.name} is on a ${call.name.replace('!', '').toLowerCase()} (${call.n} in a row)`);
+    }
   }
 
   onPlayerDeath() {
     this.hud.banner.hidden = true;
+    this.streak = 0;
+    this.combo = 0;
+    this.comboT = 0;
     if (this.story) {
       this.deadT = 0;
       return;
@@ -1114,6 +1157,8 @@ class Game {
     $('#go-heads').textContent = String(s.heads);
     $('#go-placed').textContent = String(s.placed);
     $('#go-coins').textContent = s.coins.toLocaleString('en-US');
+    $('#go-combo').textContent = `×${s.bestCombo || 0}`;
+    $('#go-streak').textContent = String(s.bestStreak || 0);
     const key = this.variant === 'endless' ? 'best' : `best:${this.variant}`;
     const prev = bestFor(this.variant);
     const better = s.score > 0 && (!prev || s.score > prev.score);
@@ -1155,6 +1200,7 @@ class Game {
       this.render();
     }
     this.preview.frame(dt);
+    if (this.inGame) this.dnums.update(dt);
     this.hud.tick(dt);
     this.dialogue.tick(dt);
     this.input.endFrame();
@@ -1186,6 +1232,10 @@ class Game {
     document.body.classList.toggle('is-dead', p.dead);
     this.hud.setHealth(p.hp);
     this.hud.setPlayer(p);
+    this.comboT = Math.max(0, (this.comboT || 0) - dt);
+    if (this.comboT === 0) this.combo = 0;
+    this.hud.setCombo(this.combo || 0, this.comboT / COMBO_TIME);
+    this.hud.setBuffs(p.buffs);
     this.hud.setCoins(this.profile.coins);
     const boss = this.mobs.boss();
     const beacon = this.story && this.story.beacon;
