@@ -132,6 +132,13 @@ export class Dialogue {
     else this.finish();
   }
 
+  // Close without carrying on (you left the game mid-conversation).
+  cancel() {
+    this.open = false;
+    this.done = null;
+    this.el.hidden = true;
+  }
+
   finish() {
     if (!this.open) return;
     this.open = false;
@@ -174,7 +181,7 @@ export class StoryRun {
 
   begin() {
     const g = this.game;
-    g.dialogue.play(this.ch.intro, () => this.nextGoal());
+    g.talk(this.ch.intro, () => this.nextGoal());
   }
 
   nextGoal() {

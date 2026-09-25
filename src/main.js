@@ -406,6 +406,7 @@ class Game {
   }
 
   setState(s) {
+    if (s !== 'talk' && this.dialogue && this.dialogue.open) this.dialogue.cancel();
     this.state = s;
     document.body.dataset.state = s;
     $('#menu').hidden = s !== 'menu';

@@ -593,7 +593,7 @@ body:not(.desktop) .app-only { display: none; }
 .dlg-pic { width: 112px; height: 112px; image-rendering: pixelated; border: 3px solid var(--edge); background: #1a1714; }
 .dlg-body { display: grid; gap: 6px; min-height: 112px; align-content: start; }
 .dlg-name { font: 400 30px/0.9 var(--font-display); text-shadow: 2px 2px 0 #000; }
-.dlg-text { margin: 0; font-size: 19px; line-height: 1.35; color: var(--paper); min-height: 2.7em; }
+.dlg-text { margin: 0; font-size: 19px; line-height: 1.35; color: var(--paper); min-height: 4.05em; }
 .dlg-hint { font-size: 12px; color: var(--dim); display: flex; gap: 12px; align-items: center; margin-top: auto; }
 .dlg-hint .link { font-size: 12px; }
 body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibility: hidden; }
