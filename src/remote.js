@@ -6,6 +6,8 @@ import { rayBox } from './mob.js';
 import { Rig, posePlayer } from './anim.js';
 import { makeSkinTexture, paintOutfit, DEFAULT_OUTFIT } from './skin.js';
 import { loadImage, clamp, wrapAngle } from './util.js';
+import { attachCosmetics, animateCosmetics, removeCosmetics, parseStyle } from './cosmetics.js';
+import { Pet, PETS } from './pets.js';
 
 // Other players in a multiplayer game, drawn with their own skins.
 
@@ -88,6 +90,21 @@ class RemotePlayer {
     this.rig = new Rig(this.model);
     this.model.root.visible = this.hasState;
     scene.add(this.model.root);
+    this.cos = attachCosmetics(this.model, this.style);
+  }
+
+  // Their hat, cape and pet, sent as a short code in every state update.
+  setStyle(code) {
+    this.styleKey = code;
+    this.style = parseStyle(code, PETS);
+    removeCosmetics(this.cos);
+    this.cos = attachCosmetics(this.model, this.style);
+    const want = this.style.pet;
+    if (this.pet && this.pet.id !== want) {
+      this.pet.dispose();
+      this.pet = null;
+    }
+    if (want && !this.pet) this.pet = new Pet(this.game, want, this, false);
   }
 
   makeGun() {
@@ -146,6 +163,7 @@ class RemotePlayer {
     if (!s || !s.p) return;
     this.buf.push({ t: performance.now(), x: s.p[0], y: s.p[1], z: s.p[2], yaw: s.y, pitch: s.pi, f: s.f | 0, r: s.r ?? -1, a: s.a || 0 });
     if (typeof s.w === 'string') this.setHeld(s.w, s.wb, s.bk | 0);
+    if (typeof s.st === 'string' && s.st !== this.styleKey) this.setStyle(s.st.slice(0, 80));
     if (s.sw) this.swing = 1;
     if (this.buf.length > 30) this.buf.shift();
     this.score = s.sc | 0;
@@ -297,12 +315,16 @@ class RemotePlayer {
       dt,
     );
     if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
+    animateCosmetics(this.cos, performance.now() / 1000, Math.hypot(this.vel.x, this.vel.z), dt);
+    this.visible = m.root.visible;
+    if (this.pet) this.pet.update(dt);
     this.tag.visible = m.root.visible;
     this.tag.position.set(this.pos.x, this.pos.y + (crouch ? 1.8 : 2.15), this.pos.z);
   }
 
   dispose() {
     const scene = this.game.scene;
+    if (this.pet) this.pet.dispose();
     scene.remove(this.model.root);
     scene.remove(this.tag);
     if (this.beam) {

@@ -664,6 +664,46 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
 .bd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 640px) { .bd-grid { grid-template-columns: 1fr; } }
 
+/* ---- Style shop ---- */
+.st-body { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 14px; min-height: 0; }
+.st-side { display: grid; gap: 8px; align-content: start; padding: 16px; }
+.st-side .arm-kind, .st-side .arm-desc { margin: 0; }
+.st-preview { max-width: 300px; justify-self: center; background: radial-gradient(ellipse at 50% 60%, rgba(255, 210, 63, 0.1), transparent 70%); }
+.st-main { display: grid; gap: 12px; align-content: start; padding: 14px; overflow: auto; max-height: calc(100vh - 120px); }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.st-card {
+  --rarity: var(--muted);
+  font: 13px/1.15 var(--font-ui);
+  color: var(--paper);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 3px;
+  padding: 6px 6px 8px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid var(--edge);
+  border-bottom: 5px solid var(--rarity);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.st-card canvas { width: 84px; height: 84px; }
+.st-card:hover { background: rgba(255, 255, 255, 0.06); }
+.st-card[aria-pressed="true"] { outline: 3px solid var(--gold); outline-offset: -3px; background: rgba(255, 210, 63, 0.08); }
+.st-card:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.st-card.worn { background: rgba(77, 138, 44, 0.22); }
+.st-name { font-weight: 600; }
+.st-state { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--gold); }
+.st-state img { width: 13px; height: 13px; image-rendering: pixelated; }
+.st-card.owned .st-state { color: var(--muted); }
+.st-card.worn .st-state { color: #8fe070; }
+.st-none { min-height: 124px; align-content: center; }
+.st-x { font: 400 56px/1 var(--font-display); color: var(--dim); }
+@media (max-width: 800px) {
+  .st-body { grid-template-columns: minmax(0, 1fr); }
+  .st-main { max-height: none; }
+}
+
 /* ---- Kill feed ---- */
 .feed { position: absolute; right: 18px; top: 150px; display: grid; gap: 3px; justify-items: end; max-width: min(360px, 60vw); }
 .feed-line { font-size: 14px; color: var(--paper); background: rgba(0, 0, 0, 0.5); padding: 3px 8px; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s; }

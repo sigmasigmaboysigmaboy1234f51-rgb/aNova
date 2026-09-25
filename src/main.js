@@ -19,6 +19,8 @@ import { Duel, TARGET } from './duel.js';
 import { MAPS, MAP_ORDER } from './maps.js';
 import { Bot, BOT_NAMES } from './bots.js';
 import { Modes, VARIANTS, bestFor } from './modes.js';
+import { Pet } from './pets.js';
+import { Wardrobe } from './wardrobe.js';
 import { GUNS, RARITY, rollPart } from './weapons.js';
 import { pickMob } from './mobtypes.js';
 import { BOSSES } from './boss.js';
@@ -160,6 +162,15 @@ class Game {
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
     this.editor = new SkinEditor(this);
+    this.wardrobe = new Wardrobe(this);
+    this.preview.dress(this.profile.style);
+    let styleKey = this.profile.styleCode();
+    this.profile.listeners.add(() => {
+      const k = this.profile.styleCode();
+      if (k === styleKey) return;
+      styleKey = k;
+      if (this.state !== 'style') this.preview.dress(this.profile.style);
+    });
     try {
       this.best = JSON.parse(store.get('best', 'null'));
     } catch {
@@ -281,6 +292,7 @@ class Game {
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
     $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
+    $('#btn-style').addEventListener('click', () => this.setState('style'));
     $('#btn-story').addEventListener('click', () => this.setState('story'));
     $('#btn-challenges').addEventListener('click', () => this.setState('challenges'));
     $('#sw-next').addEventListener('click', () => {
@@ -428,6 +440,8 @@ class Game {
     else this.challenges.hide();
     if (s === 'modes') this.modes.show();
     else this.modes.hide();
+    if (s === 'style') this.wardrobe.show();
+    else this.wardrobe.hide();
     $('#storywin').hidden = s !== 'storywin';
     $('#storyfail').hidden = s !== 'storyfail';
     $('#pause').hidden = s !== 'paused';
@@ -448,6 +462,8 @@ class Game {
     } else if (s === 'editor') {
       this.preview.mount($('#editor-preview'), true);
       this.editor.onOpen();
+    } else if (s === 'style') {
+      this.preview.mount($('#st-preview'), false);
     } else {
       this.preview.hide();
     }
@@ -690,6 +706,8 @@ class Game {
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
+    if (this.pet) this.pet.dispose();
+    this.pet = null;
     this.duel = null;
     this.botDuel = null;
     this.inGame = false;
@@ -1000,6 +1018,9 @@ class Game {
 
   onKill(mob, head, byId) {
     const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (this.wave - 1) * 0.1));
+    // The killer's kill effect, if they wear one. Everyone sees it.
+    const killer = !byId || byId === this.myId ? this.profile.style : this.mp && this.mp.remotes.get(byId) ? this.mp.remotes.get(byId).style : null;
+    if (killer && killer.fx) this.mobs.bossFx({ k: 'kfx', p: [mob.pos.x, mob.pos.y, mob.pos.z], fx: killer.fx });
     if (!byId || byId === this.myId) this.creditKill(pts, head, mob.type);
     else if (this.mp) this.mp.sendKill(byId, pts, head, mob.type);
     const drop = (kind, value = 0) => {
@@ -1125,7 +1146,8 @@ class Game {
 
     if (s === 'armory') this.armory.frame(dt);
     if (s === 'bestiary') this.bestiary.frame(dt);
-    if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes'].includes(s)) {
+    if (s === 'style') this.wardrobe.frame(dt);
+    if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes', 'style'].includes(s)) {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
@@ -1157,6 +1179,7 @@ class Game {
       this.mobs.updateRemote(dt);
     }
     for (const b of this.bots) b.update(dt);
+    this.updatePet(dt);
     if (this.mp) this.mp.update(dt);
     p.updateCamera(this.camera, dt);
     p.updateModels(dt);
@@ -1193,6 +1216,17 @@ class Game {
         if (this.deadT > 1.6 && !this.gameOverShown) this.showGameOver();
       }
     }
+  }
+
+  // Your pet from the Style shop follows you in every mode.
+  updatePet(dt) {
+    const want = this.profile.style.pet;
+    if (this.pet && this.pet.id !== want) {
+      this.pet.dispose();
+      this.pet = null;
+    }
+    if (want && !this.pet) this.pet = new Pet(this, want, this.player, true);
+    if (this.pet) this.pet.update(dt);
   }
 
   updateMenu(dt) {

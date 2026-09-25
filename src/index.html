@@ -102,10 +102,13 @@
         </div>
         <div class="btn-row">
           <button id="btn-armory" class="btn btn-gold" type="button">Armory</button>
-          <button id="btn-bestiary" class="btn" type="button">Mobs</button>
+          <button id="btn-style" class="btn btn-gold" type="button">Style</button>
         </div>
         <div class="btn-row">
+          <button id="btn-bestiary" class="btn" type="button">Mobs</button>
           <button id="btn-challenges" class="btn" type="button">Challenges</button>
+        </div>
+        <div class="btn-row">
           <button id="btn-skin" class="btn" type="button">Edit skin</button>
         </div>
         <div class="btn-row">
@@ -299,6 +302,33 @@
       <p id="best-blurb" class="arm-desc"></p>
       <dl id="best-stats" class="best-stats"></dl>
     </aside>
+  </div>
+</section>
+
+<section id="style" class="screen armory style-shop" hidden aria-label="Style shop">
+  <header class="arm-head">
+    <h2 class="arm-title">Style</h2>
+    <div class="arm-wallet"><img id="st-coin-icon" alt="Coins"><span id="st-coins">0</span></div>
+    <p id="st-msg" class="arm-msg" role="status"></p>
+    <button id="st-done" class="btn btn-go" type="button">Done</button>
+  </header>
+  <div class="st-body">
+    <aside class="st-side panel">
+      <div id="st-preview" class="preview-slot st-preview"></div>
+      <h3 id="st-name" class="arm-name"></h3>
+      <p id="st-kind" class="arm-kind"></p>
+      <p id="st-desc" class="arm-desc"></p>
+      <button id="st-action" class="btn btn-go" type="button" hidden>Buy</button>
+    </aside>
+    <div class="st-main panel">
+      <div class="seg st-tabs" role="group" aria-label="Kind">
+        <button class="seg-btn" type="button" data-tab="hat" aria-pressed="true">Hats</button>
+        <button class="seg-btn" type="button" data-tab="cape" aria-pressed="false">Capes</button>
+        <button class="seg-btn" type="button" data-tab="pet" aria-pressed="false">Pets</button>
+        <button class="seg-btn" type="button" data-tab="fx" aria-pressed="false">Kill effects</button>
+      </div>
+      <div id="st-grid" class="st-grid"></div>
+    </div>
   </div>
 </section>
 

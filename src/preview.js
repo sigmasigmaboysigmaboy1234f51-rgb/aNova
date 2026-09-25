@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { buildHumanoid } from './model.js';
 import { clamp } from './util.js';
+import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
+import { petObject, PETS } from './pets.js';
 
 // The spinning character on the title screen, which doubles as the canvas
 // you paint on in the skin editor.
@@ -49,6 +51,27 @@ export class SkinPreview {
     this.model.root.position.y = -0.92;
     this.pivot.add(this.model.root);
     this.applyLayers();
+    this.dress(this.style);
+  }
+
+  // Show off your hat, cape and pet. The skin editor hides them so they
+  // don't get in the way of painting.
+  dress(style) {
+    this.style = style || null;
+    removeCosmetics(this.cos);
+    this.cos = attachCosmetics(this.model, this.editing ? null : this.style);
+    const pet = this.editing || !this.style ? null : this.style.pet;
+    if (this.petObj && this.petObj.userData.id !== pet) {
+      this.pivot.remove(this.petObj);
+      this.petObj = null;
+    }
+    if (pet && !this.petObj) {
+      this.petObj = petObject(pet);
+      this.petObj.userData.id = pet;
+      this.petObj.position.set(0.6, -0.92, 0.7);
+      this.petObj.rotation.y = 0.35;
+      this.pivot.add(this.petObj);
+    }
   }
 
   applyLayers() {
@@ -61,7 +84,9 @@ export class SkinPreview {
       this.yaw = 0.45;
       this.pitch = 0.1;
     }
+    const was = this.editing;
     this.editing = editing;
+    if (was !== editing) this.dress(this.style);
     this.visible = true;
     this.autoRotate = !editing && !matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.dist = editing ? 4.6 : 5.2;
@@ -171,6 +196,8 @@ export class SkinPreview {
       P.legL.rotation.set(0, 0, 0);
       P.head.rotation.set(Math.sin(this.t * 0.7) * 0.06, Math.sin(this.t * 0.45) * 0.25, 0);
     }
+    animateCosmetics(this.cos, this.t, 0, dt);
+    if (this.petObj && PETS[this.petObj.userData.id].fly) this.petObj.position.y = 0.12 + Math.sin(this.t * 2.2) * 0.06;
     this.camera.position.set(0, 0.05, this.dist);
     this.camera.lookAt(0, 0.02, 0);
     this.renderer.render(this.scene, this.camera);

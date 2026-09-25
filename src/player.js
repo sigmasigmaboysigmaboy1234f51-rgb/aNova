@@ -6,6 +6,7 @@ import { buildGun, CORES } from './gun.js';
 import { GUNS, gunStats, cleanBuild, buildCode } from './weapons.js';
 import { TILE_UV } from './textures.js';
 import { Rig, posePlayer, ease } from './anim.js';
+import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
 
@@ -176,6 +177,13 @@ export class Player {
     game.skin.listeners.add(({ model }) => {
       if (model) this.buildModels();
     });
+    this.styleKey = game.profile.styleCode();
+    game.profile.listeners.add(() => {
+      const k = game.profile.styleCode();
+      if (k === this.styleKey) return;
+      this.styleKey = k;
+      this.dress();
+    });
     this.reset(new THREE.Vector3(32.5, 12, 32.5));
   }
 
@@ -257,6 +265,7 @@ export class Player {
     this.model.root.visible = wasVisible;
     this.rig = new Rig(this.model);
     scene.add(this.model.root);
+    this.dress();
 
     for (const v of this.views) {
       if (!v) continue;
@@ -968,6 +977,12 @@ export class Player {
     };
   }
 
+  // Hats and capes from the Style shop.
+  dress() {
+    removeCosmetics(this.cos);
+    this.cos = attachCosmetics(this.model, this.game.profile.style);
+  }
+
   updateModels(dt) {
     const m = this.model;
     m.root.visible = this.thirdPerson;
@@ -983,6 +998,7 @@ export class Player {
       m.root.rotation.y = this.yaw + Math.PI;
       posePlayer(this.rig, this.animState(), dt);
       if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
+      animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     }
     this.landed = 0;
 

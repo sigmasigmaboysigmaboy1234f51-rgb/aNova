@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { killBurst } from './cosmetics.js';
 import { FlowField } from './flow.js';
 import { SX, SZ, SEA, B, BLOCKS } from './world.js';
 import { TILE_UV, T } from './textures.js';
@@ -8,6 +9,8 @@ import { Boss, BOSSES } from './boss.js';
 import { MOB_TYPES, TYPE_LIST } from './mobtypes.js';
 
 // All the mobs, their projectiles and the pickups they drop.
+
+const PUFF = [new THREE.Color('#e8e2cc'), new THREE.Color('#b9b2a0'), new THREE.Color('#8f8f93')];
 
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
@@ -299,7 +302,8 @@ export class Mobs {
     }
   }
 
-  findSpawn() {
+  // strict: only spots mobs can walk to you from.
+  findSpawn(strict = false) {
     const f = this.flow;
     const players = this.game.targets();
     for (let pass = 0; pass < 2; pass++) {
@@ -312,7 +316,7 @@ export class Mobs {
         let near = Infinity;
         for (const p of players) near = Math.min(near, Math.hypot(x + 0.5 - p.pos.x, z + 0.5 - p.pos.z));
         if (near < minD || (players.length && near > 40)) continue;
-        if (pass === 0 && !isFinite(f.at(x, z))) continue;
+        if ((pass === 0 || strict) && !isFinite(f.at(x, z))) continue;
         return new THREE.Vector3(x + 0.5, s, z + 0.5);
       }
     }
@@ -361,6 +365,10 @@ export class Mobs {
     const g = this.game;
     const at = new THREE.Vector3(ev.p ? ev.p[0] : 0, ev.p ? ev.p[1] : 0, ev.p ? ev.p[2] : 0);
     const scene = g.scene;
+    if (ev.k === 'kfx') {
+      killBurst(g.fx, at, ev.fx);
+      return;
+    }
     if (ev.k === 'ring') {
       const mesh = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
       mesh.rotation.x = -Math.PI / 2;
@@ -594,9 +602,43 @@ export class Mobs {
     }
     this.separate(dt);
     this.list = this.list.filter((m) => !m.gone);
+    this.stuckTimer = (this.stuckTimer || 0) - dt;
+    if (this.stuckTimer <= 0) {
+      this.stuckTimer = 2;
+      this.unstick();
+    }
     this.updateBolts(dt);
     this.updatePickups(dt);
     this.updateEffects(dt);
+  }
+
+  // A mob that has not got any closer for a while and can't see anyone is
+  // stuck somewhere (a pit, a walled-in spot). Pop it back into the fight
+  // so the wave can end.
+  unstick() {
+    const targets = this.game.targets();
+    if (!targets.length) return;
+    for (const m of this.list) {
+      if (m.remote || m.state !== 'live' || m.def.boss) continue;
+      let near = Infinity;
+      for (const t of targets) near = Math.min(near, Math.hypot(m.pos.x - t.pos.x, m.pos.z - t.pos.z));
+      if (m.stuckBest === undefined || near < m.stuckBest - 1 || near < 7 || m.los) {
+        m.stuckBest = near;
+        m.stuckT = 0;
+        continue;
+      }
+      m.stuckT += 2;
+      if (m.stuckT < 14) continue;
+      const at = this.findSpawn(true);
+      if (!at) continue;
+      const puff = (x, y, z) => this.game.fx.burst(x, y + 0.8, z, PUFF, 14, { speed: 2.5, size: 0.14, up: 1.5, life: 0.6, spread: 0.4, grav: -1 });
+      puff(m.pos.x, m.pos.y, m.pos.z);
+      m.pos.set(at.x, at.y, at.z);
+      m.vel.set(0, 0, 0);
+      puff(at.x, at.y, at.z);
+      m.stuckBest = undefined;
+      m.stuckT = 0;
+    }
   }
 
   // Joined players: mobs are copies of the host's.
@@ -778,8 +820,10 @@ export class Mobs {
           const dy = p.pos.y + 0.8 - pk.y;
           const dz = p.pos.z - pk.z;
           const d = Math.hypot(dx, dy, dz);
-          if (d < 4.5 && d > 0.01) {
-            const step = Math.min(d, (5 + (4.5 - d) * 4) * dt);
+          // The Coin Cat pulls coins in from much further away.
+          const R = g.pet && g.pet.id === 'cat' ? 11 : 4.5;
+          if (d < R && d > 0.01) {
+            const step = Math.min(d, (5 + (R - d) * 4) * dt);
             pk.x += (dx / d) * step;
             pk.y += (dy / d) * step;
             pk.z += (dz / d) * step;
@@ -820,7 +864,15 @@ export class Mobs {
       g.hud.popup('+1 grenade');
       g.sound.pickup();
     } else if (pk.kind === 'coin') {
-      g.gainCoins(pk.value || 1);
+      let v = pk.value || 1;
+      if (g.pet && g.pet.id === 'cat') {
+        // +10%, saved up across coins so small ones count too.
+        this.catBonus = (this.catBonus || 0) + v * 0.1;
+        const extra = Math.floor(this.catBonus);
+        this.catBonus -= extra;
+        v += extra;
+      }
+      g.gainCoins(v);
       g.fx.burst(pk.x, pk.y, pk.z, COIN_COLORS, 3, { speed: 1.5, size: 0.06, up: 1.5, life: 0.35, spread: 0.1 });
     } else if (pk.kind === 'crate') {
       g.openCrate();

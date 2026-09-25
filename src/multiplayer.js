@@ -348,6 +348,7 @@ export class Multiplayer {
         sw: p.swing > 0 ? 1 : 0,
         sc: g.stats.score,
         k: g.stats.kills,
+        st: g.profile.styleCode(),
       });
     }
 

@@ -45,6 +45,9 @@ export const ACHIEVEMENTS = [
   { id: 'builder', name: 'Master Builder', desc: 'Place 500 blocks', coins: 200, goal: 500, get: (p) => p.totals.placed },
   { id: 'rich', name: 'Loaded', desc: 'Have 5,000 coins at once', coins: 300, goal: 5000, get: (p) => p.coins },
   { id: 'vet', name: 'Veteran', desc: 'Reach level 10', coins: 500, goal: 10, get: (p) => p.level },
+  { id: 'drip', name: 'Fresh Fit', desc: 'Get something from the Style shop', coins: 100, goal: 1, get: (p) => p.cos.size },
+  { id: 'fashion', name: 'Fashion Icon', desc: 'Own 12 Style items', coins: 500, goal: 12, get: (p) => p.cos.size },
+  { id: 'petpal', name: 'Best Buddies', desc: 'Adopt a pet', coins: 150, goal: 1, get: (p) => [...p.cos].filter((c) => c.startsWith('pet:')).length },
 ];
 
 // Daily challenge templates. n is the target; pick picks a family or

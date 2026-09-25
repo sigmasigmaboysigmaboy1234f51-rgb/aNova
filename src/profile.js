@@ -33,6 +33,13 @@ export class Profile {
     this.totals = { kills: 0, heads: 0, bestWave: 0, crates: 0, placed: 0, ...((data && data.totals) || {}) };
     this.daily = (data && data.daily) || null;
     this.story = { done: 0, stars: {}, ...((data && data.story) || {}) };
+    // Cosmetics: owned ids like "hat:crown", and what you are wearing.
+    this.cos = new Set((data && data.cos) || []);
+    this.style = { hat: null, cape: null, pet: null, fx: null, ...((data && data.style) || {}) };
+    for (const k of Object.keys(this.style)) if (this.style[k] && !this.cos.has(`${k}:${this.style[k]}`)) this.style[k] = null;
+    // Extras: mastery kills per gun, the lucky wheel, and settings.
+    this.gunKills = (data && data.gunKills) || {};
+    this.wheel = (data && data.wheel) || null;
     this.listeners = new Set();
     this.saveTimer = 0;
   }
@@ -122,6 +129,39 @@ export class Profile {
     this.changed();
   }
 
+  ownsCos(kind, id) {
+    return this.cos.has(`${kind}:${id}`);
+  }
+
+  buyCos(kind, id, price) {
+    if (this.ownsCos(kind, id) || this.coins < price) return false;
+    this.coins -= price;
+    this.cos.add(`${kind}:${id}`);
+    this.style[kind] = id;
+    this.changed();
+    return true;
+  }
+
+  // Found in a crate or on the wheel. Returns false if you already had it.
+  giveCos(kind, id) {
+    if (this.ownsCos(kind, id)) return false;
+    this.cos.add(`${kind}:${id}`);
+    this.changed();
+    return true;
+  }
+
+  wear(kind, id) {
+    if (id && !this.ownsCos(kind, id)) return;
+    this.style = { ...this.style, [kind]: id || null };
+    this.changed();
+  }
+
+  // A short string other players can use to dress you: hat,cape,pet,fx.
+  styleCode() {
+    const s = this.style;
+    return [s.hat, s.cape, s.pet, s.fx].map((v) => v || '').join(',');
+  }
+
   changed() {
     for (const fn of this.listeners) fn();
     this.scheduleSave();
@@ -149,6 +189,10 @@ export class Profile {
         totals: this.totals,
         daily: this.daily,
         story: this.story,
+        cos: [...this.cos],
+        style: this.style,
+        gunKills: this.gunKills,
+        wheel: this.wheel,
       }),
     );
   }

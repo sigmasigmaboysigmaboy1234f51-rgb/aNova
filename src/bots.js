@@ -11,6 +11,7 @@ import { B, SEA } from './world.js';
 import { CORES } from './gun.js';
 import { mulberry32 } from './rng.js';
 import { wrapAngle, clamp } from './util.js';
+import { attachCosmetics, animateCosmetics, randomStyle } from './cosmetics.js';
 
 // Computer players for practice duels. They find their way around the
 // map, strafe, aim like a person (late and a bit off), reload, jump,
@@ -99,6 +100,7 @@ export class Bot {
     paintOutfit(this.canvas, randomOutfit(rng), false, seed);
     this.texture = makeSkinTexture(this.canvas);
     this.pickGun(BOT_GUNS[Math.floor(rng() * BOT_GUNS.length)]);
+    this.style = randomStyle(rng);
     this.build();
   }
 
@@ -117,6 +119,7 @@ export class Bot {
     this.model = buildHumanoid(this.texture, { slim: false });
     this.gun = holdGun(this.model, this.gunId, defaultBuild(this.gunId));
     this.rig = new Rig(this.model);
+    this.cos = attachCosmetics(this.model, this.style);
     scene.add(this.model.root);
     this.tag = nameplate(this.name);
     scene.add(this.tag);
@@ -527,6 +530,7 @@ export class Bot {
     u.showFlash(this.flashT > 0);
     u.shroud.position.z = this.recoil * 0.03;
     u.spin.rotation.z += this.spin * dt * 40;
+    animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     this.tag.visible = m.root.visible;
     this.tag.position.set(this.pos.x, this.pos.y + 2.15, this.pos.z);
   }
