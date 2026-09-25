@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Blockfire</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Pixelify+Sans:wght@400;600&display=swap">
+<style>/*STYLE*/</style>
+</head>
+<body>
+<canvas id="game" aria-label="Blockfire game view"></canvas>
+
+<div id="hud" hidden>
+  <div id="crosshair" aria-hidden="true"></div>
+  <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="popups" aria-live="polite"></div>
+  <div class="hud-top">
+    <div>
+      <div id="hud-wave" class="hud-wave">Get ready</div>
+      <div id="hud-left" class="hud-left">Next wave soon</div>
+    </div>
+    <div class="score-box">
+      <div class="hud-label">Score</div>
+      <div id="hud-score" class="hud-score">0</div>
+    </div>
+  </div>
+  <div id="banner" class="banner" hidden>
+    <div id="banner-title" class="banner-title"></div>
+    <div id="banner-sub" class="banner-sub"></div>
+  </div>
+  <div class="hud-bottom">
+    <div class="hud-stack">
+      <div id="hearts" class="hearts"></div>
+      <div id="hotbar" class="hotbar"></div>
+      <div id="slot-name" class="slot-name">Cobblestone</div>
+    </div>
+    <div id="ammo" class="ammo">
+      <div class="ammo-num"><span id="ammo-cur">16</span><span class="ammo-max">/16</span></div>
+      <div id="ammo-pips" class="ammo-pips" aria-hidden="true"></div>
+      <div id="ammo-status" class="ammo-status">R to reload</div>
+    </div>
+  </div>
+  <div id="vignette" class="vignette"></div>
+  <div id="lowhp" class="lowhp"></div>
+</div>
+
+<section id="menu" class="screen menu" hidden aria-label="Title screen">
+  <div class="menu-col">
+    <header class="logo-wrap">
+      <h1 class="logo"><span class="logo-a">BLOCK</span><span class="logo-b">FIRE</span></h1>
+      <p id="splash" class="splash">Blocks are load-bearing!</p>
+    </header>
+    <div class="panel menu-panel">
+      <div class="menu-buttons">
+        <button id="btn-play" class="btn btn-go" type="button">Play</button>
+        <button id="btn-skin" class="btn" type="button">Edit skin</button>
+        <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
+      </div>
+      <p id="best" class="best"></p>
+      <p id="touch-note" class="note" hidden>Playing needs a keyboard and mouse. The skin editor works with touch.</p>
+      <dl class="controls">
+        <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move</dd>
+        <dt><kbd>Space</kbd></dt><dd>Jump</dd>
+        <dt><kbd>Shift</kbd></dt><dd>Sprint</dd>
+        <dt><kbd>Left click</kbd></dt><dd>Shoot. Shots break blocks too</dd>
+        <dt><kbd>Right click</kbd></dt><dd>Place a block</dd>
+        <dt><kbd>1</kbd>–<kbd>4</kbd> or scroll</dt><dd>Pick block type</dd>
+        <dt><kbd>R</kbd></dt><dd>Reload</dd>
+        <dt><kbd>V</kbd> or <kbd>F5</kbd></dt><dd>Third person</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
+      </dl>
+      <label class="slider" for="sens"><span>Mouse speed</span><input id="sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
+    </div>
+  </div>
+  <div class="menu-char">
+    <div id="menu-preview" class="preview-slot"></div>
+    <p class="char-caption">This is you. Drag to spin, or <button id="btn-skin-2" class="link" type="button">change your skin</button>.</p>
+  </div>
+</section>
+
+<section id="editor" class="screen editor" hidden aria-label="Skin editor">
+  <header class="ed-head">
+    <h2 class="ed-title">Skin editor</h2>
+    <p class="ed-sub">64×64 pixels, same layout as Minecraft skins</p>
+    <button id="ed-done" class="btn btn-go" type="button">Done</button>
+  </header>
+  <div class="ed-body">
+    <div class="ed-stage">
+      <div id="editor-preview" class="preview-slot ed-preview"></div>
+      <p class="ed-hint">Paint on the model. Drag the empty space around it to spin. Scroll to zoom.</p>
+    </div>
+    <div class="ed-tools panel">
+      <div class="ed-group">
+        <h3>Tool</h3>
+        <div class="seg" role="group" aria-label="Tool">
+          <button class="seg-btn" type="button" data-tool="pencil" aria-pressed="true">Pencil</button>
+          <button class="seg-btn" type="button" data-tool="fill" aria-pressed="false">Fill</button>
+          <button class="seg-btn" type="button" data-tool="picker" aria-pressed="false">Pick color</button>
+          <button class="seg-btn" type="button" data-tool="eraser" aria-pressed="false">Eraser</button>
+        </div>
+      </div>
+      <div class="ed-group">
+        <h3>Paint on</h3>
+        <div class="seg" role="group" aria-label="Layer">
+          <button class="seg-btn" type="button" data-layer="base" aria-pressed="true">Skin</button>
+          <button class="seg-btn" type="button" data-layer="outer" aria-pressed="false">Outer layer</button>
+        </div>
+        <label class="check" for="ed-show-outer"><input id="ed-show-outer" type="checkbox" checked> Show outer layer (hats, jackets, hair)</label>
+      </div>
+      <div class="ed-group">
+        <h3>Color</h3>
+        <div class="color-row">
+          <input id="ed-color" type="color" value="#e0752d" aria-label="Paint color">
+          <span id="ed-color-hex" class="hex">#E0752D</span>
+        </div>
+        <div id="ed-palette" class="palette"></div>
+        <div id="ed-recent" class="palette recent" aria-label="Recent colors"></div>
+      </div>
+      <div class="ed-group">
+        <h3>Flat texture</h3>
+        <div class="flat-wrap">
+          <canvas id="ed-flat" width="64" height="64" aria-label="Your skin as a flat 64 by 64 image. You can paint here too."></canvas>
+          <canvas id="ed-guides" aria-hidden="true"></canvas>
+        </div>
+      </div>
+      <div class="ed-group">
+        <h3>Arms</h3>
+        <div class="seg" role="group" aria-label="Arm width">
+          <button class="seg-btn" type="button" data-arms="classic" aria-pressed="true">Classic, 4 px</button>
+          <button class="seg-btn" type="button" data-arms="slim" aria-pressed="false">Slim, 3 px</button>
+        </div>
+      </div>
+      <div class="ed-group ed-actions">
+        <button id="ed-undo" class="btn btn-small" type="button">Undo</button>
+        <button id="ed-random" class="btn btn-small" type="button">Random outfit</button>
+        <button id="ed-reset" class="btn btn-small" type="button">Reset</button>
+      </div>
+      <div class="ed-group ed-actions">
+        <button id="ed-load" class="btn btn-small" type="button">Load .png</button>
+        <button id="ed-save" class="btn btn-small" type="button">Save .png</button>
+        <input id="ed-file" type="file" accept="image/png,.png" hidden>
+      </div>
+      <p id="ed-status" class="ed-status" role="status"></p>
+    </div>
+  </div>
+</section>
+
+<section id="pause" class="screen overlay" hidden aria-label="Paused">
+  <div class="panel overlay-panel">
+    <h2 class="overlay-title">Paused</h2>
+    <p id="pause-msg" class="note" hidden></p>
+    <div class="menu-buttons">
+      <button id="btn-resume" class="btn btn-go" type="button">Resume</button>
+      <button id="btn-pause-skin" class="btn" type="button">Edit skin</button>
+      <button id="btn-quit" class="btn" type="button">Quit to title</button>
+    </div>
+  </div>
+</section>
+
+<section id="gameover" class="screen overlay dead" hidden aria-label="Game over">
+  <div class="panel overlay-panel">
+    <h2 class="overlay-title">You got cubed.</h2>
+    <p id="go-line" class="go-line"></p>
+    <dl class="stats">
+      <div><dt>Wave</dt><dd id="go-wave">1</dd></div>
+      <div><dt>Score</dt><dd id="go-score">0</dd></div>
+      <div><dt>Mobs</dt><dd id="go-kills">0</dd></div>
+      <div><dt>Headshots</dt><dd id="go-heads">0</dd></div>
+      <div><dt>Blocks placed</dt><dd id="go-placed">0</dd></div>
+    </dl>
+    <p id="go-best" class="best"></p>
+    <div class="menu-buttons">
+      <button id="btn-again" class="btn btn-go" type="button">Play again</button>
+      <button id="btn-title" class="btn" type="button">Title screen</button>
+    </div>
+  </div>
+</section>
+
+<p id="boot-error" class="boot-error" hidden>Blockfire needs WebGL, and this browser could not start it. Try a recent Chrome, Edge, Firefox or Safari.</p>
+
+<script>/*SCRIPT*/</script>
+</body>
+</html>

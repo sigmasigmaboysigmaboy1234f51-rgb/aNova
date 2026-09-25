@@ -1,0 +1,15 @@
+{
+  "name": "blockfire",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A blocky voxel arena shooter with a Minecraft-format skin editor. Runs in the browser.",
+  "type": "module",
+  "scripts": {
+    "start": "npx serve . -l 8080",
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.186.1"
+  }
+}
