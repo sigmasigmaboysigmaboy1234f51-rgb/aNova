@@ -5,7 +5,11 @@ import { Input } from './input.js';
 import { Sound } from './sound.js';
 import { Particles, Tracers } from './fx.js';
 import { SkinState } from './skin.js';
-import { Player } from './player.js';
+import { Player, MAX_NADES } from './player.js';
+import { Profile } from './profile.js';
+import { Combat } from './combat.js';
+import { Armory } from './armory.js';
+import { GUNS, RARITY, rollPart } from './weapons.js';
 import { Mobs } from './mobs.js';
 import { Hud } from './hud.js';
 import { SkinPreview } from './preview.js';
@@ -30,6 +34,10 @@ const SPLASHES = [
   'Built one pixel at a time!',
   'Crouch to stay on ledges!',
   'Bring a friend!',
+  'Now with 12 guns!',
+  'Try the Tesla Coil!',
+  'Scopes are for headshots!',
+  'Grenades break walls. Yours too.',
 ];
 
 const WAVE_TIPS = {
@@ -38,13 +46,24 @@ const WAVE_TIPS = {
   3: 'Gloops hop over two-block walls',
   4: 'Mossheads chew through walls if you hide too long',
 };
-const LATE_TIPS = ['They brought friends', 'Hold the high ground', 'Keep moving', 'Headshots do double damage'];
+const LATE_TIPS = [
+  'They brought friends',
+  'Hold the high ground',
+  'Keep moving',
+  'Headshots do double damage',
+  'Press B to spend your coins',
+  'Throw a grenade with G',
+];
 
 const DEATH_LINES = {
   moss: 'A Mosshead got you.',
   bone: 'Shot by a Bonehead.',
   gloop: 'Flattened by a Gloop.',
+  self: 'Caught in your own explosion.',
 };
+
+// Coins each mob drops.
+const COINS = { moss: 5, bone: 6, gloop: 6 };
 
 function randomSeed() {
   return (Math.random() * 2 ** 31) | 0;
@@ -87,14 +106,18 @@ class Game {
     this.tracers = new Tracers(this.scene);
     this.skin = new SkinState();
     this.input = new Input(this.canvas);
-    this.hud = new Hud(this.atlas);
+    this.hud = new Hud(this);
     this.settings = {
       sens: parseFloat(store.get('sens', '1')) || 1,
       muted: store.get('muted', '0') === '1',
     };
     this.sound.setMuted(this.settings.muted);
-    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0 };
+    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0 };
+    this.profile = new Profile();
+    this.combat = new Combat(this);
     this.player = new Player(this);
+    this.armory = new Armory(this);
+    this.profile.listeners.add(() => this.player.refreshLoadout());
     this.mobs = new Mobs(this);
     this.preview = new SkinPreview(this.skin);
     this.editor = new SkinEditor(this);
@@ -215,6 +238,8 @@ class Game {
     $('#btn-mp').addEventListener('click', () => this.openMp());
     $('#btn-skin').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
+    $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
+    $('#btn-pause-armory').addEventListener('click', () => this.openArmory('paused'));
     $('#btn-sound').addEventListener('click', () => this.toggleSound());
     $('#btn-resume').addEventListener('click', () => this.resume());
     $('#btn-pause-skin').addEventListener('click', () => this.openEditor('paused'));
@@ -318,6 +343,8 @@ class Game {
     $('#menu').hidden = s !== 'menu';
     $('#mp').hidden = s !== 'mp';
     $('#editor').hidden = s !== 'editor';
+    if (s === 'armory') this.armory.show();
+    else if (this.armory.open) this.armory.hide();
     $('#pause').hidden = s !== 'paused';
     $('#gameover').hidden = !(s === 'dead' && this.gameOverShown);
     this.hud.show(s === 'playing' || s === 'paused' || s === 'dead');
@@ -367,7 +394,8 @@ class Game {
     this.fx.clear();
     this.player.reset(this.world.spawnPoint());
     this.player.thirdPerson = false;
-    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0 };
+    this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0 };
+    this.combat.clear();
     this.wave = 0;
     this.waveState = 'rest';
     this.waveTimer = 3;
@@ -389,7 +417,7 @@ class Game {
     this.worldUsed = true;
     this.resetRun();
     this.mobs.refreshFlow(true);
-    this.hud.showBanner('Get ready', 'Build walls with right click. Shoot with left.', 3);
+    this.hud.showBanner('Get ready', 'Shoot with left click, aim with right. Press B for the Armory.', 3.5);
   }
 
   pause(msg = '') {
@@ -415,6 +443,24 @@ class Game {
     this.mobs.clear();
     this.gameOverShown = false;
     this.setState('menu');
+  }
+
+  // In single player the Armory pauses the game. In multiplayer the world
+  // keeps going, so find a safe spot first.
+  openArmory(from) {
+    this.armoryReturn = from;
+    this.input.exitLock();
+    this.setState('armory');
+  }
+
+  closeArmory() {
+    const back = this.armoryReturn || 'menu';
+    if (back === 'playing' || (back === 'paused' && this.mp)) {
+      this.setState('playing');
+      this.lockMouse();
+    } else {
+      this.setState(back);
+    }
   }
 
   openEditor(from) {
@@ -576,6 +622,7 @@ class Game {
       const bonus = 250 * this.wave;
       this.onWaveCleared(this.wave, bonus);
       if (this.mp) this.mp.sendCleared(this.wave, bonus);
+      this.dropCrates();
       this.waveState = 'rest';
       this.waveTimer = 6;
     }
@@ -583,23 +630,64 @@ class Game {
 
   onWaveCleared(n, bonus) {
     this.stats.score += bonus;
-    if (!this.player.dead) {
-      this.player.heal(4);
-      this.player.blocks = Math.min(99, this.player.blocks + 8);
+    const coins = 20 + n * 5;
+    this.gainCoins(coins);
+    const p = this.player;
+    if (!p.dead) {
+      p.heal(4);
+      p.blocks = Math.min(99, p.blocks + 8);
+      p.grenades = Math.min(MAX_NADES, p.grenades + 1);
     }
-    this.hud.showBanner(`Wave ${n} cleared`, `+${bonus} points, +2 hearts, +8 blocks`);
+    this.hud.showBanner(`Wave ${n} cleared`, `+${bonus} points, +${coins} coins, +1 grenade. A supply crate is falling!`, 3.4);
     this.sound.cleared();
+  }
+
+  // The host drops one supply crate near every player.
+  dropCrates() {
+    for (const t of this.targets()) {
+      const pk = this.mobs.dropCrate(t.pos);
+      if (pk && this.mp) this.mp.pickupAdded(pk);
+    }
+  }
+
+  gainCoins(n) {
+    this.profile.addCoins(n);
+    this.stats.coins += n;
+    this.sound.coin();
+  }
+
+  // Open a supply crate: a random part, or coins if you already have it.
+  openCrate() {
+    const part = rollPart();
+    const r = RARITY[part.rarity];
+    this.sound.crate();
+    if (this.profile.givePart(part.id)) {
+      this.hud.toast('Supply crate', part.name, `${r.name} part. Fit it in the Armory (B).`, r.color);
+    } else {
+      const coins = Math.max(25, Math.round(part.price / 2));
+      this.gainCoins(coins);
+      this.hud.toast('Supply crate', `${coins} coins`, `You already had the ${part.name}.`, r.color);
+    }
   }
 
   onKill(mob, head, byId) {
     const pts = Math.round(mob.def.score * (head ? 1.5 : 1) * (1 + (this.wave - 1) * 0.1));
     if (!byId || byId === this.myId) this.creditKill(pts, head);
     else if (this.mp) this.mp.sendKill(byId, pts, head);
+    const drop = (kind, value = 0) => {
+      const x = mob.pos.x + (Math.random() - 0.5) * 0.8;
+      const z = mob.pos.z + (Math.random() - 0.5) * 0.8;
+      const pk = this.mobs.spawnPickup(kind, x, mob.pos.y, z, null, value);
+      if (this.mp) this.mp.pickupAdded(pk);
+    };
+    // Coins always, sometimes a bonus coin for headshots.
+    const value = Math.round((COINS[mob.type] || 5) * (1 + Math.floor(this.wave / 5) * 0.2));
+    drop('coin', value);
+    if (head) drop('coin', Math.ceil(value / 2));
     const r = Math.random();
-    let pk = null;
-    if (r < 0.2) pk = this.mobs.spawnPickup('heart', mob.pos.x, mob.pos.y, mob.pos.z);
-    else if (r < 0.42) pk = this.mobs.spawnPickup('blocks', mob.pos.x, mob.pos.y, mob.pos.z);
-    if (pk && this.mp) this.mp.pickupAdded(pk);
+    if (r < 0.16) drop('heart');
+    else if (r < 0.34) drop('blocks');
+    else if (r < 0.4) drop('nade');
   }
 
   creditKill(pts, head) {
@@ -640,6 +728,7 @@ class Game {
     $('#go-kills').textContent = String(s.kills);
     $('#go-heads').textContent = String(s.heads);
     $('#go-placed').textContent = String(s.placed);
+    $('#go-coins').textContent = s.coins.toLocaleString('en-US');
     const better = s.score > 0 && (!this.best || s.score > this.best.score);
     if (better) {
       this.best = { wave: this.wave, score: s.score };
@@ -667,7 +756,8 @@ class Game {
     else if (s === 'menu' || s === 'mp') this.updateMenu(dt);
     if (this.mp && !this.inGame) this.mp.update(dt);
 
-    if (s !== 'editor') {
+    if (s === 'armory') this.armory.frame(dt);
+    if (s !== 'editor' && s !== 'armory') {
       this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
@@ -682,9 +772,11 @@ class Game {
   updatePlay(dt) {
     const p = this.player;
     p.update(dt);
+    this.combat.update(dt);
     if (this.mp && this.state === 'playing' && (this.input.pressed.has('KeyT') || this.input.pressed.has('Enter'))) {
       this.mp.openChat();
     }
+    if (this.state === 'playing' && this.input.pressed.has('KeyB')) this.openArmory('playing');
     if (this.authority) {
       if (!p.dead || this.mp) this.updateWaves(dt);
       this.mobs.update(dt);
@@ -696,8 +788,11 @@ class Game {
     p.updateModels(dt);
     document.body.classList.toggle('is-dead', p.dead);
     this.hud.setHealth(p.hp);
-    this.hud.setAmmo(p.ammo, p.reloadT > 0 ? p.reloadT : 0);
-    this.hud.setBlocks(p.blocks, p.slot);
+    this.hud.setPlayer(p);
+    this.hud.setCoins(this.profile.coins);
+    const boss = this.mobs.boss();
+    if (boss) this.hud.setBoss(boss.def.name, boss.remote ? boss.net.hp : boss.hp / boss.maxHp);
+    else this.hud.setBoss(null, null);
     const left = this.waveState === 'rest' ? null : this.authority ? this.queue.length + this.mobs.alive() : this.netLeft;
     this.hud.setWave(this.wave, left);
     this.hud.setScore(this.stats.score);

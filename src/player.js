@@ -1,30 +1,32 @@
 import * as THREE from 'three';
 import { moveEntity, boxHitsWorld } from './physics.js';
 import { B, BLOCKS, SEA, SY } from './world.js';
-import { buildHumanoid, buildBlaster, holdBlaster, setBoxUV } from './model.js';
+import { buildHumanoid, holdGun, setBoxUV, PX } from './model.js';
+import { buildGun, CORES } from './gun.js';
+import { GUNS, gunStats, cleanBuild, buildCode } from './weapons.js';
+import { TILE_UV } from './textures.js';
 import { Rig, posePlayer, ease } from './anim.js';
 import { clamp } from './util.js';
 
 export const PLACEABLE = [B.COBBLE, B.PLANKS, B.BRICK, B.MOSSY];
-export const MAG = 16;
 export const MAX_HP = 20;
-export const RELOAD = 1.1;
-const FIRE_GAP = 0.13;
+export const MAX_NADES = 5;
 const REACH = 5.5;
-const RANGE = 90;
 const H_STAND = 1.8;
 const H_CROUCH = 1.5;
 const EYE_STAND = 1.62;
 const EYE_CROUCH = 1.27;
 const BASE_FOV = 75;
+const VIEW_SCALE = 0.6;
+const VIEW_REST = new THREE.Vector3(0.22, -0.2, -0.45);
 
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
 const vC = new THREE.Vector3();
-const vD = new THREE.Vector3();
 const vE = new THREE.Vector3();
 const vF = new THREE.Vector3();
 const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
+const lerp = (a, b, t) => a + (b - a) * t;
 
 function overlapsBlock(e, x, y, z) {
   return (
@@ -37,16 +39,33 @@ function overlapsBlock(e, x, y, z) {
   );
 }
 
-// First-person arm (wearing your skin) holding the blaster.
-function buildViewModel(skin) {
-  const group = new THREE.Group();
-  const gun = buildBlaster();
-  group.add(gun);
+// One gun in your loadout, with its own ammo and timers.
+export class Weapon {
+  constructor(id, build) {
+    this.id = id;
+    this.def = GUNS[id];
+    this.build = cleanBuild(id, build);
+    this.code = buildCode(this.build);
+    this.stats = gunStats(id, this.build);
+    this.color = new THREE.Color((CORES[this.stats.core.split('.')[1]] || CORES.ember).beam);
+    this.ammo = this.stats.mag;
+    this.reloadT = 0;
+    this.fireCd = 0;
+    this.heat = 0;
+    this.spin = 0;
+    this.flashT = 0;
+    this.beamT = 0;
+  }
+
+  get reloadFrac() {
+    return this.reloadT > 0 ? 1 - this.reloadT / this.stats.reload : -1;
+  }
+}
+
+// Your arm (wearing your skin) plus whatever you hold in first person.
+function buildArm(skin, geos, base, outer) {
   const armW = skin.slim ? 3 : 4;
   const U = 0.034;
-  const base = new THREE.MeshLambertMaterial({ map: skin.texture });
-  const outer = new THREE.MeshLambertMaterial({ map: skin.texture, alphaTest: 0.5, side: THREE.DoubleSide });
-  const geos = [];
   const part = (u, v, inflate, mat) => {
     const geo = new THREE.BoxGeometry((armW + inflate) * U, (12 + inflate) * U, (4 + inflate) * U);
     setBoxUV(geo, u, v, armW, 12, 4);
@@ -56,23 +75,75 @@ function buildViewModel(skin) {
   };
   const arm = new THREE.Group();
   arm.add(part(40, 16, 0, base), part(40, 32, 0.5, outer));
+  return arm;
+}
+
+function blockCube(atlas, id, size) {
+  const geo = new THREE.BoxGeometry(size, size, size);
+  const info = BLOCKS[id];
+  const uv = geo.attributes.uv;
+  for (let f = 0; f < 6; f++) {
+    const tile = f === 2 ? info.top : f === 3 ? info.bottom : info.side;
+    const [u0, v0, u1, v1] = TILE_UV[tile];
+    uv.setXY(f * 4, u0, v1);
+    uv.setXY(f * 4 + 1, u1, v1);
+    uv.setXY(f * 4 + 2, u0, v0);
+    uv.setXY(f * 4 + 3, u1, v0);
+  }
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: atlas.texture }));
+}
+
+function buildGunView(skin, weapon) {
+  const group = new THREE.Group();
+  const gun = buildGun(weapon.id, weapon.build);
+  group.add(gun);
+  const geos = [];
+  const base = new THREE.MeshLambertMaterial({ map: skin.texture });
+  const outer = new THREE.MeshLambertMaterial({ map: skin.texture, alphaTest: 0.5, side: THREE.DoubleSide });
+  const arm = buildArm(skin, geos, base, outer);
   arm.position.set(0.01, -0.1, 0.12);
   arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.85, -0.3, 0.45).normalize());
   group.add(arm);
-  group.position.set(0.22, -0.2, -0.45);
-  group.scale.setScalar(0.6);
-  const cell = gun.userData.cell;
+  group.position.copy(VIEW_REST);
+  group.scale.setScalar(VIEW_SCALE);
+  const eye = gun.userData.eye;
   return {
     group,
     gun,
-    cell,
-    cellY: cell.position.y,
-    rest: group.position.clone(),
+    cell: gun.userData.cell,
+    cellY: gun.userData.cell.position.y,
+    ads: new THREE.Vector3(-eye.x * VIEW_SCALE, -eye.y * VIEW_SCALE, -0.3 - eye.z * VIEW_SCALE),
     dispose() {
       for (const g of geos) g.dispose();
       base.dispose();
       outer.dispose();
       gun.userData.dispose();
+    },
+  };
+}
+
+function buildBlockView(skin, atlas, blockId) {
+  const group = new THREE.Group();
+  const geos = [];
+  const base = new THREE.MeshLambertMaterial({ map: skin.texture });
+  const outer = new THREE.MeshLambertMaterial({ map: skin.texture, alphaTest: 0.5, side: THREE.DoubleSide });
+  const arm = buildArm(skin, geos, base, outer);
+  arm.position.set(0.02, -0.12, 0.05);
+  arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.5, -0.6, 0.6).normalize());
+  const cube = blockCube(atlas, blockId, 0.15);
+  cube.position.set(-0.02, -0.01, -0.1);
+  cube.rotation.set(0.2, 0.7, 0);
+  group.add(arm, cube);
+  group.position.set(0.3, -0.28, -0.5);
+  return {
+    group,
+    blockId,
+    dispose() {
+      for (const g of geos) g.dispose();
+      base.dispose();
+      outer.dispose();
+      cube.geometry.dispose();
+      cube.material.dispose();
     },
   };
 }
@@ -86,12 +157,20 @@ export class Player {
     this.h = H_STAND;
     this.maxHp = MAX_HP;
     this.thirdPerson = false;
+    this.weapons = [null, null, null];
+    this.views = [null, null, null];
+    this.guns3p = [null, null, null];
+    this.blockView = null;
+    this.held = 0;
+    this.lastHeld = 3;
+    this.blockSlot = 0;
     this.selection = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004)),
       new THREE.LineBasicMaterial({ color: 0x101010, transparent: true, opacity: 0.6 }),
     );
     this.selection.visible = false;
     game.scene.add(this.selection);
+    this.loadWeapons();
     this.buildModels();
     game.skin.listeners.add(({ model }) => {
       if (model) this.buildModels();
@@ -99,26 +178,118 @@ export class Player {
     this.reset(new THREE.Vector3(32.5, 12, 32.5));
   }
 
+  // --- Loadout -----------------------------------------------------------
+
+  // Pick up the guns in your profile's loadout. Guns that did not change
+  // keep their ammo.
+  loadWeapons() {
+    const prof = this.game.profile;
+    let changed = false;
+    for (let i = 0; i < 3; i++) {
+      const id = prof.loadout[i];
+      const cur = this.weapons[i];
+      if (!id) {
+        if (cur) changed = true;
+        this.weapons[i] = null;
+        continue;
+      }
+      const build = prof.builds[id];
+      if (cur && cur.id === id && cur.code === buildCode(cleanBuild(id, build))) continue;
+      this.weapons[i] = new Weapon(id, build);
+      changed = true;
+    }
+    if (!this.weapons[this.held] && this.held < 3) this.held = this.weapons.findIndex(Boolean);
+    if (this.held < 0) this.held = 3;
+    return changed;
+  }
+
+  refreshLoadout() {
+    if (this.loadWeapons()) this.buildModels();
+  }
+
+  get weapon() {
+    return this.held < 3 ? this.weapons[this.held] : null;
+  }
+
+  blockType() {
+    return PLACEABLE[this.blockSlot];
+  }
+
+  select(slot) {
+    if (slot === this.held) return;
+    if (slot < 3 && !this.weapons[slot]) return;
+    const w = this.weapon;
+    if (w) w.reloadT = 0;
+    this.lastHeld = this.held;
+    this.held = slot;
+    if (slot >= 3) this.blockSlot = slot - 3;
+    this.equip = 0;
+    this.ads = 0;
+    this.game.combat.beamTick(this, null, 0, false);
+    this.game.sound.equip();
+  }
+
+  cycle(dir) {
+    for (let n = 1; n <= 7; n++) {
+      const s = (this.held + dir * n + 70) % 7;
+      if (s >= 3 || this.weapons[s]) {
+        this.select(s);
+        return;
+      }
+    }
+  }
+
   buildModels() {
-    const { scene, viewScene, skin } = this.game;
+    const { scene, viewScene, skin, atlas } = this.game;
     const wasVisible = this.model ? this.model.root.visible : false;
     if (this.model) {
       scene.remove(this.model.root);
       this.model.dispose();
-      this.gun3p.userData.dispose();
+      for (const g of this.guns3p) if (g) g.userData.dispose();
     }
     this.model = buildHumanoid(skin.texture, { slim: skin.slim });
-    this.gun3p = holdBlaster(this.model);
+    this.guns3p = this.weapons.map((w) => (w ? holdGun(this.model, w.id, w.build) : null));
+    this.block3p = blockCube(atlas, this.blockType(), 0.22);
+    this.block3p.position.set(0, -11 * PX, 1.5 * PX);
+    this.model.parts.armR.add(this.block3p);
+    this.block3pId = this.blockType();
     this.model.root.visible = wasVisible;
     this.rig = new Rig(this.model);
     scene.add(this.model.root);
 
-    if (this.view) {
-      viewScene.remove(this.view.group);
-      this.view.dispose();
+    for (const v of this.views) {
+      if (!v) continue;
+      viewScene.remove(v.group);
+      v.dispose();
     }
-    this.view = buildViewModel(skin);
-    viewScene.add(this.view.group);
+    this.views = this.weapons.map((w) => (w ? buildGunView(skin, w) : null));
+    for (const v of this.views) if (v) viewScene.add(v.group);
+    if (this.blockView) {
+      viewScene.remove(this.blockView.group);
+      this.blockView.dispose();
+    }
+    this.blockView = buildBlockView(skin, atlas, this.blockType());
+    viewScene.add(this.blockView.group);
+  }
+
+  syncBlockModels() {
+    const id = this.blockType();
+    if (this.blockView.blockId !== id) {
+      this.game.viewScene.remove(this.blockView.group);
+      this.blockView.dispose();
+      this.blockView = buildBlockView(this.game.skin, this.game.atlas, id);
+      this.game.viewScene.add(this.blockView.group);
+    }
+    if (this.block3pId !== id) {
+      const old = this.block3p;
+      this.block3p = blockCube(this.game.atlas, id, 0.22);
+      this.block3p.position.copy(old.position);
+      old.parent.add(this.block3p);
+      old.parent.remove(old);
+      old.geometry.dispose();
+      old.material.dispose();
+      this.block3pId = id;
+    }
   }
 
   reset(spawn) {
@@ -131,12 +302,19 @@ export class Player {
     this.dead = false;
     this.deadT = 0;
     this.killer = null;
-    this.ammo = MAG;
-    this.reloadT = 0;
-    this.fireCd = 0;
+    for (const w of this.weapons) {
+      if (!w) continue;
+      w.ammo = w.stats.mag;
+      w.reloadT = 0;
+      w.fireCd = 0;
+      w.heat = 0;
+      w.spin = 0;
+    }
     this.placeCd = 0;
+    this.mineCd = 0;
+    this.nadeCd = 0;
     this.blocks = 24;
-    this.slot = 0;
+    this.grenades = 2;
     this.invuln = 0;
     this.sinceHurt = 99;
     this.regenT = 0;
@@ -146,7 +324,7 @@ export class Player {
     this.stepDist = 0;
     this.recoil = 0;
     this.recoilRoll = 0;
-    this.flashT = 0;
+    this.swing = 0;
     this.onGround = false;
     this.inWater = false;
     this.crouch = false;
@@ -168,7 +346,8 @@ export class Player {
     this.swayY = 0;
     this.sprintW = 0;
     this.crouchW = 0;
-    this.heat = 0;
+    this.ads = 0;
+    this.leech = 0;
   }
 
   aimDir(out) {
@@ -186,7 +365,6 @@ export class Player {
     return !boxHitsWorld(this.game.world, p.x - this.hw, p.y, p.z - this.hw, p.x + this.hw, p.y + H_STAND, p.z + this.hw);
   }
 
-  // Is there a block under any corner of our feet?
   supported(x, y, z) {
     const w = this.game.world;
     const fy = Math.floor(y - 0.05);
@@ -199,6 +377,25 @@ export class Player {
     );
   }
 
+  zoom() {
+    const w = this.weapon;
+    return w ? lerp(1, w.stats.zoom, this.ads) : 1;
+  }
+
+  // How far shots wander right now.
+  spreadFor(w) {
+    const s = w.stats;
+    let spread = s.spread * lerp(s.hip, s.ads, this.ads);
+    if (Math.hypot(this.vel.x, this.vel.z) > 1) spread *= 1.6;
+    if (!this.onGround && !this.inWater) spread *= 3;
+    if (this.crouch && this.onGround) spread *= s.bipod ? 0.35 : 0.6;
+    return spread;
+  }
+
+  coreColor(w) {
+    return w.color;
+  }
+
   update(dt) {
     const g = this.game;
     const inp = g.input;
@@ -208,11 +405,17 @@ export class Player {
     this.shake *= Math.exp(-9 * dt);
     this.recoil *= Math.exp(-14 * dt);
     this.recoilRoll *= Math.exp(-12 * dt);
+    this.swing = Math.max(0, this.swing - dt * 4);
     this.hurtT = Math.max(0, this.hurtT - dt);
     this.sinceShot += dt;
-    this.equip = Math.min(1, this.equip + dt * 2.2);
-    this.flashT -= dt;
-    this.heat = Math.max(0, this.heat - dt * 0.45);
+    this.equip = Math.min(1, this.equip + dt * 2.6);
+    for (const wp of this.weapons) {
+      if (!wp) continue;
+      wp.heat = Math.max(0, wp.heat - dt * 0.45);
+      wp.flashT -= dt;
+      wp.fireCd -= dt;
+      if (wp !== this.weapon) wp.spin = Math.max(0, wp.spin - dt * 2);
+    }
 
     if (this.dead) {
       this.deadT += dt;
@@ -222,22 +425,27 @@ export class Player {
       moveEntity(w, this, dt);
       this.selection.visible = false;
       this.sprint = false;
+      g.combat.beamTick(this, null, 0, false);
       return;
     }
 
+    const zoom = this.zoom();
     const [mx, my] = inp.takeMouse();
-    const sens = 0.0024 * g.settings.sens;
+    const sens = (0.0024 * g.settings.sens) / zoom;
     this.yaw -= mx * sens;
     this.pitch = clamp(this.pitch - my * sens, -1.55, 1.55);
     this.swayX = clamp(this.swayX + mx * 0.00022, -0.05, 0.05);
     this.swayY = clamp(this.swayY + my * 0.00022, -0.05, 0.05);
 
-    for (let i = 0; i < 4; i++) if (inp.pressed.has('Digit' + (i + 1))) this.slot = i;
-    if (inp.wheel) this.slot = (this.slot + (inp.wheel > 0 ? 1 : -1) + 4) % 4;
+    // Hotbar: 1-3 guns, 4-7 blocks, scroll to cycle, Q for the last thing held.
+    for (let i = 0; i < 7; i++) if (inp.pressed.has('Digit' + (i + 1))) this.select(i);
+    if (inp.wheel) this.cycle(inp.wheel > 0 ? 1 : -1);
+    if (inp.pressed.has('KeyQ')) this.select(this.lastHeld);
     if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) this.thirdPerson = !this.thirdPerson;
+    if (this.held >= 3) this.blockSlot = this.held - 3;
 
+    const weapon = this.weapon;
     const k = inp.keys;
-    // Crouch: hold Shift. You stay crouched under low ceilings.
     const wantCrouch = k.has('ShiftLeft') || k.has('ShiftRight');
     if (wantCrouch) this.crouch = true;
     else if (this.crouch && this.canStand()) this.crouch = false;
@@ -246,15 +454,15 @@ export class Player {
     const fwdHeld = k.has('KeyW') || k.has('ArrowUp');
     const fwd = (fwdHeld ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const side = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    // Sprint: double-tap W (or hold Ctrl in the desktop app, where Ctrl+W
-    // can't close the window).
     if (inp.pressed.has('KeyW') || inp.pressed.has('ArrowUp')) {
       if (this.time - this.lastW < 0.3) this.sprintLatch = true;
       this.lastW = this.time;
     }
     if (!fwdHeld) this.sprintLatch = false;
     const ctrl = g.desktop && (k.has('ControlLeft') || k.has('ControlRight'));
-    this.sprint = fwd > 0 && (this.sprintLatch || ctrl) && !this.crouch && !this.inWater;
+    const aiming = !!weapon && inp.right && weapon.reloadT <= 0;
+    this.sprint = fwd > 0 && (this.sprintLatch || ctrl) && !this.crouch && !this.inWater && !aiming;
+    this.ads = damp(this.ads, aiming ? 1 : 0, 14, dt);
 
     let wx = -Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * side;
     let wz = -Math.cos(this.yaw) * fwd - Math.sin(this.yaw) * side;
@@ -265,6 +473,7 @@ export class Player {
     }
     this.inWater = this.pos.y < SEA - 0.35;
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
+    if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
     if (this.inWater) speed *= 0.55;
     const accel = this.onGround ? 14 : this.inWater ? 6 : 3.5;
     const a = Math.min(1, accel * dt);
@@ -328,16 +537,29 @@ export class Player {
     }
     this.strafeRoll = damp(this.strafeRoll, -side * 0.012, 8, dt);
 
-    this.fireCd -= dt;
     this.placeCd -= dt;
-    if (this.reloadT > 0) {
-      this.reloadT -= dt;
-      if (this.reloadT <= 0) this.ammo = MAG;
+    this.mineCd -= dt;
+    this.nadeCd -= dt;
+    if (weapon) this.updateGun(dt, weapon);
+    else {
+      g.combat.beamTick(this, null, 0, false);
+      if (inp.left && this.mineCd <= 0) this.mine();
+      if (inp.right && this.placeCd <= 0) this.tryPlace();
     }
-    if (inp.pressed.has('KeyR') && this.ammo < MAG && this.reloadT <= 0) this.startReload();
-    if (inp.left && this.fireCd <= 0 && this.reloadT <= 0 && this.ammo > 0 && this.equip > 0.6) this.shoot();
-    if (this.ammo === 0 && this.reloadT <= 0 && this.fireCd <= 0) this.startReload();
-    if (inp.right && this.placeCd <= 0) this.tryPlace();
+    // F places a block even with a gun out, G throws a grenade.
+    if (k.has('KeyF') && this.placeCd <= 0) this.tryPlace();
+    if (inp.pressed.has('KeyG') && this.nadeCd <= 0) {
+      if (this.grenades > 0) {
+        this.grenades--;
+        this.nadeCd = 0.8;
+        this.swing = 1;
+        g.combat.throwGrenade(this);
+      } else {
+        g.sound.empty();
+        g.hud.popup('No grenades');
+        this.nadeCd = 0.5;
+      }
+    }
 
     this.invuln -= dt;
     this.sinceHurt += dt;
@@ -348,99 +570,90 @@ export class Player {
         this.hp = Math.min(this.maxHp, this.hp + 1);
       }
     }
-
+    this.syncBlockModels();
     this.updateSelection();
   }
 
-  startReload() {
-    this.reloadT = RELOAD;
-    this.sprintLatch = false;
-    this.game.sound.reload();
-  }
-
-  get reloadFrac() {
-    return this.reloadT > 0 ? 1 - this.reloadT / RELOAD : -1;
-  }
-
-  muzzleWorld(out) {
-    if (this.thirdPerson) return this.gun3p.userData.muzzle.getWorldPosition(out);
-    // The gun is drawn by its own camera; find where its muzzle appears on
-    // screen and start the tracer at that spot in the world.
+  updateGun(dt, w) {
     const g = this.game;
-    this.view.gun.userData.muzzle.getWorldPosition(out);
+    const inp = g.input;
+    const s = w.stats;
+    if (w.reloadT > 0) {
+      w.reloadT -= dt;
+      if (w.reloadT <= 0) w.ammo = s.mag;
+    }
+    if (inp.pressed.has('KeyR') && w.ammo < s.mag && w.reloadT <= 0) this.startReload(w);
+    const ready = w.reloadT <= 0 && this.equip > 0.6;
+    if (s.mode === 'beam') {
+      g.combat.beamTick(this, w, dt, ready && inp.left && w.ammo > 0);
+      if (ready && inp.left && w.ammo > 0) {
+        this.sinceShot = 0;
+        this.recoil = Math.max(this.recoil, 0.15);
+        w.heat = Math.min(1, w.heat + dt * 0.6);
+      }
+    } else {
+      if (s.mode === 'spin') {
+        w.spin = clamp(w.spin + (inp.left && ready ? dt / s.spinUp : -dt * 1.5), 0, 1);
+        if (inp.left && ready) g.sound.spin(w.spin);
+      }
+      const trigger = s.mode === 'semi' ? inp.leftPressed : inp.left;
+      if (trigger && ready && w.fireCd <= 0 && (s.mode !== 'spin' || w.spin >= 1)) {
+        if (w.ammo > 0) this.fire(w);
+        else if (s.mode === 'semi') g.sound.empty();
+      }
+    }
+    if (w.ammo === 0 && w.reloadT <= 0 && w.fireCd <= 0) this.startReload(w);
+  }
+
+  startReload(w) {
+    w.reloadT = w.stats.reload;
+    this.sprintLatch = false;
+    this.game.sound.reload(w.stats.reload);
+    this.game.combat.beamTick(this, null, 0, false);
+  }
+
+  fire(w) {
+    const g = this.game;
+    const s = w.stats;
+    if (s.proj === 'block') {
+      if (this.blocks <= 0) {
+        g.sound.empty();
+        g.hud.flashBlocks();
+        w.fireCd = 0.3;
+        return;
+      }
+      this.blocks--;
+    }
+    w.ammo--;
+    w.fireCd = s.gap;
+    this.sprintLatch = false;
+    this.sinceShot = 0;
+    g.combat.fire(this, w);
+    const steady = this.crouch && this.onGround ? (s.bipod ? 0.25 : 0.6) : 1;
+    this.kick += 0.022 * s.recoil * steady * (1 - this.ads * 0.3);
+    this.recoil = 1;
+    this.recoilRoll = (Math.random() - 0.5) * 0.08;
+    if (!s.noFlash) w.flashT = 0.05;
+    w.heat = Math.min(1, w.heat + 0.06 + s.gap * 0.1);
+    this.shake = Math.max(this.shake, 0.02 + 0.015 * s.recoil);
+    g.stats.shots++;
+  }
+
+  // Where our muzzle appears on screen, placed out in the world, so tracers
+  // start at the barrel you see.
+  muzzleWorld(out) {
+    const g = this.game;
+    if (this.thirdPerson) {
+      const gun = this.guns3p[this.held];
+      return gun ? gun.userData.muzzle.getWorldPosition(out) : this.eyePos(out);
+    }
+    const view = this.views[this.held];
+    if (!view) return this.eyePos(out);
+    view.gun.userData.muzzle.getWorldPosition(out);
     out.project(g.viewCam);
     out.z = 0.5;
     out.unproject(g.camera).sub(g.camera.position).normalize();
     return out.multiplyScalar(0.9).add(g.camera.position);
-  }
-
-  shoot() {
-    const g = this.game;
-    const w = g.world;
-    this.ammo--;
-    this.fireCd = FIRE_GAP;
-    this.sprintLatch = false;
-    this.sinceShot = 0;
-    const origin = vA.copy(g.camera.position);
-    const dir = this.aimDir(vB);
-    const moving = Math.hypot(this.vel.x, this.vel.z) > 1;
-    let spread = 0.004 + (moving ? 0.01 : 0) + (this.onGround || this.inWater ? 0 : 0.025);
-    if (this.crouch && this.onGround) spread *= 0.35;
-    dir.x += (Math.random() - 0.5) * spread * 2;
-    dir.y += (Math.random() - 0.5) * spread * 2;
-    dir.z += (Math.random() - 0.5) * spread * 2;
-    dir.normalize();
-
-    const mobHit = g.mobs.raycast(origin, dir, RANGE);
-    const blockHit = w.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, RANGE);
-    let endT = RANGE;
-    if (mobHit && (!blockHit || mobHit.t < blockHit.t)) {
-      endT = mobHit.t;
-      const at = vC.copy(dir).multiplyScalar(endT).add(origin);
-      mobHit.mob.damage(mobHit.head ? 9 : 4, dir, mobHit.head, at, g.myId);
-      g.hud.hitmarker(mobHit.head);
-      if (mobHit.head) g.sound.headshot();
-      else g.sound.hit();
-    } else if (blockHit) {
-      endT = blockHit.t;
-      const at = vC.copy(dir).multiplyScalar(endT).add(origin);
-      const res = w.hitBlock(blockHit.x, blockHit.y, blockHit.z, 1);
-      if (res) {
-        const colors = g.atlas.colors[res.info.side];
-        g.fx.burst(at.x + blockHit.nx * 0.06, at.y + blockHit.ny * 0.06, at.z + blockHit.nz * 0.06, colors, 5, {
-          speed: 2.5,
-          size: 0.07,
-          up: 1.5,
-          life: 0.5,
-          spread: 0.03,
-        });
-        if (res.broken) {
-          g.fx.burst(blockHit.x + 0.5, blockHit.y + 0.5, blockHit.z + 0.5, colors, 18, {
-            speed: 3,
-            size: 0.13,
-            up: 2,
-            life: 0.9,
-            spread: 0.35,
-          });
-          g.sound.blockBreak(res.info.sound);
-          this.blocks = Math.min(99, this.blocks + 1);
-        } else {
-          g.sound.blockHit(res.info.sound);
-        }
-      }
-    }
-    const end = vC.copy(dir).multiplyScalar(endT).add(origin);
-    const from = this.muzzleWorld(vD);
-    g.tracers.fire(from, end);
-    if (g.mp) g.mp.sendShot(from, end);
-    this.kick += this.crouch ? 0.012 : 0.022;
-    this.recoil = 1;
-    this.recoilRoll = (Math.random() - 0.5) * 0.08;
-    this.flashT = 0.05;
-    this.heat = Math.min(1, this.heat + 0.09);
-    this.shake = Math.max(this.shake, 0.04);
-    g.sound.shoot();
-    g.stats.shots++;
   }
 
   // Ray from the camera, limited to arm's reach from the player's eyes.
@@ -450,6 +663,31 @@ export class Player {
     const extra = this.thirdPerson ? cam.position.distanceTo(this.eyePos(vF)) : 0;
     const o = cam.position;
     return this.game.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, REACH + extra);
+  }
+
+  mine() {
+    const g = this.game;
+    this.mineCd = 0.22;
+    this.swing = 1;
+    const hit = this.targetBlock();
+    if (!hit) return;
+    const res = g.world.hitBlock(hit.x, hit.y, hit.z, 1);
+    if (!res) return;
+    const colors = g.atlas.colors[res.info.side];
+    if (res.broken) {
+      g.fx.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, colors, 14, { speed: 2.5, size: 0.12, up: 2, life: 0.8, spread: 0.35 });
+      g.sound.blockBreak(res.info.sound);
+      this.blocks = Math.min(99, this.blocks + 1);
+    } else {
+      g.fx.burst(hit.x + 0.5 + hit.nx * 0.5, hit.y + 0.5 + hit.ny * 0.5, hit.z + 0.5 + hit.nz * 0.5, colors, 3, {
+        speed: 1.5,
+        size: 0.07,
+        up: 1,
+        life: 0.4,
+        spread: 0.3,
+      });
+      g.sound.blockHit(res.info.sound);
+    }
   }
 
   tryPlace() {
@@ -467,15 +705,13 @@ export class Player {
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz;
     if (!w.inBounds(x, y, z) || y >= SY - 1 || w.get(x, y, z) !== B.AIR) return;
-    if (overlapsBlock(this, x, y, z)) return;
-    if (g.mobs.list.some((m) => m.state !== 'dying' && overlapsBlock(m, x, y, z))) return;
-    if (g.mp && g.mp.remotes.list().some((r) => !r.dead && overlapsBlock(r, x, y, z))) return;
-    const id = PLACEABLE[this.slot];
+    if (g.combat.occupied(x, y, z)) return;
+    const id = this.blockType();
     w.set(x, y, z, id);
     this.blocks--;
     g.stats.placed++;
     g.sound.place();
-    this.recoil = Math.max(this.recoil, 0.4);
+    this.swing = 1;
     g.fx.burst(x + 0.5, y + 0.5, z + 0.5, g.atlas.colors[BLOCKS[id].side], 6, {
       speed: 1.2,
       size: 0.08,
@@ -486,7 +722,7 @@ export class Player {
   }
 
   updateSelection() {
-    const hit = this.targetBlock();
+    const hit = this.weapon && this.ads > 0.5 ? null : this.targetBlock();
     this.selection.visible = !!hit;
     if (hit) this.selection.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
   }
@@ -506,7 +742,6 @@ export class Player {
       this.vel.x += (dx / l) * 6;
       this.vel.z += (dz / l) * 6;
       this.vel.y = Math.max(this.vel.y, 4.5);
-      // Tip the camera away from whatever hit you.
       const right = Math.cos(this.yaw) * (dx / l) - Math.sin(this.yaw) * (dz / l);
       this.hurtRoll = (right >= 0 ? -1 : 1) * 0.09;
     } else {
@@ -530,6 +765,11 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + n);
   }
 
+  scoped() {
+    const w = this.weapon;
+    return !!w && w.stats.zoom >= 2 && this.ads > 0.85 && !this.thirdPerson;
+  }
+
   updateCamera(cam, dt) {
     this.eye = damp(this.eye, this.crouch ? EYE_CROUCH : EYE_STAND, 14, dt);
     this.landDip = Math.max(0, this.landDip - dt * 3.2);
@@ -542,7 +782,7 @@ export class Player {
       eye.y -= ease(k) * (this.eye - 0.25);
       roll = ease(k) * 0.6;
     } else if (!this.thirdPerson) {
-      const bob = this.walkAmt * (1 + this.sprintW * 0.6);
+      const bob = this.walkAmt * (1 + this.sprintW * 0.6) * (1 - this.ads * 0.8);
       eye.y += Math.abs(Math.sin(this.walkPhase)) * 0.06 * bob - 0.03 * bob;
     }
     const s = this.shake;
@@ -571,9 +811,9 @@ export class Player {
     } else {
       cam.position.copy(eye);
     }
-    // Sprinting widens the view a little.
     const moving = Math.hypot(this.vel.x, this.vel.z) > 2;
-    this.fov = damp(this.fov, BASE_FOV + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0), 8, dt);
+    const target = (BASE_FOV + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0)) / (this.thirdPerson ? 1 : this.zoom());
+    this.fov = damp(this.fov, target, 12, dt);
     if (Math.abs(cam.fov - this.fov) > 0.01) {
       cam.fov = this.fov;
       cam.updateProjectionMatrix();
@@ -581,8 +821,8 @@ export class Player {
     cam.updateMatrixWorld();
   }
 
-  // Everything the third-person model, remote copies and animation need.
   animState() {
+    const w = this.weapon;
     return {
       speed: Math.hypot(this.vel.x, this.vel.z),
       sprint: this.sprint,
@@ -591,9 +831,9 @@ export class Player {
       water: this.inWater,
       vy: this.vel.y,
       pitch: this.pitch + this.kick,
-      aim: this.sinceShot < 1.4 || this.reloadT > 0 ? 1 : 0,
+      aim: w && (this.sinceShot < 1.4 || w.reloadT > 0 || this.ads > 0.3) ? 1 : 0,
       recoil: this.recoil,
-      reload: this.reloadFrac,
+      reload: w ? w.reloadFrac : -1,
       hurt: this.hurtT / 0.3,
       landed: this.landed,
       dead: this.dead,
@@ -606,48 +846,79 @@ export class Player {
     m.root.visible = this.thirdPerson;
     const flash = this.hurtT > 0 ? this.hurtT / 0.3 : this.dead ? 0.5 : 0;
     for (const mat of m.materials) mat.emissive.setRGB(0.6 * flash, 0.05 * flash, 0.03 * flash);
+    const weapon = this.weapon;
+    this.guns3p.forEach((gun, i) => {
+      if (gun) gun.visible = i === this.held;
+    });
+    this.block3p.visible = this.held >= 3;
     if (this.thirdPerson) {
       m.root.position.copy(this.pos);
       m.root.rotation.y = this.yaw + Math.PI;
       posePlayer(this.rig, this.animState(), dt);
+      if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
     }
     this.landed = 0;
 
-    const v = this.view;
-    v.group.visible = !this.thirdPerson && !this.dead;
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.sprintW = damp(this.sprintW, this.sprint && hs > 1 ? 1 : 0, 9, dt);
     this.crouchW = damp(this.crouchW, this.crouch ? 1 : 0, 9, dt);
-    const bob = this.walkAmt * (1 + this.sprintW * 0.9);
+    const firstPerson = !this.thirdPerson && !this.dead;
+    const scoped = this.scoped();
+    this.views.forEach((v, i) => {
+      if (v) v.group.visible = firstPerson && i === this.held && !scoped;
+    });
+    this.blockView.group.visible = firstPerson && this.held >= 3;
+    const bob = this.walkAmt * (1 + this.sprintW * 0.9) * (1 - this.ads * 0.85);
     const bx = Math.sin(this.walkPhase) * 0.014 * bob;
     const by = -Math.abs(Math.cos(this.walkPhase)) * 0.016 * bob;
-    const r = this.reloadFrac;
-    const tilt = r < 0 ? 0 : r < 0.2 ? ease(r / 0.2) : r > 0.8 ? ease((1 - r) / 0.2) : 1;
     const eq = 1 - ease(this.equip);
-    v.group.position.set(
-      v.rest.x + bx - this.swayX * 0.6 - this.sprintW * 0.05 - this.crouchW * 0.035,
-      v.rest.y + by + this.swayY * 0.6 - tilt * 0.03 - this.sprintW * 0.05 - this.landDip * 0.05 - eq * 0.35,
-      v.rest.z + this.recoil * 0.06 + this.sprintW * 0.03,
-    );
-    v.group.rotation.set(
-      this.recoil * 0.12 - tilt * 0.25 - this.sprintW * 0.4 + this.swayY * 1.2 - eq * 0.9,
-      0.04 + this.sprintW * 0.65 + this.swayX * 1.5,
-      tilt * 0.6 + this.sprintW * 0.25 + this.recoilRoll,
-    );
-    this.swayX *= Math.exp(-9 * dt);
-    this.swayY *= Math.exp(-9 * dt);
-    // Reload: the energy cell drops out and a fresh one slides in.
-    let off = 0;
-    if (r > 0.2 && r < 0.45) off = ease((r - 0.2) / 0.25);
-    else if (r >= 0.45 && r < 0.55) off = 1;
-    else if (r >= 0.55 && r < 0.8) off = 1 - ease((r - 0.55) / 0.25);
-    v.cell.position.y = v.cellY - off * 0.18;
-    v.cell.visible = off < 0.97;
-    // Barrel shroud kicks back, vents glow as the gun heats up.
-    for (const gun of [v.gun, this.gun3p]) {
-      gun.userData.shroud.position.z = this.recoil * 0.03;
-      gun.userData.setHeat(this.heat);
-      gun.userData.showFlash(this.flashT > 0);
+    const sway = 1 - this.ads * 0.8;
+
+    if (weapon) {
+      const v = this.views[this.held];
+      const r = weapon.reloadFrac;
+      const tilt = r < 0 ? 0 : r < 0.2 ? ease(r / 0.2) : r > 0.8 ? ease((1 - r) / 0.2) : 1;
+      const A = this.ads;
+      v.group.position.set(
+        lerp(VIEW_REST.x, v.ads.x, A) + bx - this.swayX * 0.6 * sway - this.sprintW * 0.05 - this.crouchW * 0.035 * (1 - A),
+        lerp(VIEW_REST.y, v.ads.y, A) + by + this.swayY * 0.6 * sway - tilt * 0.03 - this.sprintW * 0.05 - this.landDip * 0.05 - eq * 0.35,
+        lerp(VIEW_REST.z, v.ads.z, A) + this.recoil * 0.06 * (1 - A * 0.5) + this.sprintW * 0.03,
+      );
+      v.group.rotation.set(
+        this.recoil * 0.12 * (1 - A * 0.6) - tilt * 0.25 - this.sprintW * 0.4 + this.swayY * 1.2 * sway - eq * 0.9,
+        0.04 * (1 - A) + this.sprintW * 0.65 + this.swayX * 1.5 * sway,
+        tilt * 0.6 + this.sprintW * 0.25 + this.recoilRoll,
+      );
+      // Reload: the magazine drops out and a fresh one slides in.
+      let off = 0;
+      if (r > 0.2 && r < 0.45) off = ease((r - 0.2) / 0.25);
+      else if (r >= 0.45 && r < 0.55) off = 1;
+      else if (r >= 0.55 && r < 0.8) off = 1 - ease((r - 0.55) / 0.25);
+      const empty = weapon.stats.mag === 1 && weapon.ammo === 0 && r < 0.5;
+      v.cell.position.y = v.cellY - off * 0.18;
+      v.cell.visible = off < 0.97 && !empty;
     }
+    for (let i = 0; i < 3; i++) {
+      const wp = this.weapons[i];
+      if (!wp) continue;
+      const on = i === this.held;
+      for (const gun of [this.views[i] && this.views[i].gun, this.guns3p[i]]) {
+        if (!gun) continue;
+        const u = gun.userData;
+        u.shroud.position.z = on ? this.recoil * 0.03 : 0;
+        u.setHeat(wp.heat);
+        u.showFlash(on && wp.flashT > 0);
+        u.spin.rotation.z += wp.spin * dt * 40;
+        // The held gun's first-person cell is handled by the reload animation.
+        if (!(on && weapon && this.views[i] && gun === this.views[i].gun)) {
+          u.cell.visible = !(wp.stats.mag === 1 && wp.ammo === 0 && wp.reloadFrac < 0.5);
+        }
+        if (u.laser) u.laser.visible = on;
+      }
+    }
+    const bv = this.blockView.group;
+    const sw = Math.sin(this.swing * Math.PI);
+    bv.position.set(0.32 + bx - this.swayX * 0.6, -0.3 + by + this.swayY * 0.6 - eq * 0.3 - sw * 0.06, -0.55 - sw * 0.08);
+    bv.rotation.set(-sw * 0.6 - eq * 0.8, this.swayX * 1.5, 0);
   }
 }

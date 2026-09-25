@@ -1,7 +1,8 @@
 import { $ } from './util.js';
 import { drawBlockIcon } from './textures.js';
 import { BLOCKS } from './world.js';
-import { PLACEABLE, MAG } from './player.js';
+import { PLACEABLE } from './player.js';
+import { gunThumb } from './thumbs.js';
 
 const HEART = ['.11...11.', '1331.1221', '132212221', '122222221', '.1222221.', '..12221..', '...121...', '....1....'];
 
@@ -23,8 +24,38 @@ function heartURL(kind) {
   return c.toDataURL();
 }
 
+// Little pixel icons drawn from strings, for coins and grenades.
+function pixelIcon(rows, pal) {
+  const c = document.createElement('canvas');
+  c.width = rows[0].length;
+  c.height = rows.length;
+  const ctx = c.getContext('2d');
+  rows.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      if (!pal[ch]) return;
+      ctx.fillStyle = pal[ch];
+      ctx.fillRect(x, y, 1, 1);
+    });
+  });
+  return c.toDataURL();
+}
+
+export const COIN_ICON = pixelIcon(['..1111..', '.122221.', '12233221', '12322321', '12322321', '12233221', '.122221.', '..1111..'], {
+  1: '#5a3a08',
+  2: '#f2c230',
+  3: '#fff2a8',
+});
+const NADE_ICON = pixelIcon(['...33...', '..3..3..', '.111111.', '12222221', '14444441', '12222221', '12222221', '.111111.'], {
+  1: '#1a2012',
+  2: '#4f6136',
+  3: '#bfbfbf',
+  4: '#ff7a2f',
+});
+
 export class Hud {
-  constructor(atlas) {
+  constructor(game) {
+    this.game = game;
+    const atlas = game.atlas;
     this.root = $('#hud');
     this.hearts = [];
     this.heartImg = { full: heartURL('full'), half: heartURL('half'), empty: heartURL('empty') };
@@ -40,47 +71,62 @@ export class Hud {
     hearts.setAttribute('role', 'img');
     this.heartsEl = hearts;
 
+    // Hotbar: three gun slots, then four block slots.
     const bar = $('#hotbar');
-    this.slots = PLACEABLE.map((id, i) => {
+    this.slots = [];
+    for (let i = 0; i < 7; i++) {
       const slot = document.createElement('div');
-      slot.className = 'slot';
+      slot.className = i < 3 ? 'slot gun-slot' : 'slot';
       const key = document.createElement('span');
       key.className = 'key';
       key.textContent = String(i + 1);
       const icon = document.createElement('canvas');
-      icon.width = icon.height = 64;
-      drawBlockIcon(icon, atlas.tiles, BLOCKS[id].top, BLOCKS[id].side);
-      icon.title = BLOCKS[id].name;
       const count = document.createElement('span');
       count.className = 'count';
+      if (i < 3) {
+        icon.width = 160;
+        icon.height = 80;
+      } else {
+        const id = PLACEABLE[i - 3];
+        icon.width = icon.height = 64;
+        drawBlockIcon(icon, atlas.tiles, BLOCKS[id].top, BLOCKS[id].side);
+        icon.title = BLOCKS[id].name;
+      }
       slot.append(key, icon, count);
       bar.appendChild(slot);
-      return { slot, count };
-    });
+      this.slots.push({ slot, icon, count, code: null });
+    }
     this.slotName = $('#slot-name');
 
-    const pips = $('#ammo-pips');
-    this.pips = [];
-    for (let i = 0; i < MAG; i++) {
-      const pip = document.createElement('i');
-      pips.appendChild(pip);
-      this.pips.push(pip);
-    }
     this.ammoEl = $('#ammo');
     this.ammoCur = $('#ammo-cur');
+    this.ammoMax = $('#ammo-max');
+    this.ammoFill = $('#ammo-fill');
     this.ammoStatus = $('#ammo-status');
+    this.nadeEl = $('#nades');
+    $('#nade-icon').src = NADE_ICON;
+    $('#coin-icon').src = COIN_ICON;
+    this.coinEl = $('#hud-coins');
+    this.coinBox = $('#coin-box');
     this.waveEl = $('#hud-wave');
     this.leftEl = $('#hud-left');
     this.scoreEl = $('#hud-score');
+    this.bossEl = $('#boss');
+    this.bossName = $('#boss-name');
+    this.bossFill = $('#boss-fill');
+    this.scopeEl = $('#scope');
+    this.crossEl = $('#crosshair');
     this.banner = $('#banner');
     this.bannerTitle = $('#banner-title');
     this.bannerSub = $('#banner-sub');
+    this.toastEl = $('#toast');
     this.hitEl = $('#hitmarker');
     this.popups = $('#popups');
     this.vignette = $('#vignette');
     this.lowEl = $('#lowhp');
     this.cache = {};
     this.bannerT = 0;
+    this.toastT = 0;
     this.hitT = 0;
     this.vigT = 0;
   }
@@ -110,34 +156,102 @@ export class Hud {
     this.lowEl.classList.toggle('on', hp > 0 && hp <= 6);
   }
 
-  setAmmo(ammo, reloadFrac) {
-    const reloading = reloadFrac > 0;
-    if (this.changed('ammo', ammo)) {
-      this.ammoCur.textContent = String(ammo);
-      this.pips.forEach((pip, i) => pip.classList.toggle('spent', i >= ammo));
+  // Everything about what you are holding: hotbar, ammo, blocks, grenades.
+  setPlayer(p) {
+    const renderer = this.game.renderer;
+    for (let i = 0; i < 3; i++) {
+      const w = p.weapons[i];
+      const s = this.slots[i];
+      const code = w ? w.id + '|' + w.code : '';
+      if (s.code === code) continue;
+      s.code = code;
+      const ctx = s.icon.getContext('2d');
+      ctx.clearRect(0, 0, s.icon.width, s.icon.height);
+      s.slot.classList.toggle('none', !w);
+      s.icon.title = w ? w.def.name : 'Empty. Add a gun in the Armory.';
+      if (w) ctx.drawImage(gunThumb(renderer, w.id, w.build), 0, 0, s.icon.width, s.icon.height);
     }
-    if (this.changed('reloading', reloading)) {
-      this.ammoEl.classList.toggle('reloading', reloading);
-      this.ammoStatus.textContent = reloading ? 'Reloading' : 'R to reload';
+    if (this.changed('held', p.held)) {
+      this.slots.forEach((s, i) => s.slot.classList.toggle('sel', i === p.held));
     }
-  }
+    const w = p.weapon;
+    const name = w ? w.def.name : BLOCKS[PLACEABLE[p.held - 3]].name;
+    if (this.changed('name', name)) this.slotName.textContent = name;
+    if (this.changed('blocks', p.blocks)) for (let i = 3; i < 7; i++) this.slots[i].count.textContent = String(p.blocks);
+    for (let i = 0; i < 3; i++) {
+      const wp = p.weapons[i];
+      const text = wp ? String(wp.ammo) : '';
+      if (this.changed('slotAmmo' + i, text)) this.slots[i].count.textContent = text;
+    }
+    if (this.changed('nades', p.grenades)) {
+      this.nadeEl.textContent = `×${p.grenades}`;
+      this.nadeEl.parentElement.classList.toggle('out', p.grenades === 0);
+    }
 
-  setBlocks(count, slot) {
-    if (this.changed('slot', slot)) {
-      this.slots.forEach((s, i) => s.slot.classList.toggle('sel', i === slot));
-      this.slotName.textContent = BLOCKS[PLACEABLE[slot]].name;
+    const reloading = !!w && w.reloadT > 0;
+    let cur;
+    let max;
+    let fill;
+    let status;
+    if (w) {
+      cur = String(w.ammo);
+      max = `/${w.stats.mag}`;
+      fill = reloading ? w.reloadFrac : w.ammo / w.stats.mag;
+      status = reloading ? 'Reloading' : w.stats.proj === 'block' ? `Uses blocks: ${p.blocks} left` : 'R to reload';
+    } else {
+      cur = String(p.blocks);
+      max = ' blocks';
+      fill = p.blocks / 99;
+      status = 'Right click place · Left click mine';
     }
-    if (this.changed('blocks', count)) {
-      this.slots.forEach((s) => (s.count.textContent = String(count)));
+    if (this.changed('ammoCur', cur)) this.ammoCur.textContent = cur;
+    if (this.changed('ammoMax', max)) this.ammoMax.textContent = max;
+    const f = Math.round(Math.max(0, Math.min(1, fill)) * 100);
+    if (this.changed('ammoFill', f)) this.ammoFill.style.width = `${f}%`;
+    if (this.changed('ammoStatus', status)) this.ammoStatus.textContent = status;
+    if (this.changed('reloading', reloading)) this.ammoEl.classList.toggle('reloading', reloading);
+    if (this.changed('blockMode', !w)) this.ammoEl.classList.toggle('blocks', !w);
+
+    const scoped = p.scoped();
+    if (this.changed('scope', scoped)) {
+      this.scopeEl.hidden = !scoped;
+      this.root.classList.toggle('scoped', scoped);
     }
+    // The crosshair opens up as your aim gets shakier.
+    const gap = w ? Math.round(Math.min(40, 3 + p.spreadFor(w) * 900)) : 3;
+    if (this.changed('gap', gap)) this.crossEl.style.setProperty('--gap', `${gap}px`);
+    const aimed = w ? Math.round((1 - p.ads) * 10) / 10 : 1;
+    if (this.changed('aimed', aimed)) this.crossEl.style.opacity = String(aimed);
   }
 
   flashBlocks() {
-    this.slots.forEach((s) => {
-      s.slot.classList.remove('empty-flash');
-      void s.slot.offsetWidth;
-      s.slot.classList.add('empty-flash');
-    });
+    for (let i = 3; i < 7; i++) {
+      const s = this.slots[i].slot;
+      s.classList.remove('empty-flash');
+      void s.offsetWidth;
+      s.classList.add('empty-flash');
+    }
+  }
+
+  setCoins(n) {
+    if (!this.changed('coins', n)) return;
+    const before = this.cache.coinsShown;
+    this.coinEl.textContent = n.toLocaleString('en-US');
+    if (before !== undefined && n > before) {
+      this.coinBox.classList.remove('bump');
+      void this.coinBox.offsetWidth;
+      this.coinBox.classList.add('bump');
+    }
+    this.cache.coinsShown = n;
+  }
+
+  setBoss(name, frac) {
+    const on = frac !== null && frac !== undefined;
+    if (this.changed('bossOn', on)) this.bossEl.hidden = !on;
+    if (!on) return;
+    if (this.changed('bossName', name)) this.bossName.textContent = name;
+    const f = Math.round(Math.max(0, frac) * 1000) / 10;
+    if (this.changed('bossFill', f)) this.bossFill.style.width = `${f}%`;
   }
 
   setWave(wave, left) {
@@ -175,14 +289,34 @@ export class Hud {
     this.bannerT = time;
   }
 
+  // A card on the right for crate rewards and purchases.
+  toast(label, title, sub, color) {
+    const el = this.toastEl;
+    el.querySelector('.toast-label').textContent = label;
+    el.querySelector('.toast-title').textContent = title;
+    el.querySelector('.toast-sub').textContent = sub || '';
+    el.style.setProperty('--rarity', color || 'var(--gold)');
+    el.hidden = false;
+    el.classList.remove('in');
+    void el.offsetWidth;
+    el.classList.add('in');
+    this.toastT = 4;
+  }
+
   damage() {
     this.vignette.classList.add('on');
     this.vigT = 0.12;
   }
 
   reset() {
-    this.cache = {};
+    const keep = this.cache.coinsShown;
+    this.cache = { coinsShown: keep };
+    for (const s of this.slots) s.code = null;
     this.banner.hidden = true;
+    this.toastEl.hidden = true;
+    this.bossEl.hidden = true;
+    this.scopeEl.hidden = true;
+    this.root.classList.remove('scoped');
     this.popups.textContent = '';
     this.vignette.classList.remove('on');
   }
@@ -199,6 +333,10 @@ export class Hud {
     if (this.bannerT > 0) {
       this.bannerT -= dt;
       if (this.bannerT <= 0) this.banner.hidden = true;
+    }
+    if (this.toastT > 0) {
+      this.toastT -= dt;
+      if (this.toastT <= 0) this.toastEl.hidden = true;
     }
   }
 }

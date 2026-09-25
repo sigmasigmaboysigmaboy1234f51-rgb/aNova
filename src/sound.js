@@ -95,12 +95,179 @@ export class Sound {
     this.tone({ f0: 1300, dur: 0.02, vol: 0.07 });
   }
 
-  reload() {
+  // Clicks timed to the reload animation: cell out, cell in.
+  reload(dur = 1.1) {
     if (!this.ready('reload')) return;
-    this.noise({ dur: 0.04, vol: 0.2, type: 'highpass', f0: 3000 });
-    this.tone({ type: 'triangle', f0: 240, f1: 180, dur: 0.06, vol: 0.12, delay: 0.05 });
-    this.noise({ dur: 0.05, vol: 0.25, type: 'bandpass', f0: 1800, q: 2, delay: 0.85 });
-    this.tone({ f0: 180, f1: 320, dur: 0.07, vol: 0.12, delay: 0.88 });
+    const k = dur / 1.1;
+    this.noise({ dur: 0.04, vol: 0.2, type: 'highpass', f0: 3000, delay: 0.2 * k });
+    this.tone({ type: 'triangle', f0: 240, f1: 180, dur: 0.06, vol: 0.12, delay: 0.25 * k });
+    this.noise({ dur: 0.05, vol: 0.25, type: 'bandpass', f0: 1800, q: 2, delay: 0.8 * k });
+    this.tone({ f0: 180, f1: 320, dur: 0.07, vol: 0.12, delay: 0.83 * k });
+  }
+
+  // Every gun frame has its own voice.
+  gunshot(frame, quiet = false, vol = 1) {
+    if (!this.ready('gun-' + frame, 30) || vol <= 0.03) return;
+    const v = vol * (quiet ? 0.35 : 1);
+    const lp = quiet ? 0.45 : 1;
+    switch (frame) {
+      case 'pistol':
+        this.noise({ dur: 0.07, vol: 0.4 * v, type: 'bandpass', f0: 3200 * lp, f1: 700, q: 0.9 });
+        this.tone({ f0: 620, f1: 110, dur: 0.07, vol: 0.12 * v });
+        this.tone({ type: 'sine', f0: 170, f1: 60, dur: 0.1, vol: 0.25 * v });
+        break;
+      case 'smg':
+        this.noise({ dur: 0.05, vol: 0.32 * v, type: 'bandpass', f0: 3600 * lp, f1: 900, q: 1 });
+        this.tone({ f0: 520, f1: 140, dur: 0.05, vol: 0.09 * v });
+        break;
+      case 'shotgun':
+        this.noise({ dur: 0.28, vol: 0.6 * v, type: 'lowpass', f0: 4200 * lp, f1: 300 });
+        this.tone({ type: 'sine', f0: 110, f1: 38, dur: 0.25, vol: 0.4 * v });
+        this.noise({ dur: 0.05, vol: 0.2 * v, type: 'bandpass', f0: 1500, q: 2, delay: 0.42 });
+        this.noise({ dur: 0.05, vol: 0.2 * v, type: 'bandpass', f0: 1100, q: 2, delay: 0.52 });
+        break;
+      case 'sniper':
+        this.noise({ dur: 0.35, vol: 0.55 * v, type: 'bandpass', f0: 5000 * lp, f1: 400, q: 0.7 });
+        this.tone({ type: 'sawtooth', f0: 1800, f1: 90, dur: 0.3, vol: 0.12 * v });
+        this.tone({ type: 'sine', f0: 90, f1: 35, dur: 0.4, vol: 0.4 * v });
+        break;
+      case 'crossbow':
+        this.tone({ type: 'triangle', f0: 260, f1: 120, dur: 0.12, vol: 0.25 * vol });
+        this.noise({ dur: 0.08, vol: 0.2 * vol, type: 'highpass', f0: 2500 });
+        break;
+      case 'revolver':
+        this.noise({ dur: 0.18, vol: 0.55 * v, type: 'bandpass', f0: 2400 * lp, f1: 350, q: 0.7 });
+        this.tone({ type: 'sine', f0: 140, f1: 40, dur: 0.22, vol: 0.38 * v });
+        this.tone({ type: 'triangle', f0: 1500, dur: 0.02, vol: 0.05 * v, delay: 0.2 });
+        break;
+      case 'tesla':
+        this.zap(v);
+        break;
+      case 'launcher':
+        this.tone({ type: 'sine', f0: 180, f1: 60, dur: 0.18, vol: 0.4 * v });
+        this.noise({ dur: 0.14, vol: 0.3 * v, type: 'lowpass', f0: 900, f1: 200 });
+        break;
+      case 'minigun':
+        this.noise({ dur: 0.04, vol: 0.28 * v, type: 'bandpass', f0: 2800 * lp, f1: 900, q: 1.2 });
+        this.tone({ type: 'sine', f0: 140, f1: 70, dur: 0.05, vol: 0.14 * v });
+        break;
+      case 'builder':
+        this.tone({ type: 'sine', f0: 320, f1: 150, dur: 0.1, vol: 0.28 * vol });
+        this.noise({ dur: 0.06, vol: 0.16 * vol, type: 'lowpass', f0: 1200 });
+        break;
+      default:
+        this.noise({ dur: 0.09, vol: 0.45 * v, type: 'bandpass', f0: 2600 * lp, f1: 500, q: 0.8 });
+        this.tone({ f0: 440, f1: 70, dur: 0.1, vol: 0.14 * v });
+        this.tone({ type: 'sine', f0: 130, f1: 45, dur: 0.13, vol: 0.32 * v });
+    }
+  }
+
+  zap(vol = 1) {
+    if (!this.ready('zap', 40) || vol <= 0.03) return;
+    this.tone({ type: 'sawtooth', f0: 1800, f1: 200, dur: 0.18, vol: 0.12 * vol });
+    this.noise({ dur: 0.16, vol: 0.3 * vol, type: 'highpass', f0: 3000, f1: 1200 });
+    this.tone({ type: 'square', f0: 90, f1: 60, dur: 0.12, vol: 0.08 * vol, delay: 0.02 });
+  }
+
+  // A steady hum while a beam gun is firing.
+  beam(on) {
+    if (!this.ctx) return;
+    if (on && !this.beamNode && !this.muted) {
+      const c = this.ctx;
+      const o = c.createOscillator();
+      const o2 = c.createOscillator();
+      const g = c.createGain();
+      o.type = 'sawtooth';
+      o.frequency.value = 220;
+      o2.type = 'square';
+      o2.frequency.value = 331;
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 1400;
+      g.gain.setValueAtTime(0.0001, c.currentTime);
+      g.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.05);
+      o.connect(f);
+      o2.connect(f);
+      f.connect(g).connect(this.master);
+      o.start();
+      o2.start();
+      this.beamNode = { o, o2, g };
+    } else if (on && this.beamNode) {
+      this.beamNode.o.frequency.value = 210 + Math.random() * 25;
+    } else if (!on && this.beamNode) {
+      const { o, o2, g } = this.beamNode;
+      const t = this.ctx.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(0.0001, t + 0.06);
+      o.stop(t + 0.08);
+      o2.stop(t + 0.08);
+      this.beamNode = null;
+    }
+  }
+
+  spin(level) {
+    if (!this.ready('spin', 70) || level >= 1) return;
+    this.tone({ type: 'triangle', f0: 120 + level * 500, f1: 140 + level * 560, dur: 0.07, vol: 0.06 });
+  }
+
+  throw() {
+    if (!this.ready('throw', 80)) return;
+    this.noise({ dur: 0.14, vol: 0.14, type: 'bandpass', f0: 600, f1: 1800, q: 1.2 });
+  }
+
+  bounce() {
+    if (!this.ready('bounce', 90)) return;
+    this.tone({ type: 'triangle', f0: 700, f1: 520, dur: 0.05, vol: 0.12 });
+  }
+
+  explosion(vol = 1, small = false) {
+    if (!this.ready(small ? 'pop' : 'boom', small ? 40 : 60) || vol <= 0.03) return;
+    if (small) {
+      this.noise({ dur: 0.2, vol: 0.3 * vol, type: 'lowpass', f0: 1800, f1: 200 });
+      this.tone({ type: 'sine', f0: 140, f1: 50, dur: 0.15, vol: 0.2 * vol });
+      return;
+    }
+    this.noise({ dur: 0.9, vol: 0.7 * vol, type: 'lowpass', f0: 2400, f1: 80 });
+    this.tone({ type: 'sine', f0: 80, f1: 28, dur: 0.8, vol: 0.55 * vol });
+    this.noise({ dur: 0.4, vol: 0.25 * vol, type: 'bandpass', f0: 600, f1: 150, q: 0.8, delay: 0.1 });
+  }
+
+  equip() {
+    if (!this.ready('equip', 60)) return;
+    this.noise({ dur: 0.04, vol: 0.14, type: 'bandpass', f0: 2400, q: 2 });
+    this.tone({ type: 'triangle', f0: 300, f1: 420, dur: 0.05, vol: 0.08, delay: 0.04 });
+  }
+
+  coin() {
+    if (!this.ready('coin', 45)) return;
+    const f = 1320 + Math.random() * 120;
+    this.tone({ type: 'square', f0: f, dur: 0.05, vol: 0.06 });
+    this.tone({ type: 'square', f0: f * 1.5, dur: 0.12, vol: 0.06, delay: 0.05 });
+  }
+
+  buy() {
+    if (!this.ready('buy', 80)) return;
+    [784, 988, 1175, 1568].forEach((f, i) => this.tone({ type: 'square', f0: f, dur: 0.07, vol: 0.06, delay: i * 0.05 }));
+  }
+
+  crate() {
+    if (!this.ready('crate', 200)) return;
+    this.noise({ dur: 0.15, vol: 0.3, type: 'lowpass', f0: 900 });
+    [523, 784, 1046, 1318, 1568].forEach((f, i) => this.tone({ type: 'triangle', f0: f, dur: 0.14, vol: 0.12, delay: 0.1 + i * 0.07 }));
+  }
+
+  landThud(vol = 1) {
+    if (!this.ready('thud', 80) || vol <= 0.03) return;
+    this.tone({ type: 'sine', f0: 120, f1: 40, dur: 0.25, vol: 0.4 * vol });
+    this.noise({ dur: 0.2, vol: 0.3 * vol, type: 'lowpass', f0: 600, f1: 120 });
+  }
+
+  roar(vol = 1) {
+    if (!this.ready('roar', 500) || vol <= 0.03) return;
+    this.tone({ type: 'sawtooth', f0: 90, f1: 55, dur: 1.1, vol: 0.18 * vol, attack: 0.1 });
+    this.tone({ type: 'sawtooth', f0: 137, f1: 80, dur: 1.0, vol: 0.1 * vol, attack: 0.15 });
+    this.noise({ dur: 0.9, vol: 0.2 * vol, type: 'lowpass', f0: 500, f1: 200 });
   }
 
   hit() {

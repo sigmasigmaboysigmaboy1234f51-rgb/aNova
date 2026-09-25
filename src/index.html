@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<!-- Blockfire. Copyright (c) 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved. -->
 <title>Blockfire</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -10,7 +11,8 @@
 <canvas id="game" aria-label="Blockfire game view"></canvas>
 
 <div id="hud" hidden>
-  <div id="crosshair" aria-hidden="true"></div>
+  <div id="scope" class="scope" hidden aria-hidden="true"><div class="scope-glass"><i></i><i></i></div></div>
+  <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
   <div id="hitmarker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="popups" aria-live="polite"></div>
   <div class="hud-top">
@@ -18,25 +20,36 @@
       <div id="hud-wave" class="hud-wave">Get ready</div>
       <div id="hud-left" class="hud-left">Next wave soon</div>
     </div>
+    <div id="boss" class="boss" hidden>
+      <div id="boss-name" class="boss-name"></div>
+      <div class="boss-bar"><div id="boss-fill" class="boss-fill"></div></div>
+    </div>
     <div class="score-box">
       <div class="hud-label">Score</div>
       <div id="hud-score" class="hud-score">0</div>
+      <div id="coin-box" class="coin-box"><img id="coin-icon" alt="Coins"><span id="hud-coins">0</span></div>
     </div>
   </div>
   <div id="banner" class="banner" hidden>
     <div id="banner-title" class="banner-title"></div>
     <div id="banner-sub" class="banner-sub"></div>
   </div>
+  <div id="toast" class="toast panel" hidden role="status">
+    <div class="toast-label"></div>
+    <div class="toast-title"></div>
+    <div class="toast-sub"></div>
+  </div>
   <div class="hud-bottom">
     <div class="hud-stack">
       <div id="hearts" class="hearts"></div>
       <div id="hotbar" class="hotbar"></div>
-      <div id="slot-name" class="slot-name">Cobblestone</div>
+      <div id="slot-name" class="slot-name">Ember Blaster</div>
     </div>
     <div id="ammo" class="ammo">
-      <div class="ammo-num"><span id="ammo-cur">16</span><span class="ammo-max">/16</span></div>
-      <div id="ammo-pips" class="ammo-pips" aria-hidden="true"></div>
+      <div class="ammo-num"><span id="ammo-cur">16</span><span id="ammo-max" class="ammo-max">/16</span></div>
+      <div class="ammo-bar" aria-hidden="true"><div id="ammo-fill" class="ammo-fill"></div></div>
       <div id="ammo-status" class="ammo-status">R to reload</div>
+      <div class="nade-row"><img id="nade-icon" alt="Grenades"><span id="nades">×2</span><kbd>G</kbd></div>
     </div>
   </div>
   <div id="chat" class="chat">
@@ -66,6 +79,7 @@
       <div class="menu-buttons">
         <button id="btn-play" class="btn btn-go" type="button">Single player</button>
         <button id="btn-mp" class="btn" type="button">Multiplayer</button>
+        <button id="btn-armory" class="btn btn-gold" type="button">Armory</button>
         <button id="btn-skin" class="btn" type="button">Edit skin</button>
         <div class="btn-row">
           <button id="btn-sound" class="btn btn-quiet" type="button" aria-pressed="true">Sound: on</button>
@@ -81,10 +95,15 @@
         <dt><kbd>Space</kbd></dt><dd>Jump</dd>
         <dt><kbd>Shift</kbd></dt><dd>Crouch. You won't fall off edges</dd>
         <dt><kbd>W</kbd><kbd>W</kbd> <span class="app-only">or <kbd>Ctrl</kbd></span></dt><dd>Sprint (double-tap W)</dd>
-        <dt><kbd>Left click</kbd></dt><dd>Shoot. Shots break blocks too</dd>
-        <dt><kbd>Right click</kbd></dt><dd>Place a block</dd>
-        <dt><kbd>1</kbd>–<kbd>4</kbd> or scroll</dt><dd>Pick block type</dd>
+        <dt><kbd>Left click</kbd></dt><dd>Shoot, or mine with a block in hand</dd>
+        <dt><kbd>Right click</kbd></dt><dd>Aim down sights, or place a block</dd>
+        <dt><kbd>1</kbd>–<kbd>3</kbd></dt><dd>Your three guns</dd>
+        <dt><kbd>4</kbd>–<kbd>7</kbd></dt><dd>Blocks. Scroll to cycle everything</dd>
+        <dt><kbd>Q</kbd></dt><dd>Swap to the last thing you held</dd>
+        <dt><kbd>F</kbd></dt><dd>Place a block without switching</dd>
+        <dt><kbd>G</kbd></dt><dd>Throw a grenade</dd>
         <dt><kbd>R</kbd></dt><dd>Reload</dd>
+        <dt><kbd>B</kbd></dt><dd>Armory: guns and parts</dd>
         <dt><kbd>V</kbd> or <kbd>F5</kbd></dt><dd>Third person</dd>
         <dt><kbd>T</kbd> / <kbd>Tab</kbd></dt><dd>Chat / player list (multiplayer)</dd>
         <dt><kbd>Esc</kbd></dt><dd>Pause</dd>
@@ -92,6 +111,7 @@
       </details>
       <label class="slider" for="sens"><span>Mouse speed</span><input id="sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
     </div>
+    <p class="copyright">© 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved. Blockfire and everything in it may not be copied or re-uploaded without permission.</p>
   </div>
   <div class="menu-char">
     <div id="menu-preview" class="preview-slot"></div>
@@ -187,6 +207,44 @@
   </div>
 </section>
 
+<section id="armory" class="screen armory" hidden aria-label="Armory">
+  <header class="arm-head">
+    <h2 class="arm-title">Armory</h2>
+    <div class="arm-wallet"><img id="arm-coin-icon" alt="Coins"><span id="arm-coins">0</span></div>
+    <p id="arm-msg" class="arm-msg" role="status"></p>
+    <button id="arm-done" class="btn btn-go" type="button">Done</button>
+  </header>
+  <div class="arm-body">
+    <div class="arm-col arm-left panel">
+      <h3>Guns</h3>
+      <div id="arm-guns" class="arm-guns"></div>
+      <h3>You carry</h3>
+      <div id="arm-loadout" class="arm-loadout"></div>
+    </div>
+    <div class="arm-col arm-mid">
+      <div id="arm-stage" class="arm-stage">
+        <p class="arm-hint">Drag to spin</p>
+      </div>
+      <div class="panel arm-info">
+        <div class="arm-name-row"><h3 id="arm-name" class="arm-name"></h3><span id="arm-kind" class="arm-kind"></span></div>
+        <p id="arm-desc" class="arm-desc"></p>
+        <button id="arm-buy" class="btn btn-go" type="button">Buy</button>
+        <div id="arm-carry" class="arm-carry">
+          <button class="btn btn-small" type="button" data-slot="0">Carry in slot 1</button>
+          <button class="btn btn-small" type="button" data-slot="1">Carry in slot 2</button>
+          <button class="btn btn-small" type="button" data-slot="2">Carry in slot 3</button>
+        </div>
+        <div id="arm-stats" class="arm-stats"></div>
+      </div>
+    </div>
+    <div class="arm-col arm-right panel">
+      <h3>Parts</h3>
+      <div id="arm-slots" class="seg arm-slots" role="group" aria-label="Part slot"></div>
+      <div id="arm-parts" class="arm-parts"></div>
+    </div>
+  </div>
+</section>
+
 <section id="pause" class="screen overlay" hidden aria-label="Paused">
   <div class="panel overlay-panel">
     <h2 class="overlay-title">Paused</h2>
@@ -194,6 +252,7 @@
     <p id="pause-mp" class="pause-mp" hidden></p>
     <div class="menu-buttons">
       <button id="btn-resume" class="btn btn-go" type="button">Resume</button>
+      <button id="btn-pause-armory" class="btn btn-gold" type="button">Armory <kbd>B</kbd></button>
       <button id="btn-pause-skin" class="btn" type="button">Edit skin</button>
       <button id="btn-quit" class="btn" type="button">Quit to title</button>
     </div>
@@ -210,6 +269,7 @@
       <div><dt>Mobs</dt><dd id="go-kills">0</dd></div>
       <div><dt>Headshots</dt><dd id="go-heads">0</dd></div>
       <div><dt>Blocks placed</dt><dd id="go-placed">0</dd></div>
+      <div><dt>Coins earned</dt><dd id="go-coins">0</dd></div>
     </dl>
     <p id="go-best" class="best"></p>
     <div class="menu-buttons">

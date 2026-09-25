@@ -118,13 +118,11 @@ export function buildGloop(texture) {
   };
 }
 
-import { buildBlaster } from './gun.js';
+import { buildGun } from './gun.js';
 
-export { buildBlaster };
-
-// Puts a blaster in a humanoid's right hand, grip in the palm.
-export function holdBlaster(model) {
-  const gun = buildBlaster();
+// Puts a gun in a humanoid's right hand, grip in the palm.
+export function holdGun(model, gunId, build) {
+  const gun = buildGun(gunId, build);
   gun.scale.setScalar(0.85);
   gun.rotation.set(-Math.PI / 2, 0, Math.PI);
   gun.position.set(0, -11.7 * PX, 1.7 * PX);

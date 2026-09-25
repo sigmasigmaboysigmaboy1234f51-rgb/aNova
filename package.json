@@ -1,11 +1,11 @@
 {
   "name": "blockfire",
   "productName": "Blockfire",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "A blocky voxel shooter with multiplayer and a Minecraft-format skin editor.",
-  "author": "Blockfire",
-  "license": "MIT",
+  "author": "sigmasigmaboysigmaboy1234f51-rgb",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -27,13 +27,15 @@
   "build": {
     "appId": "io.github.blockfire.game",
     "productName": "Blockfire",
-    "copyright": "Blockfire",
+    "copyright": "Copyright © 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved.",
     "files": [
       "index.html",
       "desktop/**",
       "server/**",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
     ],
     "directories": {
       "output": "dist",

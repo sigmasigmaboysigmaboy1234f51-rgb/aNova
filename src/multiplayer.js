@@ -14,6 +14,7 @@ export const DEATH_VERBS = {
   moss: 'was clobbered by a Mosshead',
   bone: 'was shot by a Bonehead',
   gloop: 'was flattened by a Gloop',
+  self: 'blew themselves up',
 };
 
 export class Multiplayer {
@@ -119,12 +120,14 @@ export class Multiplayer {
       block: (m) => g.world.set(m.x, m.y, m.z, m.b, true),
       shot: (m) => {
         const r = this.remotes.get(m.id);
-        const a = vec(m.a);
-        const b = vec(m.b);
-        if (r) r.onShot(a, b);
-        const d = a.distanceTo(g.player.pos);
-        if (d < 45) g.sound.remoteShot(1 - d / 45);
+        if (!r || !Array.isArray(m.e)) return;
+        r.onShot(vec(m.a), m.e.slice(0, 16).map(vec), m);
       },
+      proj: (m) => {
+        g.combat.spawn(m.k, vec(m.o), vec(m.v), { block: m.b });
+        if (m.k === 'nade') g.sound.throw();
+      },
+      boom: (m) => g.combat.explode(vec(m.p), Math.min(8, Number(m.r) || 3), 0, { small: !!m.s }),
       chat: (m) => this.line(m.name, m.text),
       died: (m) => this.system(`${m.name} ${DEATH_VERBS[m.by] || 'was cubed'}`),
       mobs: (m) => {
@@ -134,7 +137,7 @@ export class Multiplayer {
         if (!this.isHost) g.mobs.spawnBolt(vec(m.o), vec(m.v), m.m, true);
       },
       pickupAdd: (m) => {
-        if (!this.isHost) g.mobs.spawnPickup(m.kind, m.p[0], m.p[1], m.p[2], m.k);
+        if (!this.isHost) g.mobs.spawnPickup(m.kind, m.p[0], m.p[1], m.p[2], m.k, m.v | 0);
       },
       pickupGone: (m) => g.mobs.removePickup(m.k),
       pickup: (m) => {
@@ -143,7 +146,8 @@ export class Multiplayer {
       hitMob: (m) => {
         if (!this.isHost) return;
         const mob = g.mobs.list.find((x) => x.id === m.m && !x.remote);
-        if (mob) mob.damage(m.d, { x: m.dir[0], y: 0, z: m.dir[1] }, !!m.h, null, m.from);
+        const fx = m.fx ? { burn: Number(m.fx[0]) || 0, slow: Math.min(0.8, Number(m.fx[1]) || 0) } : null;
+        if (mob) mob.damage(m.d, { x: m.dir[0], y: 0, z: m.dir[1] }, !!m.h, null, m.from, fx);
       },
       wave: (m) => {
         if (!this.isHost) this.applyWave(m);
@@ -177,12 +181,33 @@ export class Multiplayer {
 
   // --- Sending ---------------------------------------------------------
 
-  sendShot(from, to) {
-    this.net.send({ t: 'shot', a: [r2(from.x), r2(from.y), r2(from.z)], b: [r2(to.x), r2(to.y), r2(to.z)] });
+  // One trigger pull: where it came from, where every pellet ended, and
+  // how to draw it.
+  sendShot(from, ends, o) {
+    this.net.send({
+      t: 'shot',
+      a: [r2(from.x), r2(from.y), r2(from.z)],
+      e: ends.map((e) => [r2(e.x), r2(e.y), r2(e.z)]),
+      g: o.gun,
+      c: o.color,
+      q: o.quiet ? 1 : 0,
+      z: o.zap ? 1 : 0,
+      bm: o.beam ? 1 : 0,
+    });
   }
 
-  sendHitMob(mob, amount, head, dir) {
-    this.net.send({ t: 'hitMob', m: mob.id, d: amount, h: head ? 1 : 0, dir: [r2(dir.x), r2(dir.z)] });
+  sendProj(kind, o, v, block) {
+    this.net.send({ t: 'proj', k: kind, o: [r2(o.x), r2(o.y), r2(o.z)], v: [r2(v.x), r2(v.y), r2(v.z)], b: block || 0 });
+  }
+
+  sendBoom(at, r, small) {
+    this.net.send({ t: 'boom', p: [r2(at.x), r2(at.y), r2(at.z)], r: r2(r), s: small ? 1 : 0 });
+  }
+
+  sendHitMob(mob, amount, head, dir, fx) {
+    const msg = { t: 'hitMob', m: mob.id, d: amount, h: head ? 1 : 0, dir: [r2(dir.x), r2(dir.z)] };
+    if (fx && (fx.burn || fx.slow)) msg.fx = [r2(fx.burn || 0), r2(fx.slow || 0)];
+    this.net.send(msg);
   }
 
   sendBolt(o, v, mobId) {
@@ -199,7 +224,7 @@ export class Multiplayer {
   }
 
   pickupAdded(pk) {
-    if (this.isHost) this.net.send({ t: 'pickupAdd', k: pk.id, kind: pk.kind, p: [r2(pk.x), r2(pk.y - 0.45), r2(pk.z)] });
+    if (this.isHost) this.net.send({ t: 'pickupAdd', k: pk.id, kind: pk.kind, p: [r2(pk.x), r2(pk.base), r2(pk.z)], v: pk.value || 0 });
   }
 
   pickupTaken(id) {
@@ -240,14 +265,19 @@ export class Multiplayer {
         (p.dead ? F.dead : 0) |
         (p.hurtT > 0 ? F.hurt : 0) |
         (p.inWater ? F.water : 0);
+      const w = p.weapon;
       this.net.send({
         t: 'state',
         p: [r3(p.pos.x), r3(p.pos.y), r3(p.pos.z)],
         y: r3(p.yaw),
         pi: r3(p.pitch + p.kick),
         f,
-        a: p.sinceShot < 1.4 || p.reloadT > 0 ? 1 : 0,
-        r: r2(p.reloadFrac),
+        a: w && (p.sinceShot < 1.4 || w.reloadT > 0 || p.ads > 0.3) ? 1 : 0,
+        r: w ? r2(w.reloadFrac) : -1,
+        w: w ? w.id : '',
+        wb: w ? w.code : '',
+        bk: w ? 0 : p.blockType(),
+        sw: p.swing > 0 ? 1 : 0,
         sc: g.stats.score,
         k: g.stats.kills,
       });

@@ -1,6 +1,6 @@
 // Talks to a Blockfire server (server/server.cjs) over a WebSocket.
 
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 export const DEFAULT_PORT = 25580;
 
 // Accepts "192.168.1.5", "192.168.1.5:25580", "myserver.net" or a full

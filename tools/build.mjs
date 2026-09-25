@@ -6,6 +6,7 @@
 import { build } from 'esbuild';
 import { readFile, writeFile } from 'node:fs/promises';
 
+const NOTICE = 'Blockfire. Copyright (c) 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved. Copying or re-uploading without permission is not allowed.';
 const args = process.argv.slice(2);
 const artifactAt = args.indexOf('--artifact');
 const artifactOut = artifactAt >= 0 ? args[artifactAt + 1] : null;
@@ -17,6 +18,7 @@ const result = await build({
   minify: true,
   target: 'es2020',
   legalComments: 'eof',
+  banner: { js: `/*! ${NOTICE} */` },
   write: false,
 });
 const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');

@@ -7,6 +7,7 @@ import { SX, SZ, SEA, B, BLOCKS } from './world.js';
 import { TILE_UV, T } from './textures.js';
 import { Rig, poseMoss, poseBone, ease } from './anim.js';
 import { wrapAngle, clamp } from './util.js';
+import { MAX_NADES } from './player.js';
 
 export const MOB_TYPES = {
   moss: {
@@ -63,6 +64,11 @@ const ATTACK_TIME = 0.5;
 const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
 const BOLT_COLORS = [new THREE.Color('#bff3ff'), new THREE.Color('#6fd6f0')];
+const FIRE_COLORS = ['#fff2b0', '#ffd36b', '#ff9a3c', '#ff6a20'].map((c) => new THREE.Color(c));
+const FROST_COLORS = ['#ffffff', '#d8f6ff', '#9fe8ff'].map((c) => new THREE.Color(c));
+const COIN_COLORS = ['#fff2a8', '#ffd84a', '#e0a526'].map((c) => new THREE.Color(c));
+const PICKUP_LIFE = { heart: 25, blocks: 25, nade: 25, coin: 30, crate: 120 };
+const CRATE_DROP = 18;
 const r2 = (v) => Math.round(v * 100) / 100;
 
 function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
@@ -133,6 +139,12 @@ class Mob {
     this.targetT = 0;
     this.hitDir = new THREE.Vector3(0, 0, 1);
     this.debris = null;
+    this.burnT = 0;
+    this.burnDps = 0;
+    this.burnBy = 0;
+    this.burnTick = 0.5;
+    this.slowT = 0;
+    this.slowAmt = 0;
     const tex = mobs.tex[type];
     this.model = type === 'gloop' ? buildGloop(tex) : buildHumanoid(tex, { limb: type === 'bone' ? 2 : 0 });
     this.rig = type === 'gloop' ? null : new Rig(this.model);
@@ -175,6 +187,62 @@ class Mob {
       this.attackT += dt / ATTACK_TIME;
       if (this.attackT >= 1) this.attackT = -1;
     }
+    this.burnT = Math.max(0, this.burnT - dt);
+    this.slowT = Math.max(0, this.slowT - dt);
+    if (this.state !== 'dying') this.statusFx(dt);
+  }
+
+  get burning() {
+    return this.remote ? !!(this.net.flags & 32) : this.burnT > 0;
+  }
+
+  get slowed() {
+    return this.remote ? !!(this.net.flags & 64) : this.slowT > 0;
+  }
+
+  // Flames and frost you can see on a mob that is burning or slowed.
+  statusFx(dt) {
+    const g = this.game;
+    const r = () => (Math.random() - 0.5) * this.hw * 2;
+    if (this.burning && Math.random() < dt * 22) {
+      g.fx.burst(this.pos.x + r(), this.pos.y + Math.random() * this.h, this.pos.z + r(), FIRE_COLORS, 1, {
+        speed: 0.5,
+        size: 0.1,
+        up: 2.4,
+        life: 0.45,
+        spread: 0.05,
+        grav: -3,
+      });
+    }
+    if (this.slowed && Math.random() < dt * 12) {
+      g.fx.burst(this.pos.x + r(), this.pos.y + Math.random() * this.h, this.pos.z + r(), FROST_COLORS, 1, {
+        speed: 0.3,
+        size: 0.07,
+        up: 0.2,
+        life: 0.8,
+        spread: 0.05,
+        grav: 2,
+      });
+    }
+  }
+
+  slowMul() {
+    return this.slowT > 0 ? 1 - this.slowAmt : 1;
+  }
+
+  // Fire and frost from gun cores. Only the computer running the mob keeps
+  // track of them.
+  applyFx(fx, byId) {
+    if (!fx) return;
+    if (fx.burn > 0) {
+      this.burnDps = this.burnT > 0 ? Math.max(this.burnDps, fx.burn) : fx.burn;
+      this.burnT = 3;
+      this.burnBy = byId;
+    }
+    if (fx.slow > 0) {
+      this.slowAmt = this.slowT > 0 ? Math.max(this.slowAmt, fx.slow) : fx.slow;
+      this.slowT = 2.5;
+    }
   }
 
   // Runs the mob's brain. Only the host (or single player) does this.
@@ -197,7 +265,19 @@ class Mob {
       this.updateDeath(dt);
       return;
     }
-
+    if (this.burnT > 0) {
+      this.burnTick -= dt;
+      if (this.burnTick <= 0) {
+        this.burnTick = 0.5;
+        this.hp -= this.burnDps * 0.5;
+        this.hurtT = Math.max(this.hurtT, 0.08);
+        if (this.hp <= 0) {
+          this.startDeath(true);
+          g.onKill(this, false, this.burnBy);
+          return;
+        }
+      }
+    }
     this.targetT -= dt;
     if (this.targetT <= 0 || !this.target || this.target.dead) {
       this.target = this.mobs.pickTarget(this.pos);
@@ -401,7 +481,7 @@ class Mob {
   }
 
   walk(dt, wx, wz, nextStand) {
-    const slow = (this.stuck >= 2 ? 0.4 : 1) * (this.drawT > 0 ? 0.4 : 1) * (this.attackT >= 0 ? 0.3 : 1);
+    const slow = (this.stuck >= 2 ? 0.4 : 1) * (this.drawT > 0 ? 0.4 : 1) * (this.attackT >= 0 ? 0.3 : 1) * this.slowMul();
     const sp = this.speed * slow;
     const k = Math.min(1, (this.onGround ? 12 : 3) * dt);
     this.vel.x += (wx * sp - this.vel.x) * k;
@@ -426,9 +506,9 @@ class Mob {
       this.hopCd -= dt;
       if (this.hopCd <= 0 && (wx || wz)) {
         this.vel.y = 11;
-        this.vel.x = wx * this.speed;
-        this.vel.z = wz * this.speed;
-        this.hopCd = 0.55 + Math.random() * 0.45;
+        this.vel.x = wx * this.speed * this.slowMul();
+        this.vel.z = wz * this.speed * this.slowMul();
+        this.hopCd = (0.55 + Math.random() * 0.45) / this.slowMul();
         this.game.sound.hop(this.vol());
       }
     }
@@ -511,7 +591,8 @@ class Mob {
     return null;
   }
 
-  damage(amount, dir, head, at, byId) {
+  // fx carries burn / slow from the shooter's gun core.
+  damage(amount, dir, head, at, byId, fx) {
     if (this.state === 'dying' || this.gone) return;
     const g = this.game;
     this.hurtT = 0.2;
@@ -520,10 +601,11 @@ class Mob {
     if (at) g.fx.burst(at.x, at.y, at.z, this.def.colorObjs, 6, { speed: 2.5, size: 0.08, up: 1.5, life: 0.5, spread: 0.1 });
     if (this.remote) {
       // The host decides what the hit does; we just show it landed.
-      if (g.mp) g.mp.sendHitMob(this, amount, head, dir);
+      if (g.mp) g.mp.sendHitMob(this, amount, head, dir, fx);
       g.sound.mobHurt(this.type, 1);
       return;
     }
+    this.applyFx(fx, byId);
     this.hp -= amount;
     this.vel.x += dir.x * 3.5;
     this.vel.z += dir.z * 3.5;
@@ -632,7 +714,11 @@ class Mob {
     m.root.position.set(this.pos.x + jitter, this.pos.y + this.yOffset(), this.pos.z);
     m.root.rotation.y = this.yaw;
     const flash = this.hurtT > 0 ? Math.min(1, this.hurtT / 0.2) : 0;
-    for (const mat of this.emissives) mat.emissive.setRGB(0.55 * flash, 0.05 * flash, 0.03 * flash);
+    const fire = this.burning ? 0.22 + Math.sin(this.t * 17) * 0.08 : 0;
+    const ice = this.slowed ? 1 : 0;
+    for (const mat of this.emissives) {
+      mat.emissive.setRGB(0.55 * flash + fire, 0.05 * flash + fire * 0.35 + ice * 0.1, 0.03 * flash + ice * 0.25);
+    }
 
     if (this.type === 'gloop') {
       let sx = 1;
@@ -709,6 +795,109 @@ export class Mobs {
     this.bowMat = new THREE.MeshLambertMaterial({ color: 0x5b4632 });
     this.heartProto = this.makeHeart();
     this.bundleProto = this.makeBundle(game.atlas.texture);
+    this.coinProto = this.makeCoin();
+    this.nadeProto = this.makeNade();
+  }
+
+  makeCoin() {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshLambertMaterial({ color: 0xf2c230, emissive: 0x6a4a00 });
+    const dark = new THREE.MeshLambertMaterial({ color: 0xc08a1a, emissive: 0x3a2400 });
+    const rim = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+    // A pixel-art coin: a ring of gold with a stamped middle.
+    const rows = ['.XXX.', 'XOOOX', 'XOXOX', 'XOOOX', '.XXX.'];
+    rows.forEach((row, j) => {
+      [...row].forEach((ch, i) => {
+        if (ch === '.') return;
+        const m = new THREE.Mesh(rim, ch === 'X' ? gold : dark);
+        m.position.set((i - 2) * 0.06, (2 - j) * 0.06, 0);
+        if (ch === 'O') m.scale.z = 0.6;
+        g.add(m);
+      });
+    });
+    return g;
+  }
+
+  makeNade() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 0.2), new THREE.MeshLambertMaterial({ color: 0x3d4a2c }));
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.22), new THREE.MeshBasicMaterial({ color: 0xff7a2f }));
+    const pin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.06), new THREE.MeshLambertMaterial({ color: 0xbfbfbf }));
+    pin.position.y = 0.15;
+    g.add(body, band, pin);
+    return g;
+  }
+
+  // Supply crate: planks box on a striped parachute, with a light beam so
+  // you can find it.
+  makeCrate() {
+    const atlas = this.game.atlas;
+    const g = new THREE.Group();
+    const box = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+    const [u0, v0, u1, v1] = TILE_UV[BLOCKS[B.PLANKS].side];
+    const uv = box.attributes.uv;
+    for (let f = 0; f < 6; f++) {
+      uv.setXY(f * 4, u0, v1);
+      uv.setXY(f * 4 + 1, u1, v1);
+      uv.setXY(f * 4 + 2, u0, v0);
+      uv.setXY(f * 4 + 3, u1, v0);
+    }
+    const crate = new THREE.Mesh(box, new THREE.MeshLambertMaterial({ map: atlas.texture }));
+    crate.position.y = 0.4;
+    g.add(crate);
+    const strapMat = new THREE.MeshLambertMaterial({ color: 0xff7a2f, emissive: 0x401800 });
+    for (const rot of [0, Math.PI / 2]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.84, 0.12), strapMat);
+      strap.position.y = 0.4;
+      strap.rotation.y = rot;
+      g.add(strap);
+    }
+    const star = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.26), new THREE.MeshBasicMaterial({ color: 0xffd84a }));
+    star.position.y = 0.83;
+    g.add(star);
+
+    const chute = new THREE.Group();
+    const red = new THREE.MeshLambertMaterial({ color: 0xd8392b });
+    const white = new THREE.MeshLambertMaterial({ color: 0xf4f1ea });
+    for (let i = -3; i <= 3; i++) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 2.6), i % 2 ? red : white);
+      panel.position.set(i * 0.42, 3.1 - Math.abs(i) * Math.abs(i) * 0.06, 0);
+      panel.rotation.z = -i * 0.09;
+      chute.add(panel);
+    }
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+    for (const [x, z] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ]) {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.03, 2.5, 0.03), lineMat);
+      line.position.set(x * 0.8, 1.95, z * 0.75);
+      line.rotation.z = -x * 0.17;
+      line.rotation.x = z * 0.14;
+      chute.add(line);
+    }
+    g.add(chute);
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 40, 0.3).translate(0, 20, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffd84a, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    g.add(beam);
+    g.userData = { chute, beam };
+    return g;
+  }
+
+  // Top of the ground at a column, or -1 for water / nothing.
+  groundAt(x, z) {
+    const w = this.game.world;
+    for (let y = 30; y > 0; y--) if (w.solid(Math.floor(x), y, Math.floor(z))) return y + 1;
+    return -1;
+  }
+
+  // The boss bar shows the biggest mob that is still standing.
+  boss() {
+    return this.list.find((m) => m.def.boss && m.state !== 'dying' && !m.gone) || null;
   }
 
   makeHeart() {
@@ -822,23 +1011,56 @@ export class Mobs {
     }
   }
 
-  spawnPickup(kind, x, y, z, id) {
-    if (id === undefined) id = this.nextPickup++;
-    const mesh = (kind === 'heart' ? this.heartProto : this.bundleProto).clone();
-    mesh.position.set(x, y + 0.45, z);
+  // y is the ground height the pickup rests on.
+  spawnPickup(kind, x, y, z, id, value = 0) {
+    if (id === undefined || id === null) id = this.nextPickup++;
+    let mesh;
+    if (kind === 'crate') mesh = this.makeCrate();
+    else {
+      const proto = { heart: this.heartProto, coin: this.coinProto, nade: this.nadeProto }[kind] || this.bundleProto;
+      mesh = proto.clone();
+    }
+    const lift = kind === 'crate' ? 0 : kind === 'coin' ? 0.3 : 0.45;
+    mesh.position.set(x, y + lift, z);
     this.game.scene.add(mesh);
-    const pk = { id, kind, mesh, x, y: y + 0.45, z, t: 0 };
+    const pk = { id, kind, mesh, x, y: y + lift, z, base: y, t: 0, value, life: PICKUP_LIFE[kind] || 25, fall: kind === 'crate' ? CRATE_DROP : 0 };
     this.pickups.push(pk);
     return pk;
+  }
+
+  // Drop a crate out of the sky near a spot.
+  dropCrate(near) {
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * 7;
+      const x = Math.floor(near.x + Math.cos(a) * r) + 0.5;
+      const z = Math.floor(near.z + Math.sin(a) * r) + 0.5;
+      if (x < 2 || z < 2 || x > SX - 2 || z > SZ - 2) continue;
+      const y = this.groundAt(x, z);
+      if (y <= SEA) continue;
+      return this.spawnPickup('crate', x, y, z);
+    }
+    return null;
   }
 
   removePickup(id) {
     const pk = this.pickups.find((p) => p.id === id);
     if (!pk) return false;
-    pk.t = 99;
+    pk.t = 1e9;
     this.game.scene.remove(pk.mesh);
     this.pickups = this.pickups.filter((p) => p !== pk);
     return true;
+  }
+
+  // Every mob along a ray, nearest first.
+  raycastAll(o, d, maxT) {
+    const hits = [];
+    for (const m of this.list) {
+      if (m.state === 'dying' || m.gone) continue;
+      const h = m.hitTest(o, d, maxT);
+      if (h) hits.push({ mob: m, t: h.t, head: h.head });
+    }
+    return hits.sort((a, b) => a.t - b.t);
   }
 
   raycast(o, d, maxT) {
@@ -887,7 +1109,7 @@ export class Mobs {
         r2(m.pos.z),
         r2(m.yaw),
         m.state === 'spawn' ? 0 : m.state === 'live' ? 1 : 2,
-        (m.aiming ? 1 : 0) | (m.drawT > 0.05 ? 2 : 0) | (m.attackT >= 0 ? 4 : 0) | (m.hurtT > 0 ? 8 : 0) | (m.onGround ? 16 : 0),
+        (m.aiming ? 1 : 0) | (m.drawT > 0.05 ? 2 : 0) | (m.attackT >= 0 ? 4 : 0) | (m.hurtT > 0 ? 8 : 0) | (m.onGround ? 16 : 0) | (m.burnT > 0 ? 32 : 0) | (m.slowT > 0 ? 64 : 0),
         r2(m.spawnT),
         r2(Math.max(0, m.hp / m.maxHp)),
       ]);
@@ -988,24 +1210,76 @@ export class Mobs {
     const p = g.player;
     for (const pk of this.pickups) {
       pk.t += dt;
-      pk.mesh.rotation.y += dt * 2.2;
-      pk.mesh.position.y = pk.y + Math.sin(pk.t * 3) * 0.1;
-      pk.mesh.visible = pk.t < 20 || Math.floor(pk.t * 8) % 2 === 0;
-      const d = Math.hypot(p.pos.x - pk.x, p.pos.y + 0.9 - pk.y, p.pos.z - pk.z);
-      if (!p.dead && d < 1.5 && pk.t < 25) {
-        if (pk.kind === 'heart') {
-          p.heal(6);
-          g.hud.popup('+3 hearts', 'heal');
-        } else {
-          p.blocks = Math.min(99, p.blocks + 6);
-          g.hud.popup('+6 blocks');
+      const m = pk.mesh;
+      if (pk.kind === 'crate') {
+        if (pk.fall > 0) {
+          pk.fall = Math.max(0, pk.fall - dt * 3.2);
+          m.rotation.z = Math.sin(pk.t * 1.7) * 0.12;
+          m.rotation.x = Math.cos(pk.t * 1.3) * 0.08;
+          if (pk.fall === 0) {
+            m.rotation.set(0, m.rotation.y, 0);
+            m.userData.chute.visible = false;
+            const d = Math.hypot(p.pos.x - pk.x, p.pos.z - pk.z);
+            g.sound.landThud(Math.max(0, 1 - d / 40));
+            const below = g.world.get(Math.floor(pk.x), Math.floor(pk.y) - 1, Math.floor(pk.z));
+            if (below) g.fx.burst(pk.x, pk.y + 0.1, pk.z, g.atlas.colors[BLOCKS[below].top], 14, { speed: 3, size: 0.12, up: 1.5, life: 0.7, spread: 0.5 });
+          }
         }
-        g.sound.pickup();
-        pk.t = 99;
+        m.position.set(pk.x, pk.y + pk.fall, pk.z);
+        m.userData.beam.material.opacity = 0.2 + Math.sin(pk.t * 3) * 0.08;
+      } else {
+        // Coins fly to you when you get close.
+        if (pk.kind === 'coin' && !p.dead && g.inGame) {
+          const dx = p.pos.x - pk.x;
+          const dy = p.pos.y + 0.8 - pk.y;
+          const dz = p.pos.z - pk.z;
+          const d = Math.hypot(dx, dy, dz);
+          if (d < 4.5 && d > 0.01) {
+            const step = Math.min(d, (5 + (4.5 - d) * 4) * dt);
+            pk.x += (dx / d) * step;
+            pk.y += (dy / d) * step;
+            pk.z += (dz / d) * step;
+          }
+        }
+        m.rotation.y += dt * (pk.kind === 'coin' ? 5 : 2.2);
+        m.position.set(pk.x, pk.y + Math.sin(pk.t * 3) * (pk.kind === 'coin' ? 0.06 : 0.1), pk.z);
+      }
+      m.visible = pk.t < pk.life - 5 || Math.floor(pk.t * 8) % 2 === 0;
+      const d = Math.hypot(p.pos.x - pk.x, p.pos.y + 0.9 - pk.y, p.pos.z - pk.z);
+      const reach = pk.kind === 'crate' ? 1.9 : pk.kind === 'coin' ? 1.1 : 1.5;
+      if (!p.dead && g.inGame && d < reach && pk.t < pk.life && pk.fall === 0 && this.collect(pk)) {
+        pk.t = 1e9;
         if (g.mp) g.mp.pickupTaken(pk.id);
       }
-      if (pk.t > 25) g.scene.remove(pk.mesh);
+      if (pk.t > pk.life) g.scene.remove(m);
     }
-    this.pickups = this.pickups.filter((pk) => pk.t <= 25);
+    this.pickups = this.pickups.filter((pk) => pk.t <= pk.life);
+  }
+
+  // Returns false if the pickup should stay on the ground.
+  collect(pk) {
+    const g = this.game;
+    const p = g.player;
+    if (pk.kind === 'heart') {
+      if (p.hp >= p.maxHp) return false;
+      p.heal(6);
+      g.hud.popup('+3 hearts', 'heal');
+      g.sound.pickup();
+    } else if (pk.kind === 'blocks') {
+      p.blocks = Math.min(99, p.blocks + 6);
+      g.hud.popup('+6 blocks');
+      g.sound.pickup();
+    } else if (pk.kind === 'nade') {
+      if (p.grenades >= MAX_NADES) return false;
+      p.grenades++;
+      g.hud.popup('+1 grenade');
+      g.sound.pickup();
+    } else if (pk.kind === 'coin') {
+      g.gainCoins(pk.value || 1);
+      g.fx.burst(pk.x, pk.y, pk.z, COIN_COLORS, 3, { speed: 1.5, size: 0.06, up: 1.5, life: 0.35, spread: 0.1 });
+    } else if (pk.kind === 'crate') {
+      g.openCrate();
+    }
+    return true;
   }
 }

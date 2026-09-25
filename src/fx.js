@@ -134,7 +134,7 @@ export class Tracers {
     const geo = new THREE.BoxGeometry(1, 1, 1);
     geo.translate(0, 0, 0.5);
     this.pool = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 40; i++) {
       const mesh = new THREE.Mesh(
         geo,
         new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),

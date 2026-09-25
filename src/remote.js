@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { buildHumanoid, holdBlaster } from './model.js';
+import { buildHumanoid, holdGun, PX } from './model.js';
+import { GUNS, parseBuildCode } from './weapons.js';
+import { B } from './world.js';
 import { Rig, posePlayer } from './anim.js';
 import { makeSkinTexture, paintOutfit, DEFAULT_OUTFIT } from './skin.js';
 import { loadImage, clamp, wrapAngle } from './util.js';
@@ -50,6 +52,9 @@ class RemotePlayer {
     this.flashT = 0;
     this.heat = 0;
     this.hasState = false;
+    this.gunKey = 'ember|';
+    this.blockId = 0;
+    this.beamT = 0;
     this.wasGround = true;
     this.lastVy = 0;
     this.canvas = document.createElement('canvas');
@@ -73,10 +78,49 @@ class RemotePlayer {
       this.gun.userData.dispose();
     }
     this.model = buildHumanoid(this.texture, { slim: this.slim });
-    this.gun = holdBlaster(this.model);
+    this.gun = this.makeGun();
+    this.cube = new THREE.Mesh(this.game.combat.blockGeo(this.blockId || B.COBBLE), this.cubeMat());
+    this.cube.scale.setScalar(0.22 / 0.3);
+    this.cube.position.set(0, -11 * PX, 1.5 * PX);
+    this.cube.visible = false;
+    this.model.parts.armR.add(this.cube);
     this.rig = new Rig(this.model);
     this.model.root.visible = this.hasState;
     scene.add(this.model.root);
+  }
+
+  makeGun() {
+    const [id, code] = this.gunKey.split('|');
+    const gunId = GUNS[id] ? id : 'ember';
+    return holdGun(this.model, gunId, parseBuildCode(gunId, code));
+  }
+
+  cubeMat() {
+    const c = this.game.combat;
+    if (!c.blockMat) c.blockMat = new THREE.MeshLambertMaterial({ map: this.game.atlas.texture });
+    return c.blockMat;
+  }
+
+  // Show whatever they are holding: their exact gun build, or a block.
+  setHeld(gunId, code, block) {
+    if (gunId && GUNS[gunId]) {
+      const key = `${gunId}|${code || ''}`;
+      if (key !== this.gunKey) {
+        this.gunKey = key;
+        this.model.parts.armR.remove(this.gun);
+        this.gun.userData.dispose();
+        this.gun = this.makeGun();
+      }
+      this.gun.visible = true;
+      this.cube.visible = false;
+    } else {
+      this.gun.visible = false;
+      this.cube.visible = true;
+      if (block && block !== this.blockId) {
+        this.blockId = block;
+        this.cube.geometry = this.game.combat.blockGeo(block);
+      }
+    }
   }
 
   async setSkin(dataURL, slim) {
@@ -100,6 +144,8 @@ class RemotePlayer {
   pushState(s) {
     if (!s || !s.p) return;
     this.buf.push({ t: performance.now(), x: s.p[0], y: s.p[1], z: s.p[2], yaw: s.y, pitch: s.pi, f: s.f | 0, r: s.r ?? -1, a: s.a || 0 });
+    if (typeof s.w === 'string') this.setHeld(s.w, s.wb, s.bk | 0);
+    if (s.sw) this.swing = 1;
     if (this.buf.length > 30) this.buf.shift();
     this.score = s.sc | 0;
     this.kills = s.k | 0;
@@ -116,16 +162,52 @@ class RemotePlayer {
     this.game.mp.sendHurt(this.id, amount, from, source);
   }
 
-  onShot(from, to) {
-    this.recoil = 1;
-    this.flashT = 0.05;
-    this.heat = Math.min(1, this.heat + 0.09);
-    this.game.tracers.fire(from, to);
+  onShot(from, ends, m) {
+    const g = this.game;
+    const color = new THREE.Color(typeof m.c === 'string' && /^[0-9a-f]{6}$/i.test(m.c) ? '#' + m.c : '#ffb040');
+    // Start the tracer at the gun in their hand when we can see it.
+    const start = this.model.root.visible ? this.gun.userData.muzzle.getWorldPosition(new THREE.Vector3()) : from;
+    if (m.bm) {
+      this.beamT = 0.15;
+      this.showBeam(start, ends[0], color);
+    } else {
+      this.recoil = 1;
+      if (!m.q) this.flashT = 0.05;
+      for (const e of ends) {
+        if (m.z) g.combat.lightning(start, e, color);
+        else g.tracers.fire(start, e, m.q ? 0x777777 : color.getHex(), ends.length > 1 ? 0.022 : 0.035);
+      }
+    }
+    this.heat = Math.min(1, this.heat + 0.06);
+    const d = start.distanceTo(g.player.pos);
+    const frame = GUNS[m.g] ? GUNS[m.g].frame : 'rifle';
+    if (d < 50 && !m.bm) g.sound.gunshot(frame, !!m.q, (1 - d / 50) * 0.8);
+  }
+
+  showBeam(from, to, color) {
+    if (!this.beam) {
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      geo.translate(0, 0, 0.5);
+      this.beam = new THREE.Mesh(
+        geo,
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }),
+      );
+      this.game.scene.add(this.beam);
+    }
+    this.beam.material.color.copy(color);
+    this.beam.position.copy(from);
+    this.beam.lookAt(to);
+    const w = 0.05 + Math.random() * 0.03;
+    this.beam.scale.set(w, w, Math.max(0.01, from.distanceTo(to)));
+    this.beam.visible = true;
   }
 
   update(dt) {
     if (!this.hasState) return;
     this.invuln -= dt;
+    this.beamT -= dt;
+    if (this.beam && this.beamT <= 0) this.beam.visible = false;
+    this.swing = Math.max(0, (this.swing || 0) - dt * 4);
     this.recoil *= Math.exp(-14 * dt);
     this.flashT -= dt;
     this.heat = Math.max(0, this.heat - dt * 0.45);
@@ -197,6 +279,7 @@ class RemotePlayer {
       },
       dt,
     );
+    if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
     this.tag.visible = m.root.visible;
     this.tag.position.set(this.pos.x, this.pos.y + (crouch ? 1.8 : 2.15), this.pos.z);
   }
@@ -205,6 +288,12 @@ class RemotePlayer {
     const scene = this.game.scene;
     scene.remove(this.model.root);
     scene.remove(this.tag);
+    if (this.beam) {
+      scene.remove(this.beam);
+      this.beam.geometry.dispose();
+      this.beam.material.dispose();
+    }
+    this.gun.userData.dispose();
     this.model.dispose();
     this.texture.dispose();
     this.tag.material.map.dispose();

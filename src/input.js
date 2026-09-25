@@ -7,6 +7,7 @@ export class Input {
     this.pressed = new Set();
     this.left = false;
     this.right = false;
+    this.leftPressed = false;
     this.mx = 0;
     this.my = 0;
     this.wheel = 0;
@@ -39,7 +40,10 @@ export class Input {
     });
     canvas.addEventListener('mousedown', (e) => {
       if (!this.active) return;
-      if (e.button === 0) this.left = true;
+      if (e.button === 0) {
+        this.left = true;
+        this.leftPressed = true;
+      }
       if (e.button === 2) this.right = true;
     });
     window.addEventListener('mouseup', (e) => {
@@ -94,6 +98,7 @@ export class Input {
 
   endFrame() {
     this.pressed.clear();
+    this.leftPressed = false;
     this.wheel = 0;
   }
 }

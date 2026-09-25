@@ -23,10 +23,15 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | Space | Jump (hold in water to swim up) |
 | Shift | Crouch. You move slower, aim steadier, and won't walk off edges |
 | Double-tap W (or Ctrl in the app) | Sprint |
-| Left click | Shoot. Shots also break blocks |
-| Right click | Place a block |
-| 1–4 or scroll | Pick block type |
+| Left click | Shoot. With a block in hand: mine |
+| Right click | Aim down the sights (scopes zoom in). With a block in hand: place it |
+| 1–3 | Your three guns |
+| 4–7 | Block types. Scroll to cycle through everything |
+| Q | Swap back to what you held before |
+| F | Place a block without putting your gun away |
+| G | Throw a grenade. It breaks blocks too |
 | R | Reload |
+| B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Switch to third person to see your skin |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
@@ -41,7 +46,35 @@ Waves of mobs rise out of the ground and come for you. Survive as long as you ca
 - **Bonehead:** keeps its distance and fires glowing bolts. Its eyes light up and it pulls back just before it shoots. Beat it and it rattles apart.
 - **Gloop:** a bouncy jelly cube that hops over walls two blocks high.
 
-Shooting blocks cracks them and then breaks them, and every broken block goes into your inventory. Use right click to build cover. Headshots do double damage. Mobs sometimes drop hearts or bundles of blocks.
+Shooting blocks cracks them and then breaks them, and every broken block goes into your inventory. Switch to a block (4–7) to build cover, or tap F. Headshots do extra damage. Mobs drop coins, and sometimes hearts, blocks or grenades. After every wave a supply crate parachutes down near you. Walk into it for a random part.
+
+## Guns, parts and coins
+
+You start with the **Ember Blaster** and the **Spark Pistol**. Earn coins by beating mobs and clearing waves, then press **B** (or click **Armory** on the title screen) to spend them. Coins and everything you buy are saved between runs.
+
+| Gun | What it does |
+| --- | --- |
+| Ember Blaster | Full-auto rifle. Good at everything |
+| Spark Pistol | Snappy sidearm, fast reload |
+| Buzz SMG | Sprays a storm of little bolts |
+| Scatter Cannon | Nine pellets per blast |
+| Longshot Rail | Sniper that punches through three mobs in a row |
+| Crossbolt | Silent bolts that drop with distance, big headshots |
+| Flare Revolver | Six heavy rounds that set mobs on fire |
+| Frost Ray | Freezing beam that slows mobs to a crawl |
+| Tesla Coil | Lightning that jumps to three more mobs |
+| Boomstick | Grenade launcher that blows up blocks too |
+| Brick Mill | Minigun. Spins up, then never stops |
+| Block Launcher | Fires your blocks and builds a wall where they land |
+
+Every gun has slots for **parts**: barrel, muzzle, sight, magazine, stock, underbarrel, core and paint. There are 44 parts in four rarities (Common, Rare, Epic, Legendary). You can see every part on the gun model, and the stat bars show what it changes before you buy. Buy a part once and you can fit it to any gun that has that slot. Some favourites:
+
+- **Scopes** (2x, 4x) zoom in when you aim with right click.
+- **Cores** change the gun's glow and add an effect: Inferno sets mobs on fire, Frost slows them, Shock chains lightning, Blast makes shots explode, Leech heals you.
+- **Twin Barrel** fires two bolts every shot. **Suppressor** makes you silent. **Laser** makes hip fire accurate. **Bipod** steadies your aim when you crouch.
+- **Paints** from Steel to Solid Gold.
+
+You carry three guns. Pick them in the Armory with **Carry in slot 1/2/3**.
 
 ## Multiplayer
 
@@ -112,7 +145,12 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/main.js` | Game setup, screens, waves, scoring, respawns |
 | `src/world.js` | Island generation, block meshes, block breaking |
 | `src/textures.js` | Pixel-painted block textures |
-| `src/player.js` | Movement, crouch, sprint, shooting, building, first-person view |
+| `src/player.js` | Movement, crouch, sprint, aiming, loadout, building, first-person view |
+| `src/weapons.js` | Every gun and part, and how parts change a gun's stats |
+| `src/gun.js` | Builds the voxel gun models from their parts |
+| `src/combat.js` | Bullets, pellets, projectiles, explosions, lightning, fire and frost |
+| `src/profile.js` | Your saved coins, guns, parts and loadout |
+| `src/armory.js`, `src/thumbs.js` | The Armory screen and gun pictures |
 | `src/anim.js` | Smooth animation for players and mobs |
 | `src/mobs.js` | Mob types, behavior, pickups, multiplayer copies of mobs |
 | `src/flow.js` | Pathfinding, so mobs find their way around walls |
@@ -120,9 +158,15 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `server/server.cjs` | The multiplayer server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |
-| `src/model.js` | Blocky character and blaster models |
+| `src/model.js` | Blocky character models |
 | `src/editor.js`, `src/preview.js` | The skin editor |
 | `src/sound.js` | Synthesized sound effects |
 | `src/hud.js`, `src/style.css`, `src/index.html` | Interface |
 
-Built with [three.js](https://threejs.org/), [ws](https://github.com/websockets/ws) and [Electron](https://www.electronjs.org/) (all MIT licensed). The fonts, [Jersey 10](https://github.com/scfried/soft-type-jersey) and [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), are under the SIL Open Font License (see `src/fonts`).
+## Copyright
+
+Copyright © 2026 sigmasigmaboysigmaboy1234f51-rgb. All rights reserved.
+
+Blockfire is not open source. You can play it, but you may not copy, re-upload, sell or publish changed versions of it without permission. See [LICENSE](LICENSE) for the details.
+
+Blockfire uses a few open-source pieces, which keep their own licenses: [three.js](https://threejs.org/), [ws](https://github.com/websockets/ws) and [Electron](https://www.electronjs.org/) (MIT), and the fonts [Jersey 10](https://github.com/scfried/soft-type-jersey) and [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans) (SIL Open Font License). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

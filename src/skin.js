@@ -226,14 +226,37 @@ export function paintOutfit(canvas, o, slim = false, seed = 11) {
 
 // --- Mob skins -----------------------------------------------------------
 
-export function paintMoss(canvas) {
+const MOSS_LOOK = {
+  seed: 301,
+  skin: ['#6f8c55', '#65804d', '#7b995f', '#5a7446'],
+  moss: ['#4f7d2f', '#5c8c36', '#44702a'],
+  tunic: '#3d6a6e',
+  trousers: '#4a3b2c',
+  eye: '#ffcf4a',
+};
+
+// The boss: an old Mosshead wearing stone.
+const BRUTE_LOOK = {
+  seed: 305,
+  skin: ['#56704a', '#4d6642', '#5f7a52', '#465c3c'],
+  moss: ['#3f6b25', '#4c7c2c', '#35601f'],
+  tunic: '#6c6f73',
+  trousers: '#3b3026',
+  eye: '#ff4a2a',
+};
+
+export function paintBrute(canvas) {
+  paintMoss(canvas, BRUTE_LOOK);
+}
+
+export function paintMoss(canvas, look = MOSS_LOOK) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 64, 64);
-  const p = new Painter(ctx, mulberry32(301));
-  const skin = ['#6f8c55', '#65804d', '#7b995f', '#5a7446'];
-  const moss = ['#4f7d2f', '#5c8c36', '#44702a'];
-  const tunic = tone('#3d6a6e');
-  const trousers = tone('#4a3b2c');
+  const p = new Painter(ctx, mulberry32(look.seed));
+  const skin = look.skin;
+  const moss = look.moss;
+  const tunic = tone(look.tunic);
+  const trousers = tone(look.trousers);
   const mottled = () => (p.rng() < 0.18 ? p.pick(moss) : p.pick(skin));
 
   const H = faceRects(0, 0, 8, 8, 8);
@@ -242,8 +265,8 @@ export function paintMoss(canvas) {
   const [fx, fy] = H.front;
   p.fill([fx + 1, fy + 3, 2, 2], '#22301a');
   p.fill([fx + 5, fy + 3, 2, 2], '#22301a');
-  p.px(fx + 2, fy + 4, '#ffcf4a');
-  p.px(fx + 5, fy + 4, '#ffcf4a');
+  p.px(fx + 2, fy + 4, look.eye);
+  p.px(fx + 5, fy + 4, look.eye);
   p.fill([fx + 2, fy + 6, 4, 1], '#2a1f14');
   p.px(fx + 3, fy + 6, '#d9d2b0');
   const HO = faceRects(32, 0, 8, 8, 8);
