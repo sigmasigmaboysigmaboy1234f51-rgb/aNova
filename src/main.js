@@ -282,8 +282,10 @@ class Game {
     this.input.onEscape = () => {
       if (this.state === 'playing') this.pause();
     };
+    // A click is what browsers need before they allow pointer lock, so any
+    // click on the game tries again (joining a server starts without one).
     this.canvas.addEventListener('mousedown', () => {
-      if (this.state === 'playing' && !this.input.locked && !this.noLock) this.input.requestLock();
+      if (this.state === 'playing' && !this.input.locked) this.input.requestLock();
     });
   }
 
