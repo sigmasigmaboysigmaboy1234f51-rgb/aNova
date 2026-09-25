@@ -776,6 +776,14 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
 .ch-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .ch-pick { display: flex; gap: 4px; }
 .ch-pick select { max-width: 170px; font: inherit; font-size: 13px; color: var(--paper); background: #1b1915; border: 2px solid var(--edge); padding: 4px; }
+.ch-lock { display: grid; justify-items: center; gap: 10px; padding: 24px 12px 30px; text-align: center; }
+.ch-lock-icon { margin: 0; font-size: 56px; line-height: 1; }
+.ch-lock-title { margin: 0; font: 400 34px/1 var(--font-display); color: #d27bff; text-shadow: 2px 2px 0 #000; }
+.ch-lock-form { display: grid; gap: 12px; width: min(340px, 100%); text-align: left; }
+.ch-lock-msg { margin: 0; min-height: 1.3em; font-size: 15px; color: #8fe070; }
+.ch-lock-msg.bad { color: #ff8f7a; }
+.ch-lock-msg.in { animation: bump 0.25s steps(3); }
+#cz-main { display: grid; gap: 10px; }
 .btn-cheat { --b: #5a2e92; --hi: #8a5ad0; --lo: #2e1650; --hov: #6b3aa8; }
 .cheat-gun { position: absolute; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); font: 400 18px/1 var(--font-display); text-shadow: 2px 2px 0 #000; letter-spacing: 0.05em; pointer-events: none; }
 @media (max-width: 800px) { .ch-body { grid-template-columns: minmax(0, 1fr); } }

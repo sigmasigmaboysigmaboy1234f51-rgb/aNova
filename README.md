@@ -90,6 +90,8 @@ Other players see your whole look online.
 
 Press **`** (the key under Esc) in a game, or click **Cheats** on the title screen or the pause menu.
 
+The cheat menu is **locked with a secret password** that only the game's owner knows. The game only keeps a scrambled fingerprint of the password, never the password itself. Tick **Remember this computer** to stay unlocked, and click **Lock cheats** to lock it again (for example on a shared computer). Five wrong guesses in a row lock the box for 30 seconds.
+
 - **Cheat guns.** Pick one, then shoot with any gun:
   - **Kill Gun** knocks out anything instantly.
   - **Kick Gun** punts mobs into the sky and kicks bots out of the match.
@@ -103,7 +105,7 @@ Press **`** (the key under Esc) in a game, or click **Cheats** on the title scre
 
 Runs with cheats on don't count for your best score.
 
-**Online, only the host can use cheats**, and everyone in the game is told when the host turns them on. The host's Kill Gun knocks out other players (they come back like normal). The Kick Gun kicks the player you hit out of your game. The Ban Gun kicks them and stops them rejoining that game, even if they change their name.
+**Online, only the host can use cheats, and only if they unlocked them with the password**, and everyone in the game is told when the host turns them on. The host's Kill Gun knocks out other players (they come back like normal). The Kick Gun kicks the player you hit out of your game. The Ban Gun kicks them and stops them rejoining that game, even if they change their name.
 
 ## Settings
 
@@ -285,7 +287,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/sky.js` | Day and night, rain, storms and snow |
 | `src/wheel.js` | The Lucky Wheel |
 | `src/settings.js` | The Settings screen |
-| `src/cheats.js` | The cheat menu and cheat guns |
+| `src/cheats.js`, `src/sha256.js` | The cheat menu, cheat guns and the password lock |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |

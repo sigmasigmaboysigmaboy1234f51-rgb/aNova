@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { $ } from './util.js';
+import { $, store } from './util.js';
+import { sha256 } from './sha256.js';
 import { MOB_TYPES, FAMILIES, FAMILY_ORDER } from './mobtypes.js';
 import { BOSSES } from './boss.js';
 import { GUNS, PARTS } from './weapons.js';
@@ -39,6 +40,26 @@ const WORLD_TOGGLES = [
   ['peace', 'Pause the waves', 'No new waves start until you turn this off'],
 ];
 
+// The cheat menu is locked with a secret password. Only a scrambled
+// fingerprint of it is kept here, never the password itself. Checking a
+// guess scrambles it the same way (20,000 rounds, so guessing is slow).
+const LOCK_SALT = '578070d923629d8d';
+const LOCK_HASH = 'be2b98a2e34880dc4b0593a7709d183f0011da7f11886e5e4b151fb634df1d5d';
+// "Remember this computer" saves a token that can only be made from the
+// real password; this is a fingerprint of that token.
+const REMEMBER_CHECK = '505bc037c7ebe75cdcf0a72eddc758d2c25a571cbd59d3b651a1e3b57a0a2457';
+
+// Spaces, dashes and capitals don't matter.
+function normalize(pw) {
+  return String(pw).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function checkPassword(pw) {
+  let h = LOCK_SALT + normalize(pw);
+  for (let i = 0; i < 20000; i++) h = sha256(h);
+  return h === LOCK_HASH;
+}
+
 const tmpO = new THREE.Vector3();
 const tmpD = new THREE.Vector3();
 const HEARTS = [new THREE.Color('#ff5a7a'), new THREE.Color('#ff9dc0'), new THREE.Color('#ffffff')];
@@ -54,8 +75,16 @@ export class Cheats {
     this.announced = false;
     this.back = 'menu';
     this.el = $('#cheats');
+    this.unlocked = sha256(store.get('cheatKey', '')) === REMEMBER_CHECK;
+    this.wrong = 0;
+    this.waitUntil = 0;
     this.build();
     $('#cz-close').addEventListener('click', () => this.close());
+    $('#cz-lock-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.tryUnlock($('#cz-pass').value);
+    });
+    $('#cz-lockbtn').addEventListener('click', () => this.lock());
     this.el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' || e.code === 'Backquote') {
         e.preventDefault();
@@ -64,10 +93,55 @@ export class Cheats {
     });
   }
 
-  // Online, only the host's cheats work.
+  // Only with the secret password, and online only for the host.
   allowed() {
     const g = this.game;
-    return !g.mp || g.mp.isHost;
+    return this.unlocked && (!g.mp || g.mp.isHost);
+  }
+
+  tryUnlock(pw) {
+    const now = performance.now();
+    if (now < this.waitUntil) {
+      this.lockMsg(`Too many wrong tries. Wait ${Math.ceil((this.waitUntil - now) / 1000)} seconds.`, true);
+      return;
+    }
+    if (!checkPassword(pw)) {
+      this.wrong++;
+      $('#cz-pass').value = '';
+      if (this.wrong >= 5) {
+        this.wrong = 0;
+        this.waitUntil = now + 30000;
+        this.lockMsg('Wrong password. Too many tries: wait 30 seconds.', true);
+      } else this.lockMsg('Wrong password.', true);
+      this.game.sound.empty();
+      return;
+    }
+    this.unlocked = true;
+    this.wrong = 0;
+    if ($('#cz-remember').checked) store.set('cheatKey', sha256('remember:' + LOCK_SALT + normalize(pw)));
+    $('#cz-pass').value = '';
+    this.game.sound.cleared();
+    this.render();
+    this.msg('Unlocked! Welcome back, boss.');
+  }
+
+  // Lock again, and turn every cheat off.
+  lock() {
+    this.unlocked = false;
+    store.set('cheatKey', '');
+    this.on = {};
+    this.gun = null;
+    this.render();
+    this.lockMsg('Locked. Every cheat is off.', false);
+  }
+
+  lockMsg(text, bad) {
+    const m = $('#cz-lock-msg');
+    m.textContent = text;
+    m.classList.toggle('bad', bad);
+    m.classList.remove('in');
+    void m.offsetWidth;
+    m.classList.add('in');
   }
 
   has(id) {
@@ -119,8 +193,10 @@ export class Cheats {
 
   show() {
     this.el.hidden = false;
+    $('#cz-lock-msg').textContent = '';
     this.render();
-    $('#cz-close').focus();
+    if (this.unlocked) $('#cz-close').focus();
+    else $('#cz-pass').focus();
   }
 
   hide() {
@@ -225,6 +301,14 @@ export class Cheats {
     const g = this.game;
     const ok = this.allowed();
     const inGame = g.inGame;
+    $('#cz-lock').hidden = this.unlocked;
+    $('#cz-main').hidden = !this.unlocked;
+    $('#cz-lockbtn').hidden = !this.unlocked;
+    if (!this.unlocked) {
+      $('#cz-status').textContent = 'Only the owner of this game knows the password.';
+      this.updateHud();
+      return;
+    }
     $('#cz-status').textContent = !ok
       ? 'Only the host can use cheats in an online game.'
       : g.mp

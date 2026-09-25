@@ -473,8 +473,20 @@
     <header class="ch-head">
       <h2 class="overlay-title ch-title">Cheats</h2>
       <p id="cz-status" class="note"></p>
+      <button id="cz-lockbtn" class="btn btn-small btn-quiet" type="button" hidden>Lock cheats</button>
       <button id="cz-close" class="btn btn-go" type="button">Done</button>
     </header>
+    <div id="cz-lock" class="ch-lock">
+      <p class="ch-lock-icon" aria-hidden="true">🔒</p>
+      <p class="ch-lock-title">Cheats are locked</p>
+      <form id="cz-lock-form" class="ch-lock-form" autocomplete="off">
+        <label class="field" for="cz-pass"><span>Secret password</span><input id="cz-pass" type="password" maxlength="40" spellcheck="false" autocomplete="off"></label>
+        <label class="check" for="cz-remember"><input id="cz-remember" type="checkbox" checked><span>Remember this computer</span></label>
+        <button id="cz-unlock" class="btn btn-cheat" type="submit">Unlock</button>
+      </form>
+      <p id="cz-lock-msg" class="ch-lock-msg" role="status" aria-live="polite"></p>
+    </div>
+    <div id="cz-main">
     <p id="cz-msg" class="ch-msg" role="status" aria-live="polite"></p>
     <div class="ch-body">
       <section class="ch-sec ch-sec-guns">
@@ -514,6 +526,7 @@
           <button id="cz-spin" class="btn btn-small" type="button">Free Lucky Wheel spin</button>
         </div>
       </section>
+    </div>
     </div>
   </div>
 </section>
