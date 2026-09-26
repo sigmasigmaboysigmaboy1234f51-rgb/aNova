@@ -299,7 +299,7 @@ npm run server     # run a dedicated multiplayer server
 npm run dist:win   # build the Windows .exe (on Windows)
 ```
 
-GitHub builds the Windows app automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, set the version in `package.json` and push a tag like `v2.1.0` (`git tag v2.1.0 && git push origin v2.1.0`). The build then makes a GitHub Release with the installer, the portable .exe and `Blockfire.html`, using the text in `.github/release-notes.md`.
+GitHub builds the Windows app automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, change the version in `package.json` (for example `npm version 2.1.0 --no-git-tag-version`) and push. When a version has no release yet, the build makes a GitHub Release for it with the installer, the portable .exe and `Blockfire.html`, using the text in `.github/release-notes.md`. Pushing a tag like `v2.1.0` does the same.
 
 | File | What it does |
 | --- | --- |

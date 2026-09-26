@@ -1,6 +1,6 @@
 # Builds the Windows app (installer + portable .exe) on every push.
 # Download it from the run's "Artifacts" section on the Actions tab.
-# Pushing a tag like v2.0.0 also makes a GitHub Release (download page).
+# A new version in package.json (or a v* tag) also makes a GitHub Release.
 name: Build Windows app
 
 on:
@@ -29,14 +29,32 @@ jobs:
           name: Blockfire-Windows
           path: dist/*.exe
           if-no-files-found: error
-      # A tag like v2.0.0 makes a download page (GitHub Release) with the
-      # installer, the portable .exe and the one-file web version.
-      - if: startsWith(github.ref, 'refs/tags/v')
+      # Download page (GitHub Release) with the installer, the portable .exe
+      # and the one-file web version. Made when a v* tag is pushed, or when
+      # the version in package.json doesn't have a release yet.
+      - name: Check for a new version
+        id: rel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            tag="v$(node -p "require('./package.json').version")"
+            if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+              echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - if: steps.rel.outputs.tag
+        shell: bash
         run: cp index.html dist/Blockfire.html
-      - if: startsWith(github.ref, 'refs/tags/v')
+      - if: steps.rel.outputs.tag
         uses: softprops/action-gh-release@v2
         with:
-          name: Blockfire ${{ github.ref_name }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Blockfire ${{ steps.rel.outputs.tag }}
           body_path: .github/release-notes.md
           make_latest: true
           files: |
