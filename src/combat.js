@@ -194,7 +194,15 @@ export class Combat {
     const g = this.game;
     if (p.buff && p.buff('dmg')) dmg *= 2;
     if (g.cheats.has('onehit')) dmg *= 1000;
+    const buff = p === g.player && g.cheats.has('buff');
+    if (buff) dmg *= 2;
     mob.damage(dmg, dir, head, at, g.myId, { burn: s.burn, slow: s.slow });
+    // Super buff: every hit sends them flying.
+    if (buff && !mob.remote && !mob.def.boss && mob.state === 'live') {
+      mob.vel.x += dir.x * 7;
+      mob.vel.z += dir.z * 7;
+      mob.vel.y = Math.max(mob.vel.y, 5);
+    }
     if (s.leech) {
       this.leechAcc += dmg * s.leech;
       while (this.leechAcc >= 1) {

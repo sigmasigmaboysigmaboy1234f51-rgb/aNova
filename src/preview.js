@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildHumanoid } from './model.js';
 import { clamp } from './util.js';
 import { attachCosmetics, animateCosmetics, removeCosmetics } from './cosmetics.js';
-import { petObject, PETS } from './pets.js';
+import { petObject, PETS, animatePet } from './pets.js';
 
 // The spinning character on the title screen, which doubles as the canvas
 // you paint on in the skin editor.
@@ -198,7 +198,11 @@ export class SkinPreview {
       P.head.rotation.set(Math.sin(this.t * 0.7) * 0.06, Math.sin(this.t * 0.45) * 0.25, 0);
     }
     animateCosmetics(this.cos, this.t, 0, dt);
-    if (this.petObj && PETS[this.petObj.userData.id].fly) this.petObj.position.y = 0.12 + Math.sin(this.t * 2.2) * 0.06;
+    if (this.petObj) {
+      const id = this.petObj.userData.id;
+      if (PETS[id].fly) this.petObj.position.y = 0.12 + Math.sin(this.t * 2.2) * 0.06;
+      animatePet(this.petObj.userData.parts, id, { t: this.t, walk: 0, act: 0 }, dt);
+    }
     const lift = this.editing ? 0 : 0.14;
     this.camera.position.set(0, 0.05 + lift, this.dist);
     this.camera.lookAt(0, 0.02 + lift, 0);

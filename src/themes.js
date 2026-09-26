@@ -192,7 +192,7 @@ function crystals(w, heights, rng, n = 10) {
 
 // light: sky brightness 0..1. top/under/beach: ground layers.
 export const THEMES = {
-  meadow: { name: 'Mossy Meadows', sky: '#8fc6ea', fog: [42, 118], light: 1, top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 24, ruins: 5, pillars: 3 },
+  meadow: { name: 'Mossy Meadows', sky: '#8fc6ea', fog: [42, 118], light: 1, top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 17, ruins: 5, pillars: 3 },
   ruins: {
     name: 'The Old Ruins',
     sky: '#d8a878',

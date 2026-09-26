@@ -301,7 +301,7 @@ export class World {
   // theme (see themes.js) picks the ground blocks, trees and landmarks.
   generate(seed, theme = null) {
     this.resize(64, 64);
-    const th = theme || { top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 24, ruins: 5, pillars: 3 };
+    const th = theme || { top: B.GRASS, under: B.DIRT, beach: B.SAND, trees: 17, ruins: 5, pillars: 3 };
     this.seed = seed;
     this.theme = th;
     this.data.fill(0);
@@ -385,36 +385,72 @@ export class World {
     this.version++;
   }
 
+  // Only fills air, and never outside the world.
+  put(x, y, z, id) {
+    if (this.inBounds(x, y, z) && this.data[this.idx(x, y, z)] === B.AIR) this.data[this.idx(x, y, z)] = id;
+  }
+
   placeTree(x, y0, z, rng, th = {}) {
-    const top = y0 + 3 + (rng() < 0.5 ? 1 : 0);
-    for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;
     // Dead trees in the bog: bare trunks with a couple of stubby branches.
     if (th.deadTrees && rng() < 0.6) {
+      const top = y0 + 3 + (rng() < 0.5 ? 1 : 0);
+      for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;
       if (this.inBounds(x + 1, top - 1, z)) this.data[this.idx(x + 1, top - 1, z)] = B.LOG;
       if (this.inBounds(x, top - 2, z - 1)) this.data[this.idx(x, top - 2, z - 1)] = B.LOG;
       return;
     }
-    for (let dy = -2; dy <= 1; dy++) {
-      const y = top + dy;
-      const r = dy <= -1 ? 2 : 1;
-      for (let dz = -r; dz <= r; dz++) {
-        for (let dx = -r; dx <= r; dx++) {
-          const corner = Math.abs(dx) === r && Math.abs(dz) === r;
-          if (dy === 1 && dx !== 0 && dz !== 0) continue;
-          if (corner && (dy === 0 || rng() < 0.5)) continue;
-          if (this.inBounds(x + dx, y, z + dz) && this.get(x + dx, y, z + dz) === B.AIR) {
-            this.data[this.idx(x + dx, y, z + dz)] = B.LEAVES;
+    const pine = rng() < (th.snowTrees ? 0.7 : 0.22);
+    let top;
+    if (pine) {
+      // Tall and pointy, in tiers.
+      top = y0 + 5 + Math.floor(rng() * 3);
+      for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;
+      const base = y0 + 2;
+      for (let y = base; y <= top + 1; y++) {
+        const t = (y - base) / (top + 1 - base);
+        let r = Math.round((1 - t) * 2.6);
+        if ((top - y) % 2 === 1 && r > 0) r -= 1;
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (dx * dx + dz * dz > r * r + 0.6) continue;
+            this.put(x + dx, y, z + dz, B.LEAVES);
+          }
+        }
+      }
+      this.put(x, top + 2, z, B.LEAVES);
+    } else {
+      // A round oak with a couple of branches poking out.
+      const big = rng() < 0.45;
+      top = y0 + 3 + Math.floor(rng() * 2) + (big ? 1 : 0);
+      for (let y = y0; y <= top; y++) this.data[this.idx(x, y, z)] = B.LOG;
+      const R = big ? 3 : 2;
+      const Rv = big ? 2.2 : 1.8;
+      const cy = top + (big ? 0 : 0.5);
+      for (let n = 0; n < (big ? 2 : 1); n++) {
+        const [bx, bz] = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(rng() * 4)];
+        const by = top - 1 - n;
+        this.put(x + bx, by, z + bz, B.LOG);
+        if (big) this.put(x + bx * 2, by + 1, z + bz * 2, B.LOG);
+      }
+      for (let y = Math.floor(cy - Rv); y <= Math.ceil(cy + Rv); y++) {
+        for (let dz = -R; dz <= R; dz++) {
+          for (let dx = -R; dx <= R; dx++) {
+            const q = (dx * dx + dz * dz) / ((R + 0.5) * (R + 0.5)) + ((y - cy) * (y - cy)) / ((Rv + 0.5) * (Rv + 0.5));
+            if (q > 1) continue;
+            // Ragged edges so it doesn't look like a perfect ball.
+            if (q > 0.62 && rng() < 0.35) continue;
+            this.put(x + dx, y, z + dz, B.LEAVES);
           }
         }
       }
     }
     // Snow settles on top of the Frostpeak trees.
     if (th.snowTrees) {
-      for (let dz = -2; dz <= 2; dz++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          for (let y = top + 1; y >= top - 2; y--) {
+      for (let dz = -3; dz <= 3; dz++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          for (let y = top + 4; y > y0; y--) {
             if (this.get(x + dx, y, z + dz) === B.LEAVES) {
-              if (this.inBounds(x + dx, y + 1, z + dz) && this.get(x + dx, y + 1, z + dz) === B.AIR) this.data[this.idx(x + dx, y + 1, z + dz)] = B.SNOW;
+              this.put(x + dx, y + 1, z + dz, B.SNOW);
               break;
             }
           }
@@ -423,23 +459,89 @@ export class World {
     }
   }
 
+  // Crumbling old stonework: a broken wall with a window, a tower with a
+  // doorway, or an arch. Loose rubble lies around them.
   placeRuin(x, z, heights, rng) {
-    const len = 5 + Math.floor(rng() * 4);
-    const alongX = rng() < 0.5;
-    const tall = 2 + (rng() < 0.4 ? 1 : 0);
-    const wall = (wx, wz) => {
-      if (wx < 1 || wz < 1 || wx >= SX - 1 || wz >= SZ - 1) return;
-      const base = heights[wz * SX + wx];
-      for (let k = 0; k < tall; k++) {
-        if (k > 0 && rng() < 0.3) break;
-        this.data[this.idx(wx, base + k, wz)] = rng() < 0.4 ? B.MOSSY : B.COBBLE;
+    const stone = () => {
+      const r = rng();
+      return r < 0.35 ? B.MOSSY : r < 0.7 ? B.STONE_BRICK : B.COBBLE;
+    };
+    const ground = (wx, wz) => heights[Math.max(0, Math.min(SZ - 1, wz)) * SX + Math.max(0, Math.min(SX - 1, wx))];
+    const ok = (wx, wz) => wx >= 1 && wz >= 1 && wx < SX - 1 && wz < SZ - 1;
+    const column = (wx, wz, tall, base = ground(wx, wz)) => {
+      if (!ok(wx, wz)) return;
+      for (let k = 0; k < tall; k++) this.data[this.idx(wx, base + k, wz)] = stone();
+    };
+    const rubble = (n, r) => {
+      for (let i = 0; i < n; i++) {
+        const rx = x + Math.round((rng() - 0.5) * r * 2);
+        const rz = z + Math.round((rng() - 0.5) * r * 2);
+        if (!ok(rx, rz)) continue;
+        this.put(rx, ground(rx, rz), rz, rng() < 0.5 ? B.COBBLE : B.GRAVEL);
       }
     };
-    for (let i = 0; i < len; i++) wall(x + (alongX ? i : 0), z + (alongX ? 0 : i));
-    if (rng() < 0.6) {
-      const ex = x + (alongX ? len - 1 : 0);
-      const ez = z + (alongX ? 0 : len - 1);
-      for (let i = 1; i < 4; i++) wall(ex + (alongX ? 0 : i), ez + (alongX ? i : 0));
+    const kind = rng();
+    if (kind < 0.45) {
+      // A broken wall, maybe with a window, maybe turning a corner.
+      const len = 5 + Math.floor(rng() * 4);
+      const alongX = rng() < 0.5;
+      const tall = 3 + (rng() < 0.4 ? 1 : 0);
+      const win = 1 + Math.floor(rng() * (len - 3));
+      for (let i = 0; i < len; i++) {
+        const wx = x + (alongX ? i : 0);
+        const wz = z + (alongX ? 0 : i);
+        // Tallest in the middle, crumbling toward the ends.
+        const h = Math.max(1, tall - (i === 0 || i === len - 1 ? 1 : 0) - (rng() < 0.3 ? 1 : 0));
+        column(wx, wz, h);
+        if (ok(wx, wz) && (i === win || i === win + 1) && h >= 3) this.data[this.idx(wx, ground(wx, wz) + 1, wz)] = B.AIR;
+      }
+      if (rng() < 0.6) {
+        const ex = x + (alongX ? len - 1 : 0);
+        const ez = z + (alongX ? 0 : len - 1);
+        for (let i = 1; i < 4; i++) column(ex + (alongX ? 0 : i), ez + (alongX ? i : 0), Math.max(1, tall - i));
+      }
+      rubble(4, 3);
+    } else if (kind < 0.75) {
+      // A hollow tower with a broken top and a doorway.
+      const n = 4;
+      let base = 99;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) base = Math.min(base, ground(x + i, z + j));
+      const door = Math.floor(rng() * 4);
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          const edge = i === 0 || j === 0 || i === n - 1 || j === n - 1;
+          const wx = x + i;
+          const wz = z + j;
+          if (!ok(wx, wz)) continue;
+          // Fill down to the ground so it never floats.
+          for (let y = base; y < ground(wx, wz); y++) this.data[this.idx(wx, y, wz)] = B.STONE_BRICK;
+          if (!edge) continue;
+          const h = 3 + Math.floor(rng() * 3) + (i + j > 3 ? 1 : 0);
+          column(wx, wz, h, base);
+        }
+      }
+      const [dx, dz] = [[1, 0], [2, 3], [0, 2], [3, 1]][door];
+      for (let y = base; y < base + 2; y++) if (ok(x + dx, z + dz)) this.data[this.idx(x + dx, y, z + dz)] = B.AIR;
+      rubble(5, 4);
+    } else {
+      // An arch: two pillars and a lintel, one side fallen in.
+      const alongX = rng() < 0.5;
+      const span = 3;
+      const ex = x + (alongX ? span + 1 : 0);
+      const ez = z + (alongX ? 0 : span + 1);
+      const base = Math.min(ground(x, z), ground(ex, ez));
+      const broken = rng() < 0.4;
+      column(x, z, 5, base);
+      column(ex, ez, broken ? 2 : 5, base);
+      for (let y = base; y < ground(x, z); y++) if (ok(x, z)) this.data[this.idx(x, y, z)] = B.STONE_BRICK;
+      for (let y = base; y < ground(ex, ez); y++) if (ok(ex, ez)) this.data[this.idx(ex, y, ez)] = B.STONE_BRICK;
+      for (let i = 1; i <= span; i++) {
+        if (broken && i > 1) break;
+        const wx = x + (alongX ? i : 0);
+        const wz = z + (alongX ? 0 : i);
+        if (ok(wx, wz)) this.data[this.idx(wx, base + 4, wz)] = stone();
+      }
+      rubble(broken ? 6 : 3, 3);
     }
   }
 

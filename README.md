@@ -96,7 +96,7 @@ Spend coins on looks. Click **Style** on the title screen and try anything on be
 - **16 hats**, from a Red Cap and a Traffic Cone to a Halo, a Space Helmet and the Royal Crown.
 - **6 capes** that flap as you run, including Rainbow and Galaxy.
 - **4 kill effects**: confetti, hearts, gold sparkles or a void pop every time you beat a mob.
-- **6 pets** that follow you and help: **Mini Pip** zaps mobs, **Bat Buddy** bites them, **Mini Golem** punches them, **Baby Dragon** sets them on fire, **Coin Cat** pulls coins in from far away (and gives 10% more), and **Heal Slime** slowly heals you.
+- **6 pets** that follow you and help: **Mini Pip** zaps mobs, **Bat Buddy** bites them, **Mini Golem** punches them, **Baby Dragon** sets them on fire, **Coin Cat** pulls coins in from far away (and gives 10% more), and **Heal Slime** slowly heals you. They blink, flap, swish their tails and walk, and the dragon opens its jaws when it breathes fire.
 
 Other players see your whole look online.
 
@@ -120,7 +120,8 @@ The cheat menu is **locked with a secret password** that only the game's owner k
   - **Freeze Gun** freezes mobs, bosses and bots for 10 seconds.
   - **Nuke Gun** makes a giant explosion wherever you point.
   - **Launch Gun** blasts you toward wherever you point.
-- **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks.
+- **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks, and **Super buff** (huge muscles; your hits do double damage and knock mobs flying).
+- **Size:** Tiny, Normal, Tall, Giant or Titan. Tiny players squeeze through one-block gaps. Tall and bigger players walk straight up blocks, and Giants and Titans stomp the ground when they land, flattening mobs nearby. Other players see how big (and how buff) you are.
 - **World:** freeze every mob, pause the waves, knock out every mob, skip a wave, summon any boss, spawn any mob, day or night, any weather, add bots to a Bot Duel, full health, every power-up at once.
 - **Goodies:** +10,000 coins, unlock every gun and part, unlock every Style item, level up, a free Lucky Wheel spin.
 
@@ -145,7 +146,7 @@ There are 10 mob families. New ones join as the waves go up:
 | Mosshead | 1 | Shambles at you and slams down with both arms. Step back during the wind-up and it misses. Chews through walls |
 | Bonehead | 2 | Keeps its distance and fires glowing bolts. Rattles apart when beaten |
 | Gloop | 3 | Bouncy jelly cube that hops over two-block walls |
-| Skitter | 4 | Eight-legged and fast. Pounces from a few blocks away and scrambles up walls |
+| Skitter | 4 | A hairy spider, very fast. Pounces from a few blocks away and runs straight up walls of any height |
 | Ember Imp | 6 | Lobs fireballs over your walls. The blast sets you on fire |
 | Fuse | 7 | Runs up, hisses, swells and explodes, taking your walls with it |
 | Rust Knight | 8 | Its shield blocks body shots from the front. Aim for the head. Charges when close |
@@ -284,7 +285,8 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/textures.js` | Pixel-painted block textures |
 | `src/player.js` | Movement, crouch, sprint, aiming, loadout, building, first-person view |
 | `src/weapons.js` | Every gun and part, and how parts change a gun's stats |
-| `src/gun.js` | Builds the voxel gun models from their parts |
+| `src/gun.js` | Builds the voxel gun models from their parts, with bevelled edges, ports, screws and vents |
+| `src/vox.js` | Builds detailed box models (pets, spiders, bats) into a few meshes |
 | `src/combat.js` | Bullets, pellets, projectiles, explosions, lightning, fire and frost |
 | `src/profile.js` | Your saved coins, guns, parts and loadout |
 | `src/armory.js`, `src/thumbs.js` | The Armory screen and gun pictures |

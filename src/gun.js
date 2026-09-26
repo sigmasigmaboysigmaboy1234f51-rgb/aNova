@@ -29,7 +29,7 @@ const BASE_PAL = {
 };
 
 export const PAINTS = {
-  steel: { 1: '#383e48', 2: '#56606e', 3: '#707985', 5: '#ff7a2f', 6: '#a8401a', 9: '#2c2e34', 10: '#43454d' },
+  steel: { 1: '#3b424e', 2: '#5d6878', 3: '#8591a2', 5: '#ff7a2f', 6: '#a8401a', 9: '#2c2e34', 10: '#474a53' },
   gunmetal: { 1: '#24272c', 2: '#3a3f47', 3: '#5c636d', 5: '#d6d9de', 6: '#8d939b', 9: '#1e1f23', 10: '#34363c' },
   desert: { 1: '#6b5a3e', 2: '#a48d62', 3: '#c9b284', 5: '#4f5a32', 6: '#353d20', 9: '#5a4a30', 10: '#76623f' },
   camo: { 1: '#33402a', 2: '#56673a', 3: '#7d8a52', 5: '#8a6b3c', 6: '#5c4526', 9: '#2f3524', 10: '#454f33', camo: true },
@@ -66,6 +66,28 @@ const UNLIT = new Set(['glow', 'heat', 'cellGlow', 'spinGlow']);
 class Voxels {
   constructor() {
     this.map = new Map();
+    // Fine details (ports, screws, grooves) added after the voxels are
+    // split in two (see refine and details).
+    this.fx = [];
+  }
+  // Ejection port cut into both sides, with the bolt showing.
+  port(i0, i1, j0, j1) {
+    this.fx.push(['port', i0, i1, j0, j1]);
+  }
+  // Screw heads on both sides.
+  screws(pts, c = 3) {
+    this.fx.push(['screws', pts, c]);
+  }
+  // A thin groove along a row, or down a column.
+  groove(i0, i1, j) {
+    this.fx.push(['groove', i0, i1, j]);
+  }
+  vgroove(i, j0, j1) {
+    this.fx.push(['vgroove', i, j0, j1]);
+  }
+  // Vent slots.
+  grille(i0, i1, j0, j1) {
+    for (let i = i0; i <= i1; i++) this.fx.push(['vgroove', i, j0, j1]);
   }
   key(i, j, k) {
     return ((i + 64) * 256 + (j + 64)) * 256 + (k + 64);
@@ -162,6 +184,9 @@ const FRAMES = {
     rail(v, 9, 30, 17);
     grip(v, 15, 8, 1);
     trigger(v, 15, 8);
+    v.port(26, 28, 14, 15);
+    v.grille(9, 13, 13, 14);
+    v.groove(16, 24, 11);
     v.box(19, 26, 8, 8, 2, 6, 1);
     return {
       front: { i: 31, j: 12 },
@@ -180,6 +205,12 @@ const FRAMES = {
     v.paint(18, 20, 17, 17, 3, 5, 1);
     for (const k of [2, 6]) v.paint(15, 23, 13, 13, k, k, 5);
     v.box(11, 22, 11, 12, 3, 5, 1);
+    v.port(17, 21, 16, 16);
+    v.grille(10, 14, 14, 16);
+    v.screws([
+      [13, 11],
+      [21, 11],
+    ]);
     grip(v, 14, 10, 3, 3);
     trigger(v, 14, 10);
     return {
@@ -213,6 +244,12 @@ const FRAMES = {
       const shift = Math.floor((10 - j) / 3);
       v.box(5 - shift, 10 - shift, j, j, 3, 5, j % 3 ? 18 : 19);
     }
+    v.screws([
+      [10, 14],
+      [12, 12],
+      [20, 15],
+    ]);
+    v.groove(9, 13, 13);
     trigger(v, 11, 10);
     return {
       front: { i: 22, j: 14 },
@@ -230,6 +267,12 @@ const FRAMES = {
     }
     v.box(20, 21, 13, 14, 7, 7, 3);
     rail(v, 9, 24, 16);
+    v.port(18, 22, 13, 14);
+    v.grille(9, 13, 12, 13);
+    v.screws([
+      [10, 10],
+      [23, 10],
+    ]);
     grip(v, 14, 8, 2);
     trigger(v, 14, 8);
     return {
@@ -254,6 +297,12 @@ const FRAMES = {
     rail(v, 10, 27, 17);
     grip(v, 15, 8, 1);
     trigger(v, 15, 8);
+    v.port(18, 23, 11, 12);
+    v.screws([
+      [10, 15],
+      [27, 15],
+    ]);
+    v.groove(9, 27, 16);
     // Tube magazine and the pump, which racks back after every shot.
     v.box(29, 44, 8, 10, 3, 5, 1);
     v.box(30, 40, 7, 11, 2, 6, 9, 'shroud');
@@ -275,6 +324,13 @@ const FRAMES = {
     v.box(20, 20, 14, 14, 7, 8, 3);
     v.box(20, 21, 12, 14, 9, 9, 3);
     rail(v, 8, 30, 16);
+    v.port(22, 26, 13, 14);
+    v.grille(8, 14, 13, 14);
+    v.screws([
+      [8, 10],
+      [29, 10],
+      [29, 14],
+    ]);
     grip(v, 13, 8, 2);
     trigger(v, 13, 8);
     return {
@@ -311,6 +367,16 @@ const FRAMES = {
     v.box(18, 38, 13, 13, 4, 4, 18, 'cell');
     v.box(18, 19, 13, 13, 3, 5, 5, 'cell');
     v.box(39, 40, 13, 13, 4, 4, 7, 'cellGlow');
+    v.screws(
+      [
+        [27, 12],
+        [30, 12],
+        [27, 10],
+        [30, 10],
+      ],
+      8,
+    );
+    v.groove(7, 24, 11);
     grip(v, 14, 9, 3, 2);
     trigger(v, 14, 9);
     return {
@@ -351,6 +417,14 @@ const FRAMES = {
       v.box(8, 8, 17, 19, k0, k1, 3, 'cell');
       v.box(24, 24, 17, 19, k0, k1, 3, 'cell');
     }
+    for (let i = 9; i <= 25; i += 3) v.vgroove(i, 9, 10);
+    v.groove(8, 26, 14);
+    v.screws([
+      [7, 14],
+      [27, 14],
+      [7, 9],
+      [27, 9],
+    ]);
     grip(v, 14, 6, 0);
     trigger(v, 14, 6);
     return {
@@ -376,6 +450,13 @@ const FRAMES = {
     v.box(12, 19, 3, 8, 2, 6, 25, 'cell');
     v.paint(12, 19, 3, 3, 2, 6, 26);
     for (const k of [2, 6]) v.box(13, 18, 5, 6, k, k, 14, 'cellGlow');
+    v.port(17, 21, 14, 15);
+    v.grille(7, 11, 10, 11);
+    v.screws([
+      [7, 15],
+      [23, 15],
+      [23, 10],
+    ]);
     rail(v, 7, 23, 17);
     grip(v, 11, 8, 1);
     trigger(v, 11, 8);
@@ -411,6 +492,14 @@ const FRAMES = {
       [23, 7],
     ]) v.carve(i, i, j, j, 0, 8);
     for (const k of [0, 8]) v.box(18, 20, 3, 5, k, k, 5, 'cell');
+    for (const i of [22, 30]) v.vgroove(i, 9, 15);
+    v.grille(14, 19, 13, 15);
+    v.screws([
+      [25, 15],
+      [34, 15],
+      [25, 9],
+      [34, 9],
+    ]);
     grip(v, 13, 7, 1);
     trigger(v, 13, 7);
     return {
@@ -446,6 +535,13 @@ const FRAMES = {
     v.box(21, 43, 12, 12, 4, 4, 3, 'spin');
     for (const i of [27, 38]) v.ring(i, 8, 16, 0, 8, 3, 'spin');
     v.box(24, 24, 11, 13, 3, 5, 14, 'spinGlow');
+    for (const i of [5, 9, 13, 17]) v.vgroove(i, 7, 16);
+    v.screws([
+      [3, 17],
+      [19, 17],
+      [3, 6],
+      [19, 6],
+    ]);
     grip(v, 7, 4, 0, 3);
     return {
       muzzle: { i: 45, j: 12 },
@@ -466,6 +562,12 @@ const FRAMES = {
     v.carve(13, 19, 19, 22, 2, 6);
     v.box(14, 18, 18, 21, 2, 6, 22, 'cell');
     v.paint(14, 18, 21, 21, 2, 6, 21);
+    v.port(21, 24, 13, 14);
+    v.screws([
+      [9, 15],
+      [25, 15],
+    ]);
+    v.groove(9, 25, 12);
     grip(v, 14, 8, 1);
     trigger(v, 14, 8);
     return {
@@ -749,37 +851,160 @@ function hash(i, j, k) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function meshPart(vox, part, pal, place, offsetY) {
+// Split every voxel into 2x2x2 smaller ones and shave the outer edges of
+// anything at least two voxels thick, so barrels come out rounded and
+// boxes get bevelled edges. Thin details (rails, sights, triggers) keep
+// their shape.
+const PAIRS = [
+  [0, 1],
+  [0, 2],
+  [1, 2],
+];
+function refine(vox) {
+  const fine = new Voxels();
+  // nb[axis * 2 + (sign > 0)]: is there a voxel of the same group that way?
+  const nb = [false, false, false, false, false, false];
+  for (const vx of vox.map.values()) {
+    const g = GROUP[vx.part];
+    for (let a = 0; a < 3; a++) {
+      for (let p = 0; p < 2; p++) {
+        const d = p ? 1 : -1;
+        const o = vox.get(vx.i + (a === 0 ? d : 0), vx.j + (a === 1 ? d : 0), vx.k + (a === 2 ? d : 0));
+        nb[a * 2 + p] = !!o && GROUP[o.part] === g;
+      }
+    }
+    for (let d = 0; d < 8; d++) {
+      let cut = false;
+      for (const [a, b] of PAIRS) {
+        const pa = (d >> a) & 1;
+        const pb = (d >> b) & 1;
+        if (!nb[a * 2 + pa] && !nb[b * 2 + pb] && nb[a * 2 + 1 - pa] && nb[b * 2 + 1 - pb]) {
+          cut = true;
+          break;
+        }
+      }
+      if (cut) continue;
+      const f = { i: vx.i * 2 + (d & 1), j: vx.j * 2 + ((d >> 1) & 1), k: vx.k * 2 + ((d >> 2) & 1), c: vx.c, part: vx.part, src: vx };
+      fine.map.set(fine.key(f.i, f.j, f.k), f);
+    }
+  }
+  return fine;
+}
+
+// The outermost fine voxel in a row, looking in from one side.
+function outer(fine, I, J, s) {
+  for (let K = s > 0 ? 22 : -6, n = 0; n < 30; n++, K -= s) {
+    const f = fine.get(I, J, K);
+    if (f && !UNLIT.has(f.part)) return f;
+  }
+  return null;
+}
+
+function details(fine, ops) {
+  const cut = (I, J, s, c) => {
+    const f = outer(fine, I, J, s);
+    if (!f) return;
+    const inner = fine.get(I, J, f.k - s);
+    if (!inner || inner.part !== f.part) return;
+    fine.map.delete(fine.key(f.i, f.j, f.k));
+    inner.c = c;
+  };
+  for (const op of ops) {
+    for (const s of [-1, 1]) {
+      if (op[0] === 'port') {
+        const [, i0, i1, j0, j1] = op;
+        const midJ = j0 + j1 + 1;
+        for (let I = i0 * 2; I <= i1 * 2 + 1; I++) {
+          for (let J = j0 * 2; J <= j1 * 2 + 1; J++) {
+            const bolt = (J === midJ || J === midJ - 1) && I > i0 * 2 + 1 && I < i1 * 2;
+            cut(I, J, s, bolt ? 8 : 12);
+          }
+        }
+      } else if (op[0] === 'screws') {
+        for (const [i, j] of op[1]) {
+          const I = i * 2;
+          const J = j * 2 + 1;
+          const f = outer(fine, I, J, s);
+          if (!f) continue;
+          for (const [di, dj] of [
+            [1, 0],
+            [0, -1],
+            [1, -1],
+          ]) {
+            const o = outer(fine, I + di, J + dj, s);
+            if (o && o.k === f.k) o.c = 1;
+          }
+          const head = { i: I, j: J, k: f.k + s, c: op[2], part: f.part, src: f.src };
+          fine.map.set(fine.key(head.i, head.j, head.k), head);
+        }
+      } else if (op[0] === 'groove') {
+        const [, i0, i1, j] = op;
+        for (let I = i0 * 2; I <= i1 * 2 + 1; I++) cut(I, j * 2, s, 1);
+      } else if (op[0] === 'vgroove') {
+        const [, i, j0, j1] = op;
+        for (let J = j0 * 2; J <= j1 * 2 + 1; J++) cut(i * 2, J, s, 1);
+      }
+    }
+  }
+}
+
+function meshPart(fine, list, part, pal, place, offsetY, seams) {
   const pos = [];
   const nor = [];
   const col = [];
   const idx = [];
   const lit = !UNLIT.has(part);
-  const base = new THREE.Color();
-  for (const v of vox.map.values()) {
-    if (v.part !== part) continue;
+  const colors = new Map();
+  const H = S / 2;
+  const grp = GROUP[part];
+  const o0 = place(0, 0, 0);
+  const oI = place(0.5, 0, 0).sub(o0);
+  const oJ = place(0, 0.5, 0).sub(o0);
+  const oK = place(0, 0, 0.5).sub(o0);
+  const around = new Array(6);
+  for (const v of list) {
     const { i, j, k } = v;
-    const same = (dj) => {
-      const n = vox.get(i, j + dj, k);
-      return n && GROUP[n.part] === GROUP[part];
-    };
-    base.set(pal[v.c] || '#ff00ff');
-    let tone = 0.94 + hash(i, j, k) * 0.12;
-    if (lit) {
-      if (!same(1)) tone *= 1.35;
-      else if (!same(-1)) tone *= 0.75;
+    // Neighbours in FACES order.
+    let open = false;
+    for (let n = 0; n < 6; n++) {
+      const d = FACES[n].d;
+      const o = fine.get(i + d[0], j + d[1], k + d[2]);
+      around[n] = o && GROUP[o.part] === grp ? o : null;
+      if (!around[n]) open = true;
     }
-    const o = place(i, j, k);
-    const x0 = o.x - S / 2;
-    const y0 = o.y - S / 2 - offsetY;
-    const z0 = o.z - S / 2;
-    for (const f of FACES) {
-      const n = vox.get(i + f.d[0], j + f.d[1], k + f.d[2]);
-      if (n && GROUP[n.part] === GROUP[part]) continue;
+    if (!open) continue;
+    let base = colors.get(v.c);
+    if (!base) colors.set(v.c, (base = new THREE.Color(pal[v.c] || '#ff00ff')));
+    const src = v.src;
+    let tone = 0.94 + hash(src.i, src.j, src.k) * 0.12;
+    if (lit) {
+      // A bright line along top edges, darker along the bottom.
+      if (!around[2]) tone *= 1.32;
+      else if (!around[3]) tone *= 0.74;
+      // Thin dark seams where two colours meet, like panel lines.
+      if (seams) {
+        const mine = pal[v.c] || '';
+        for (const o of around) {
+          if (o && o.c !== v.c && (pal[o.c] || '') < mine) {
+            tone *= 0.78;
+            break;
+          }
+        }
+      }
+    }
+    const fi = i / 2 - 0.25;
+    const fj = j / 2 - 0.25;
+    const fk = k / 2 - 0.25;
+    const x0 = o0.x + (oI.x * fi + oJ.x * fj + oK.x * fk) * 2 - H / 2;
+    const y0 = o0.y + (oI.y * fi + oJ.y * fj + oK.y * fk) * 2 - H / 2 - offsetY;
+    const z0 = o0.z + (oI.z * fi + oJ.z * fj + oK.z * fk) * 2 - H / 2;
+    for (let n = 0; n < 6; n++) {
+      if (around[n]) continue;
+      const f = FACES[n];
       const l = Math.pow(lit ? f.shade * tone : tone, 2.2);
       const vi = pos.length / 3;
       for (const c of f.c) {
-        pos.push(x0 + c[0] * S, y0 + c[1] * S, z0 + c[2] * S);
+        pos.push(x0 + c[0] * H, y0 + c[1] * H, z0 + c[2] * H);
         nor.push(f.n[0], f.n[1], f.n[2]);
         col.push(base.r * l, base.g * l, base.b * l);
       }
@@ -794,6 +1019,14 @@ function meshPart(vox, part, pal, place, offsetY) {
   geo.computeBoundingSphere();
   return geo;
 }
+const NEIGH = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
 
 const cache = new Map();
 
@@ -817,8 +1050,14 @@ function geometries(gunId, build) {
   // Place every gun so its grip lands in the same spot.
   const place = (i, j, k) => new THREE.Vector3((k - 4) * S, (j - a.grip.j) * S + GRIP.y, -(i - a.grip.i) * S + GRIP.z);
   const spinY = a.spin ? place(0, a.spin.j, 4).y : 0;
+  const fine = refine(v);
+  details(fine, v.fx);
+  const seams = !(PAINTS[paint] || PAINTS.steel).camo;
+  const lists = {};
+  for (const part of Object.keys(GROUP)) lists[part] = [];
+  for (const f of fine.map.values()) lists[f.part].push(f);
   const geo = {};
-  for (const part of Object.keys(GROUP)) geo[part] = meshPart(v, part, pal, place, part.startsWith('spin') ? spinY : 0);
+  for (const part of Object.keys(GROUP)) geo[part] = meshPart(fine, lists[part], part, pal, place, part.startsWith('spin') ? spinY : 0, seams);
   geo.muzzle = place(m.i, m.j, 4);
   geo.muzzle.z += S / 2;
   geo.eye = eye ? place(eye.i, eye.j, 4) : place(a.grip.i + 6, a.grip.j + 12, 4);

@@ -34,6 +34,16 @@ const TOGGLES = [
   ['jump', 'Moon jump', 'Jump really, really high'],
   ['nades', 'Infinite grenades', 'Throw as many as you like'],
   ['blocks', 'Infinite blocks', 'Build forever'],
+  ['buff', 'Super buff', 'Huge muscles. Your hits do double damage and knock mobs flying'],
+];
+
+// How big you are. Giants step up blocks and stomp mobs when they land.
+export const SIZES = [
+  [0.5, 'Tiny'],
+  [1, 'Normal'],
+  [1.6, 'Tall'],
+  [2.5, 'Giant'],
+  [4, 'Titan'],
 ];
 const WORLD_TOGGLES = [
   ['freeze', 'Freeze all mobs', 'Every mob stops where it is'],
@@ -70,6 +80,7 @@ export class Cheats {
     this.game = game;
     this.on = {};
     this.gun = null;
+    this.size = 1;
     this.banned = new Set();
     this.bannedBots = new Set();
     this.announced = false;
@@ -131,6 +142,7 @@ export class Cheats {
     store.set('cheatKey', '');
     this.on = {};
     this.gun = null;
+    this.size = 1;
     this.render();
     this.lockMsg('Locked. Every cheat is off.', false);
   }
@@ -152,8 +164,12 @@ export class Cheats {
     return this.allowed() ? this.gun : null;
   }
 
+  bodySize() {
+    return this.allowed() ? this.size : 1;
+  }
+
   any() {
-    return this.allowed() && (!!this.gun || Object.values(this.on).some(Boolean));
+    return this.allowed() && (!!this.gun || this.size !== 1 || Object.values(this.on).some(Boolean));
   }
 
   // A new game: forget who was banned.
@@ -232,6 +248,24 @@ export class Cheats {
       }
     };
     toggles(TOGGLES, $('#cz-you'));
+
+    const sizes = $('#cz-size');
+    for (const [k, name] of SIZES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ch-gun';
+      b.dataset.size = String(k);
+      b.style.setProperty('--c', k === 1 ? '#cfc6b0' : k < 1 ? '#6ff0ff' : '#ff9a3c');
+      b.textContent = name;
+      b.addEventListener('click', () => {
+        if (!this.allowed()) return this.msg('Only the host can use cheats in an online game.');
+        this.size = k;
+        if (k !== 1) this.used();
+        this.msg(k === 1 ? 'Back to normal size.' : k < 1 ? 'Tiny! Squeeze through one-block gaps.' : `${name}! You step right up blocks${k >= 2 ? ' and stomp mobs when you land' : ''}.`);
+        this.render();
+      });
+      sizes.appendChild(b);
+    }
     toggles(WORLD_TOGGLES, $('#cz-world-t'));
 
     const guns = $('#cz-guns');
@@ -291,7 +325,7 @@ export class Cheats {
     act('#cz-heal', () => this.fullHeal());
     act('#cz-power', () => this.allPowers());
     act('#cz-coins', () => this.coins(10000));
-    act('#cz-unlock', () => this.unlockGear());
+    act('#cz-unlockgear', () => this.unlockGear());
     act('#cz-style', () => this.unlockStyle());
     act('#cz-level', () => this.levelUp());
     act('#cz-spin', () => this.freeSpin());
@@ -324,6 +358,10 @@ export class Cheats {
       b.setAttribute('aria-pressed', String((b.dataset.gun || null) === this.gun));
       b.disabled = !ok;
     }
+    for (const b of this.el.querySelectorAll('[data-size]')) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.size) === this.size));
+      b.disabled = !ok;
+    }
     $('#cz-gun-desc').textContent = this.gun ? CHEAT_GUNS[this.gun].desc : 'Pick a cheat gun, then shoot with any gun in your hand.';
     const waves = inGame && g.authority && !g.duel && !g.story;
     for (const id of ['#cz-killall', '#cz-spawnboss', '#cz-spawnmob']) $(id).disabled = !ok || !inGame || !!g.duel || !g.authority;
@@ -333,7 +371,7 @@ export class Cheats {
     $('#cz-addbot').disabled = !ok || g.bots.length >= 5;
     $('#cz-unban').disabled = !ok || !(this.banned.size || this.bannedBots.size);
     for (const id of ['#cz-heal', '#cz-power']) $(id).disabled = !ok || !inGame;
-    for (const id of ['#cz-coins', '#cz-unlock', '#cz-style', '#cz-level', '#cz-spin']) $(id).disabled = !ok;
+    for (const id of ['#cz-coins', '#cz-unlockgear', '#cz-style', '#cz-level', '#cz-spin']) $(id).disabled = !ok;
     $('#cz-world-note').hidden = inGame;
     this.updateHud();
   }

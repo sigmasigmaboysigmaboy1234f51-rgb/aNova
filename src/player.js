@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { moveEntity, boxHitsWorld } from './physics.js';
 import { B, BLOCKS, SEA, SY } from './world.js';
-import { buildHumanoid, holdGun, setBoxUV, PX } from './model.js';
+import { buildHumanoid, holdGun, setBoxUV, setBulk, PX } from './model.js';
 import { buildGun, CORES } from './gun.js';
 import { GUNS, gunStats, cleanBuild, buildCode } from './weapons.js';
 import { TILE_UV } from './textures.js';
@@ -23,7 +23,7 @@ const EYE_STAND = 1.62;
 const EYE_CROUCH = 1.27;
 const BASE_FOV = 75;
 const SHIELD_COLORS = [new THREE.Color('#6f8cff'), new THREE.Color('#bfe8ff'), new THREE.Color('#ffffff')];
-const VIEW_SCALE = 0.6;
+const VIEW_SCALE = 0.66;
 const VIEW_REST = new THREE.Vector3(0.22, -0.2, -0.45);
 const ZERO3 = [0, 0, 0];
 // Where your left shoulder is, in view space: behind you, low and left.
@@ -138,11 +138,18 @@ function buildGunView(skin, weapon) {
     armL.quaternion.setFromUnitVectors(UP, dir);
   };
   setHand(points.support.x, points.support.y, points.support.z);
+  let bulk = 0;
   return {
     group,
     gun,
     armL,
     shell,
+    // Super Buff: thicker arms in first person too.
+    setBulk(k) {
+      if (k === bulk) return;
+      bulk = k;
+      for (const a of [arm, armL]) a.scale.set(1 + 0.7 * k, 1, 1 + 0.7 * k);
+    },
     points,
     setHand,
     style: reloadStyle(weapon.def.frame, points.cellTop),
@@ -192,6 +199,10 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.hw = 0.3;
     this.h = H_STAND;
+    // Size and muscles from the cheat menu (1 and 0 normally).
+    this.size = 1;
+    this.bulk = 0;
+    this.stepDip = 0;
     this.maxHp = MAX_HP;
     this.thirdPerson = false;
     this.driving = null;
@@ -344,6 +355,9 @@ export class Player {
   reset(spawn) {
     this.pos.copy(spawn);
     this.vel.set(0, 0, 0);
+    // Cheat sizes grow back from normal so a giant never spawns in a wall.
+    this.size = 1;
+    this.hw = 0.3;
     this.yaw = Math.PI * 0.25;
     this.pitch = -0.05;
     this.kick = 0;
@@ -411,6 +425,84 @@ export class Player {
     this.dotBy = null;
   }
 
+  // Grow or shrink toward a new size (cheats). Growing needs room, so we
+  // lift up out of the ground or slide away from walls, or wait.
+  resize(want, dt) {
+    let next = this.size + (want - this.size) * Math.min(1, dt * 4);
+    if (Math.abs(want - next) < 0.02) next = want;
+    if (next > this.size) {
+      const w = this.game.world;
+      const p = this.pos;
+      const hw = 0.3 * next;
+      const h = (this.crouch ? H_CROUCH : H_STAND) * next;
+      const d = hw - this.hw + 0.02;
+      let found = null;
+      for (const [ox, oz] of [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d], [d, d], [-d, d], [d, -d], [-d, -d]]) {
+        for (let lift = 0; lift <= 3 && !found; lift += 0.25) {
+          if (!boxHitsWorld(w, p.x + ox - hw, p.y + lift, p.z + oz - hw, p.x + ox + hw, p.y + lift + h, p.z + oz + hw)) found = [ox, lift, oz];
+        }
+        if (found) break;
+      }
+      if (!found) return;
+      p.x += found[0];
+      p.y += found[1];
+      p.z += found[2];
+    }
+    this.size = next;
+    this.hw = 0.3 * next;
+  }
+
+  // Blocked while walking: try the same step a block or two higher.
+  stepUp(px, py, pz, vx, vz, dt) {
+    const w = this.game.world;
+    const hw = this.hw;
+    const h = this.h;
+    const tx = px + vx * dt;
+    const tz = pz + vz * dt;
+    const max = Math.max(1, Math.floor(this.size * 0.6));
+    for (let s = 1; s <= max; s++) {
+      const y = Math.floor(py) + s;
+      if (boxHitsWorld(w, px - hw, y, pz - hw, px + hw, y + h, pz + hw)) return;
+      if (boxHitsWorld(w, tx - hw, y, tz - hw, tx + hw, y + h, tz + hw)) continue;
+      this.pos.set(tx, y, tz);
+      this.vel.x = vx;
+      this.vel.z = vz;
+      this.vel.y = 0;
+      this.onGround = true;
+      this.stepDip += y - py;
+      return;
+    }
+  }
+
+  // A giant landing shakes the ground and flattens mobs close by.
+  stomp(v) {
+    const g = this.game;
+    const r = 1.6 * this.size;
+    const power = clamp((v - 9) / 12, 0.2, 1);
+    const at = this.pos;
+    const below = g.world.get(Math.floor(at.x), Math.floor(at.y - 0.1), Math.floor(at.z));
+    const cols = below ? g.atlas.colors[BLOCKS[below].top] : null;
+    if (cols) g.fx.burst(at.x, at.y + 0.15, at.z, cols, 26, { speed: 5 + this.size, size: 0.18, up: 2.5, life: 0.8, spread: r * 0.4 });
+    this.shake = Math.max(this.shake, 0.3 + power * 0.4);
+    g.sound.landThud(1);
+    g.sound.explosion(0.5 * power, true);
+    for (const m of g.mobs.list) {
+      if (m.state !== 'live' || m.gone) continue;
+      const dx = m.pos.x - at.x;
+      const dz = m.pos.z - at.z;
+      const d = Math.hypot(dx, dz);
+      if (d > r + m.hw || Math.abs(m.pos.y - at.y) > 2.5) continue;
+      const dir = vE.set(dx / (d || 1), 0.6, dz / (d || 1)).normalize();
+      const dmg = (5 + 9 * power) * this.size * (1 - (d / (r + m.hw)) * 0.5);
+      g.combat.hitMob(this, m, dmg, dir.clone(), false, m.pos.clone(), {}, null);
+      if (!m.remote && !m.def.boss) {
+        m.vel.x += dir.x * 9;
+        m.vel.z += dir.z * 9;
+        m.vel.y = Math.max(m.vel.y, 7);
+      }
+    }
+  }
+
   aimDir(out) {
     const p = this.pitch + this.kick;
     const cp = Math.cos(p);
@@ -423,7 +515,7 @@ export class Player {
 
   canStand() {
     const p = this.pos;
-    return !boxHitsWorld(this.game.world, p.x - this.hw, p.y, p.z - this.hw, p.x + this.hw, p.y + H_STAND, p.z + this.hw);
+    return !boxHitsWorld(this.game.world, p.x - this.hw, p.y, p.z - this.hw, p.x + this.hw, p.y + H_STAND * this.size, p.z + this.hw);
   }
 
   supported(x, y, z) {
@@ -544,10 +636,14 @@ export class Player {
     const k = inp.keys;
     const cheats = g.cheats;
     const flying = cheats.has('fly');
+    const wantSize = cheats.bodySize();
+    if (this.size !== wantSize) this.resize(wantSize, dt);
+    this.bulk += ((cheats.has('buff') ? 1 : 0) - this.bulk) * Math.min(1, dt * 5);
+    if (Math.abs(this.bulk - Math.round(this.bulk)) < 0.01) this.bulk = Math.round(this.bulk);
     const wantCrouch = (k.has('ShiftLeft') || k.has('ShiftRight')) && !flying;
     if (wantCrouch) this.crouch = true;
     else if (this.crouch && this.canStand()) this.crouch = false;
-    this.h = this.crouch ? H_CROUCH : H_STAND;
+    this.h = (this.crouch ? H_CROUCH : H_STAND) * this.size;
 
     const fwdHeld = k.has('KeyW') || k.has('ArrowUp');
     const fwd = (fwdHeld ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
@@ -573,6 +669,7 @@ export class Player {
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;
     if (this.buff('speed')) speed *= 1.45;
     if (cheats.has('speed')) speed *= 2;
+    speed *= 1 + (this.size - 1) * 0.38;
     if (flying) speed *= 1.6;
     if (this.slowT > 0) speed *= 1 - this.slowAmt;
     if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
@@ -599,7 +696,7 @@ export class Player {
     } else {
       this.vel.y = Math.max(this.vel.y - 30 * dt, -45);
       if (jump && this.onGround) {
-        this.vel.y = cheats.has('jump') ? 19 : 9;
+        this.vel.y = (cheats.has('jump') ? 19 : 9) * Math.sqrt(Math.max(1, this.size));
         g.sound.jump();
       }
     }
@@ -610,7 +707,11 @@ export class Player {
     const pz = this.pos.z;
     const wasGround = this.onGround;
     const vyBefore = this.vel.y;
+    const vx0 = this.vel.x;
+    const vz0 = this.vel.z;
     moveEntity(w, this, dt);
+    // Big players step straight up onto blocks.
+    if (this.size >= 1.5 && wasGround && !flying && (this.hitX || this.hitZ) && len > 0) this.stepUp(px, py, pz, vx0, vz0, dt);
 
     // Crouching never walks you off an edge.
     if (this.crouch && wasGround && !this.onGround && vyBefore <= 0 && !this.supported(this.pos.x, py, this.pos.z)) {
@@ -633,6 +734,7 @@ export class Player {
     if (!wasGround && this.onGround && vyBefore < -7) {
       this.landed = clamp((-vyBefore - 7) / 14, 0.25, 1);
       this.landDip = this.landed;
+      if (this.size >= 2 && vyBefore < -9) this.stomp(-vyBefore);
       const below = w.get(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.1), Math.floor(this.pos.z));
       if (below) g.sound.step(BLOCKS[below].sound);
     }
@@ -1120,11 +1222,12 @@ export class Player {
       this.fov = cam.fov;
       return;
     }
-    this.eye = damp(this.eye, this.crouch ? EYE_CROUCH : EYE_STAND, 14, dt);
+    this.eye = damp(this.eye, (this.crouch ? EYE_CROUCH : EYE_STAND) * this.size, 14, dt);
     this.landDip = Math.max(0, this.landDip - dt * 3.2);
+    this.stepDip = Math.max(0, this.stepDip - dt * 6);
     this.hurtRoll *= Math.exp(-7 * dt);
     const eye = this.eyePos(vA);
-    eye.y -= Math.sin(this.landDip * Math.PI * 0.5) * 0.16;
+    eye.y -= Math.sin(this.landDip * Math.PI * 0.5) * 0.16 * this.size + this.stepDip;
     let roll = this.hurtRoll + this.strafeRoll;
     if (this.dead) {
       const k = Math.min(1, this.deadT / 0.7);
@@ -1142,10 +1245,11 @@ export class Player {
     cam.rotation.set(cp + (Math.random() - 0.5) * s * 0.3, cy + (Math.random() - 0.5) * s * 0.3, roll, 'YXZ');
     if (this.thirdPerson && !this.dead) {
       const d = ew > 0.001 ? vB.set(-Math.sin(cy) * Math.cos(cp), Math.sin(cp), -Math.cos(cy) * Math.cos(cp)) : this.aimDir(vB);
-      const want = vC.copy(eye).addScaledVector(d, -4.2 + ew * 0.8);
-      want.x += Math.cos(cy) * 0.55 * (1 - ew);
-      want.z -= Math.sin(cy) * 0.55 * (1 - ew);
-      want.y += 0.3;
+      const far = Math.max(1, this.size * 0.85);
+      const want = vC.copy(eye).addScaledVector(d, (-4.2 + ew * 0.8) * far);
+      want.x += Math.cos(cy) * 0.55 * (1 - ew) * far;
+      want.z -= Math.sin(cy) * 0.55 * (1 - ew) * far;
+      want.y += 0.3 * far;
       const dirB = want.sub(eye);
       const total = dirB.length();
       dirB.divideScalar(total);
@@ -1205,6 +1309,9 @@ export class Player {
       if (gun) gun.visible = i === this.held;
     });
     this.block3p.visible = this.held >= 3 && this.held < 7;
+    m.root.scale.setScalar(this.size);
+    setBulk(m, this.bulk);
+    for (const v of this.views) if (v) v.setBulk(this.bulk);
     if (this.thirdPerson) {
       m.root.position.copy(this.pos);
       m.root.rotation.y = this.yaw + Math.PI;

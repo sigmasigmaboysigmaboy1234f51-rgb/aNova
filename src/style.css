@@ -761,6 +761,8 @@ body[data-state="talk"] #crosshair, body[data-state="talk"] .hud-bottom { visibi
 .ch-sec .note { margin: 0; }
 .ch-sec-guns { grid-column: 1 / -1; }
 .ch-guns { display: flex; flex-wrap: wrap; gap: 6px; }
+.ch-size { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ch-size > span { font: 400 18px/1 var(--font-display); color: var(--muted, #cfc6b0); }
 .ch-gun { --c: #fff; font: 400 20px/1 var(--font-display); color: var(--c); padding: 8px 12px; cursor: pointer; background: rgba(0, 0, 0, 0.35); border: 2px solid var(--edge); text-shadow: 2px 2px 0 #000; }
 .ch-gun:hover { background: rgba(255, 255, 255, 0.06); }
 .ch-gun[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 0 0 2px var(--c); background: rgba(255, 255, 255, 0.08); }

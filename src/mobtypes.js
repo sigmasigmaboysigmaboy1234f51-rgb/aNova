@@ -66,7 +66,7 @@ export const FAMILIES = {
     death: 0.7,
     unlock: 4,
     colors: ['#3a3440', '#241f2a', '#ff3b3b', '#5a5064'],
-    blurb: 'Eight legs, very fast. Leaps at you from a few blocks away and scrambles up walls.',
+    blurb: 'A hairy spider, very fast. Leaps at you from a few blocks away and runs straight up walls, however tall you build them.',
   },
   imp: {
     name: 'Ember Imp',

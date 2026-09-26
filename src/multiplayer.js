@@ -366,6 +366,8 @@ export class Multiplayer {
         k: g.stats.kills,
         st: g.profile.styleCode(),
         em: p.emote || '',
+        sz: p.size !== 1 ? r2(p.size) : undefined,
+        bf: p.bulk > 0 ? r2(p.bulk) : undefined,
       });
     }
 

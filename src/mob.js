@@ -6,7 +6,7 @@ import { Rig, poseMoss, poseBone, ease } from './anim.js';
 import { wrapAngle, clamp } from './util.js';
 import { MOB_TYPES } from './mobtypes.js';
 import { mobTexture } from './mobskins.js';
-import { buildMobModel } from './mobmodels.js';
+import { buildMobModel, SPIDER, reachLeg } from './mobmodels.js';
 
 // One mob. The host (or single player) runs its brain; everyone else
 // draws a puppet copy that follows the host's snapshots.
@@ -30,7 +30,7 @@ const SPARK_COLORS = ['#fff6a0', '#c8a4ff', '#ffffff'].map((c) => new THREE.Colo
 const GOLD_COLORS = ['#fff6c8', '#ffd84a', '#f2c230'].map((c) => new THREE.Color(c));
 
 // Snapshot flag bits.
-export const MF = { aim: 1, draw: 2, attack: 4, hurt: 8, ground: 16, burn: 32, slow: 64, special: 128, charge: 256 };
+export const MF = { aim: 1, draw: 2, attack: 4, hurt: 8, ground: 16, burn: 32, slow: 64, special: 128, charge: 256, climb: 512 };
 
 export function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
   let tmin = 0;
@@ -115,6 +115,9 @@ export class Mob {
     this.biteCd = 0;
     this.orbit = Math.random() * Math.PI * 2;
     this.diving = 0;
+    this.wall = null;
+    this.climbT = 0;
+    this.climbK = 0;
     this.ctx = { p: null, dist: 99, dx: 0, dz: 0, dy: 0, wx: 0, wz: 0, nextStand: -1 };
     this.buildModel();
     this.sync(0);
@@ -297,7 +300,7 @@ export class Mob {
       this.progressT += dt;
       if (this.progressT > 0.8) {
         const moved = Math.hypot(this.pos.x - this.lastX, this.pos.z - this.lastZ);
-        this.stuck = (c.wx || c.wz) && moved < 0.3 && c.dist > 1.2 ? this.stuck + 1 : 0;
+        this.stuck = (c.wx || c.wz) && moved < 0.3 && c.dist > 1.2 && !this.wall ? this.stuck + 1 : 0;
         this.lastX = this.pos.x;
         this.lastZ = this.pos.z;
         this.progressT = 0;
@@ -307,8 +310,9 @@ export class Mob {
 
     const faceTarget = p && (this.ai === 'archer' || this.ai === 'thrower' ? this.aiming : c.dist < 5 || this.flies);
     const hs = Math.hypot(this.vel.x, this.vel.z);
-    const targetYaw = faceTarget ? Math.atan2(c.dx, c.dz) : hs > 0.3 ? Math.atan2(this.vel.x, this.vel.z) : this.yaw;
-    this.yaw += wrapAngle(targetYaw - this.yaw) * Math.min(1, dt * 8);
+    let targetYaw = faceTarget ? Math.atan2(c.dx, c.dz) : hs > 0.3 ? Math.atan2(this.vel.x, this.vel.z) : this.yaw;
+    if (this.wall) targetYaw = Math.atan2(this.wall.x, this.wall.z);
+    this.yaw += wrapAngle(targetYaw - this.yaw) * Math.min(1, dt * (this.wall ? 14 : 8));
     this.sync(dt);
   }
 
@@ -575,7 +579,8 @@ export class Mob {
       (this.burnT > 0 ? MF.burn : 0) |
       (this.slowT > 0 ? MF.slow : 0) |
       (this.fuseT > 0 || this.diving > 0 ? MF.special : 0) |
-      (this.chargeT > 0 ? MF.charge : 0)
+      (this.chargeT > 0 ? MF.charge : 0) |
+      (this.wall ? MF.climb : 0)
     );
   }
 
@@ -614,6 +619,7 @@ export class Mob {
       (this.chargeT > 0 ? 2.1 : 1) *
       this.slowMul();
     const sp = this.speed * slow;
+    if (this.wall && this.climb(dt, wx, wz, sp)) return;
     const k = Math.min(1, (this.onGround ? 12 : this.ai === 'crawler' ? 1 : 3) * dt);
     this.vel.x += (wx * sp - this.vel.x) * k;
     this.vel.z += (wz * sp - this.vel.z) * k;
@@ -622,11 +628,55 @@ export class Mob {
     if (inWater && (wx || wz)) this.vel.y = Math.min(this.vel.y + 26 * dt, 3);
     moveEntity(this.game.world, this, dt);
     const wantsUp = nextStand > Math.floor(this.pos.y + 0.01);
+    if (this.ai === 'crawler' && !inWater && (this.hitX || this.hitZ) && this.state === 'live') {
+      // Skitters run straight up walls instead of jumping.
+      const ax = this.hitX && Math.abs(wx) > 0.2 ? Math.sign(wx) : 0;
+      const az = !ax && this.hitZ && Math.abs(wz) > 0.2 ? Math.sign(wz) : 0;
+      if (ax || az) {
+        this.wall = { x: ax, z: az };
+        this.climbT = 0;
+        return;
+      }
+    }
     if ((this.onGround || inWater) && this.jumpCd <= 0 && (wx || wz) && (this.hitX || this.hitZ || wantsUp)) {
-      // Skitters scramble up walls two blocks high.
-      this.vel.y = this.ai === 'crawler' && (this.hitX || this.hitZ) ? 11.2 : 8.8;
+      this.vel.y = 8.8;
       this.jumpCd = 0.4;
     }
+  }
+
+  // One step of running up a wall. Returns false once we let go.
+  climb(dt, wx, wz, sp) {
+    const w = this.wall;
+    this.climbT += dt;
+    // Let go if we want to go the other way or it goes on forever.
+    if (wx * w.x + wz * w.z < -0.3 || this.climbT > 9 || sp <= 0.05) {
+      this.letGo();
+      return false;
+    }
+    this.vel.x = w.x * 2 + (w.x ? 0 : wx * sp * 0.4);
+    this.vel.z = w.z * 2 + (w.z ? 0 : wz * sp * 0.4);
+    this.vel.y = Math.max(2.2, sp * 0.85);
+    moveEntity(this.game.world, this, dt);
+    if (this.hitCeil) {
+      this.letGo();
+      return true;
+    }
+    if (!(w.x ? this.hitX : this.hitZ)) {
+      // Over the top: scramble onto it.
+      this.wall = null;
+      this.vel.set(w.x * sp, 3.2, w.z * sp);
+      this.jumpCd = 0.3;
+    }
+    return true;
+  }
+
+  letGo() {
+    const w = this.wall;
+    if (!w) return;
+    this.wall = null;
+    this.vel.x = -w.x * 1.5;
+    this.vel.z = -w.z * 1.5;
+    this.vel.y = Math.min(this.vel.y, 0);
   }
 
   // Gloops travel in big bouncy hops that clear two-block walls.
@@ -789,6 +839,12 @@ export class Mob {
       const t = rayBox(o, d, x - 0.47 * s, y, z - 0.47 * s, x + 0.47 * s, y + 0.92 * s, z + 0.47 * s);
       return t >= 0 && t < maxT ? { t, head: false } : null;
     }
+    if (body === 'crawler' && this.climbK > 0.5) {
+      // Up a wall: long body standing on end, head at the top.
+      const tb = rayBox(o, d, x - 0.45 * s, y - 0.4 * s, z - 0.45 * s, x + 0.45 * s, y + 0.75 * s, z + 0.45 * s);
+      const th = rayBox(o, d, x - 0.22 * s, y + 0.75 * s, z - 0.22 * s, x + 0.22 * s, y + 1.0 * s, z + 0.22 * s);
+      return check(tb, th);
+    }
     if (body === 'crawler') {
       const fx = Math.sin(this.yaw) * 0.4 * s;
       const fz = Math.cos(this.yaw) * 0.4 * s;
@@ -853,6 +909,7 @@ export class Mob {
     this.aiming = false;
     this.attackT = -1;
     this.fuseT = 0;
+    this.wall = null;
     if (this.shard) this.shard.visible = false;
     this.game.sound.mobDie(this.family, loud ? 1 : this.vol());
     // Plain Boneheads rattle apart (the Bone Colossus boss has its own fall).
@@ -1086,21 +1143,84 @@ export class Mob {
 
   poseCrawler(dt) {
     const m = this.model;
-    const speed = Math.hypot(this.vel.x, this.vel.z);
-    this.legPhase = (this.legPhase || 0) + speed * dt * 5;
     const dead = this.state === 'dying';
-    for (const leg of m.legs) {
-      const { side, i, base } = leg.userData;
-      const ph = this.legPhase + i * 1.6 + (side > 0 ? Math.PI : 0);
-      const air = !this.onGround && !dead;
-      leg.rotation.y = base + (dead ? 0 : Math.sin(ph) * 0.35 * Math.min(1, speed / 3));
-      leg.rotation.z = dead ? side * 0.9 : air ? side * -0.35 : Math.max(0, Math.cos(ph)) * side * -0.25 * Math.min(1, speed / 3);
+    const sc = this.def.scale;
+    const climbing = !dead && (this.remote ? !!(this.net.flags & MF.climb) : !!this.wall);
+    this.climbK = this.climbK || 0;
+    this.climbK += ((climbing ? 1 : 0) - this.climbK) * Math.min(1, dt * 12);
+    const ck = ease(this.climbK);
+    // How fast the legs need to go: along the ground, up a wall, or turning.
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    const along = (hs * (1 - ck) + Math.abs(this.vel.y) * ck) / sc;
+    const turn = dt > 0 ? Math.abs(wrapAngle(this.yaw - (this.lastYaw ?? this.yaw))) / dt : 0;
+    this.lastYaw = this.yaw;
+    const pace = Math.min(7, along + turn * 0.3);
+    const stride = Math.min(0.34, 0.08 + pace * 0.05);
+    this.legPhase = ((this.legPhase || 0) + (pace / (2 * stride)) * dt) % 1000;
+    const moving = Math.min(1, pace / 1.2);
+    // Which way the feet push, in the spider's own frame.
+    let fx = 0;
+    let fz = 1;
+    if (ck < 0.5 && hs > 0.3) {
+      const c = Math.cos(this.yaw);
+      const sn = Math.sin(this.yaw);
+      const lx = this.vel.x * c - this.vel.z * sn;
+      const lz = this.vel.x * sn + this.vel.z * c;
+      const l = Math.hypot(lx, lz);
+      fx = lx / l;
+      fz = lz / l;
     }
-    m.head.rotation.x = this.attackT >= 0 ? -0.4 : 0;
-    const d = dead ? Math.min(1, this.deathT / 0.35) : 0;
-    m.root.rotation.z = ease(d) * Math.PI;
-    m.body.position.y = dead ? ease(d) * 0.7 : 0;
-    m.body.rotation.x = !this.onGround && !dead ? -0.25 : 0;
+    const air = !dead && !this.onGround && ck < 0.5 && this.state === 'live';
+    const bite = this.attackT >= 0 ? 1 : Math.max(0, (this.biteCd - 0.45) / 0.35);
+    const bob = dead || air ? 0 : Math.abs(Math.sin(this.legPhase * Math.PI * 2)) * 0.03 * moving;
+    m.body.position.y = bob;
+    const dk = dead ? ease(Math.min(1, this.deathT / 0.4)) : 0;
+    for (const leg of m.legs) {
+      const u = leg.userData;
+      const f = u.foot;
+      const r = u.rest;
+      if (dead) {
+        // Dead spiders curl their legs up.
+        f.set(r.x + (leg.position.x * 1.2 - r.x) * dk, (SPIDER.hipY - 0.12) * dk - bob, r.z + (leg.position.z * 1.15 - r.z) * dk);
+      } else if (air) {
+        f.set(r.x * 1.12, u.i === 0 ? 0.3 : -0.08, r.z * 1.1 + (u.i === 0 ? 0.12 : 0));
+      } else {
+        const p = (this.legPhase + u.group * 0.5 + u.i * 0.03) % 1;
+        let off;
+        let lift = 0;
+        if (p < 0.55) off = 0.5 - p / 0.55;
+        else {
+          const q = (p - 0.55) / 0.45;
+          off = q - 0.5;
+          lift = Math.sin(q * Math.PI) * (0.05 + stride * 0.35);
+        }
+        off *= stride * moving;
+        f.set(r.x + fx * off, lift * moving - bob, r.z + fz * off);
+        // Front legs reach up to grab when biting, and twitch when idle.
+        if (u.i === 0) {
+          f.y += bite * 0.32 + (1 - moving) * Math.max(0, Math.sin(this.t * 2.3 + u.side)) * 0.05;
+          f.z += bite * 0.1;
+        }
+      }
+      reachLeg(leg, f);
+    }
+    // Fangs open and snap shut, feelers wiggle, the abdomen sways.
+    const open = bite > 0 ? Math.abs(Math.sin(this.t * 18)) * bite : 0;
+    for (let n = 0; n < 2; n++) {
+      const s = n ? 1 : -1;
+      const fang = m.fangs[n];
+      fang.rotation.set(-open * 0.5, 0, s * open * 0.4);
+      fang.userData.palp.rotation.set(Math.sin(this.t * 5 + n * 1.7) * 0.25 - bite * 0.5, s * 0.15, 0);
+    }
+    m.head.rotation.x = bite * -0.25;
+    m.abdomen.rotation.set(Math.sin(this.t * 2.1) * 0.03 + (air ? 0.25 : 0), Math.sin(this.legPhase * Math.PI * 2) * 0.06 * moving, 0);
+    // On its back when dead, flat against the wall when climbing.
+    m.root.rotation.z = dk * Math.PI;
+    m.root.rotation.x = -ck * Math.PI * 0.5 + (air ? -0.2 : 0);
+    const push = this.hw * ck;
+    m.root.position.x += Math.sin(this.yaw) * push;
+    m.root.position.z += Math.cos(this.yaw) * push;
+    m.root.position.y += 0.42 * sc * ck + dk * 0.85 * sc;
   }
 
   poseFlyer(dt) {

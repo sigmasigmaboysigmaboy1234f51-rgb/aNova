@@ -79,6 +79,8 @@ export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
   return {
     root,
     parts,
+    armW,
+    legW,
     baseMeshes,
     outerMeshes,
     materials: [base, outer],
@@ -88,6 +90,26 @@ export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
       outer.dispose();
     },
   };
+}
+
+// The Super Buff cheat: k from 0 (normal) to 1 (huge muscles). Wider,
+// deeper chest, thick arms and legs, and a head that looks small on top.
+// Only the limb boxes grow, so a gun in the hand keeps its shape.
+export function setBulk(model, k) {
+  const P = model.parts;
+  if (!P || !P.body || model.bulk === k) return;
+  model.bulk = k;
+  P.body.scale.set(1 + 0.55 * k, 1 + 0.08 * k, 1 + 0.65 * k);
+  P.head.scale.setScalar(1 - 0.08 * k);
+  P.head.position.y = (12 + 0.5 * k) * PX;
+  const armX = 4 + model.armW / 2 + 2.2 * k + (model.armW / 2) * 0.75 * k;
+  P.armR.position.set(-armX * PX, (10 + 0.5 * k) * PX, 0);
+  P.armL.position.set(armX * PX, (10 + 0.5 * k) * PX, 0);
+  for (const n of ['armR', 'armL']) for (const m of P[n].children.slice(0, 2)) m.scale.set(1 + 0.75 * k, 1 + 0.05 * k, 1 + 0.75 * k);
+  const legX = 2 + 0.9 * k;
+  P.legR.position.x = -legX * PX;
+  P.legL.position.x = legX * PX;
+  for (const n of ['legR', 'legL']) for (const m of P[n].children.slice(0, 2)) m.scale.set(1 + 0.45 * k, 1, 1 + 0.5 * k);
 }
 
 export function buildGloop(texture) {

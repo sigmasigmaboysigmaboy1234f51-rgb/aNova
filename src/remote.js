@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildHumanoid, holdGun, PX } from './model.js';
+import { buildHumanoid, holdGun, setBulk, PX } from './model.js';
 import { GUNS, parseBuildCode } from './weapons.js';
 import { B } from './world.js';
 import { rayBox } from './mob.js';
@@ -171,6 +171,9 @@ class RemotePlayer {
       this.emoteT = 0;
     }
     if (s.sw) this.swing = 1;
+    // Cheats: the host can be giant or buff.
+    this.size = Math.min(4, Math.max(0.5, Number(s.sz) || 1));
+    this.bulk = Math.min(1, Math.max(0, Number(s.bf) || 0));
     if (this.buf.length > 30) this.buf.shift();
     this.score = s.sc | 0;
     this.kills = s.k | 0;
@@ -187,8 +190,9 @@ class RemotePlayer {
     const x = this.pos.x;
     const y = this.pos.y;
     const z = this.pos.z;
-    const tb = rayBox(o, d, x - 0.36, y, z - 0.36, x + 0.36, y + 1.36 * k, z + 0.36);
-    const th = rayBox(o, d, x - 0.3, y + 1.36 * k, z - 0.3, x + 0.3, y + this.h + 0.1, z + 0.3);
+    const w = this.hw / 0.3;
+    const tb = rayBox(o, d, x - 0.36 * w, y, z - 0.36 * w, x + 0.36 * w, y + 1.36 * k, z + 0.36 * w);
+    const th = rayBox(o, d, x - 0.3 * w, y + 1.36 * k, z - 0.3 * w, x + 0.3 * w, y + this.h + 0.1, z + 0.3 * w);
     const okB = tb >= 0 && tb < maxT;
     const okH = th >= 0 && th < maxT;
     if (okH && (!okB || th <= tb)) return { t: th, head: true };
@@ -290,7 +294,9 @@ class RemotePlayer {
     if (dead && !this.dead) this.deadT = 0;
     this.dead = dead;
     if (dead) this.deadT += dt;
-    this.h = crouch ? 1.5 : 1.8;
+    const size = this.size || 1;
+    this.h = (crouch ? 1.5 : 1.8) * size;
+    this.hw = 0.3 * size;
     const landed = ground && !this.wasGround && this.lastVy < -7 ? Math.min(1, (-this.lastVy - 7) / 14) : 0;
     this.wasGround = ground;
     this.lastVy = this.vel.y;
@@ -298,6 +304,8 @@ class RemotePlayer {
     const m = this.model;
     m.root.visible = !(dead && this.deadT > 2.5);
     m.root.position.copy(this.pos);
+    m.root.scale.setScalar(size);
+    setBulk(m, this.bulk || 0);
     m.root.rotation.y = this.yaw + Math.PI;
     const hurt = f & F.hurt ? 1 : 0;
     const flash = hurt || (dead ? 0.5 : 0);
@@ -331,7 +339,7 @@ class RemotePlayer {
     this.visible = m.root.visible;
     if (this.pet) this.pet.update(dt);
     this.tag.visible = m.root.visible;
-    this.tag.position.set(this.pos.x, this.pos.y + (crouch ? 1.8 : 2.15), this.pos.z);
+    this.tag.position.set(this.pos.x, this.pos.y + (crouch ? 1.8 : 2.15) * size, this.pos.z);
   }
 
   dispose() {
