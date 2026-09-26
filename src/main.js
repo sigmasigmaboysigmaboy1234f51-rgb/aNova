@@ -242,24 +242,24 @@ class Game {
 
   buildEnvironment() {
     const wt = buildWaterTexture();
-    wt.repeat.set(400, 400);
+    wt.repeat.set(900, 900);
     this.waterTex = wt;
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 400),
+      new THREE.PlaneGeometry(900, 900),
       new THREE.MeshBasicMaterial({ map: wt, transparent: true, opacity: 0.78, depthWrite: false }),
     );
     water.rotation.x = -Math.PI / 2;
     this.water = water;
-    water.position.set(SX / 2, SEA - 0.12, SZ / 2);
+    water.position.set(96, SEA - 0.12, 96);
     water.renderOrder = 1;
     this.scene.add(water);
 
     const st = pixelTex(new THREE.CanvasTexture(this.atlas.tiles[T.SAND]));
     st.wrapS = st.wrapT = THREE.RepeatWrapping;
-    st.repeat.set(400, 400);
-    const bed = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ map: st, color: 0x8a8a80 }));
+    st.repeat.set(900, 900);
+    const bed = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshBasicMaterial({ map: st, color: 0x8a8a80 }));
     bed.rotation.x = -Math.PI / 2;
-    bed.position.set(SX / 2, SEA - 3.05, SZ / 2);
+    bed.position.set(96, SEA - 3.05, 96);
     this.scene.add(bed);
 
     this.sunMesh = new THREE.Mesh(new THREE.PlaneGeometry(18, 18), new THREE.MeshBasicMaterial({ color: 0xfff6cf, fog: false }));

@@ -22,8 +22,8 @@ const MAX_STARS = 5;
 const UNITS = [0, 1, 2, 3, 3, 4];
 const SIGHT = 34;
 
-const STREETS_X = ['1st Street', '2nd Street', '3rd Street', '4th Street'];
-const STREETS_Z = ['Maple Avenue', 'Oak Avenue', 'Pine Avenue', 'Cedar Avenue'];
+const STREETS_X = ['1st Street', '2nd Street', '3rd Street', '4th Street', '5th Street', '6th Street'];
+const STREETS_Z = ['Maple Avenue', 'Oak Avenue', 'Pine Avenue', 'Cedar Avenue', 'Birch Avenue', 'Willow Avenue'];
 
 // The street name nearest to (x, z), for the police radio.
 export function streetAt(x, z) {
@@ -312,6 +312,15 @@ class Officer {
       const c = this.unit.car;
       if (c) this.pos.copy(c.pos);
       this.model.root.visible = false;
+      return;
+    }
+    // Webbed up: stuck, wriggling.
+    if (this.webT > 0 && this.state !== 'down') {
+      this.webT -= dt;
+      this.vel.set(0, this.vel.y, 0);
+      this.speed = 0;
+      this.sync(dt, 'hands');
+      for (const mat of this.model.materials) mat.emissive.setRGB(0.4, 0.4, 0.38);
       return;
     }
     let wx = 0;
@@ -1115,9 +1124,9 @@ export class Police {
     car.drive(dt, throttle, steer, false);
     // Close enough and slow: everyone out!
     const canWalk = !p.driving || Math.abs(p.driving.speed) < 5;
-    if (canWalk && u.riding > 0 && ((arrived && Math.abs(car.speed) < 3) || (dist < 30 && u.noProg > 4))) u.deploy();
+    if (canWalk && u.riding > 0 && ((arrived && Math.abs(car.speed) < 3) || (dist < 48 && u.noProg > 4))) u.deploy();
     // Hopelessly stuck far away: move to a road near you, out of sight.
-    if (u.noProg > 8 && dist >= 30 && !this.lineOfSight(car.pos, 1.2)) {
+    if (u.noProg > 8 && dist >= 48 && !this.lineOfSight(car.pos, 1.2)) {
       const w = this.roadPoint(target);
       const spots = [];
       for (let k = 0; k < 12; k++) {

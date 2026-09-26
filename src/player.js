@@ -263,12 +263,13 @@ export class Player {
   select(slot) {
     if (slot === this.held) return;
     if (slot < 3 && !this.weapons[slot]) return;
+    if (slot === 7 && !this.game.adventure) return;
     this.inspectT = 0;
     const w = this.weapon;
     if (w) w.reloadT = 0;
     this.lastHeld = this.held;
     this.held = slot;
-    if (slot >= 3) this.blockSlot = slot - 3;
+    if (slot >= 3 && slot < 7) this.blockSlot = slot - 3;
     this.equip = 0;
     this.ads = 0;
     this.game.combat.beamTick(this, null, 0, false);
@@ -276,8 +277,9 @@ export class Player {
   }
 
   cycle(dir) {
-    for (let n = 1; n <= 7; n++) {
-      const s = (this.held + dir * n + 70) % 7;
+    const slots = this.game.adventure ? 8 : 7;
+    for (let n = 1; n <= slots; n++) {
+      const s = (this.held + dir * n + 80) % slots;
       if (s >= 3 || this.weapons[s]) {
         this.select(s);
         return;
@@ -351,6 +353,8 @@ export class Player {
     this.killer = null;
     this.buffs = {};
     this.driving = null;
+    this.webFly = false;
+    if (this.held === 7 && !this.game.adventure) this.held = 0;
     this.stopEmote();
     for (const w of this.weapons) {
       if (!w) continue;
@@ -517,7 +521,9 @@ export class Player {
     this.swayY = clamp(this.swayY + my * 0.00022, -0.05, 0.05);
 
     // Hotbar: 1-3 guns, 4-7 blocks, scroll to cycle, Q for the last thing held.
-    for (let i = 0; i < 7; i++) if (inp.pressed.has('Digit' + (i + 1))) this.select(i);
+    // Slot 8: web shooters, in Adventure mode.
+    const slots = g.adventure ? 8 : 7;
+    for (let i = 0; i < slots; i++) if (inp.pressed.has('Digit' + (i + 1))) this.select(i);
     if (inp.wheel) this.cycle(inp.wheel > 0 ? 1 : -1);
     if (inp.pressed.has('KeyQ')) this.select(this.lastHeld);
     if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) {
@@ -532,7 +538,7 @@ export class Player {
       if (inp.left || inp.right || (this.weapon && this.weapon.reloadT > 0) || this.inspectT > 2.4) this.inspectT = 0;
     }
     this.updateEmote(dt);
-    if (this.held >= 3) this.blockSlot = this.held - 3;
+    if (this.held >= 3 && this.held < 7) this.blockSlot = this.held - 3;
 
     const weapon = this.weapon;
     const k = inp.keys;
@@ -573,8 +579,14 @@ export class Player {
     if (this.inWater) speed *= 0.55;
     const accel = this.onGround ? 14 : this.inWater ? 6 : 3.5;
     const a = Math.min(1, accel * dt);
-    this.vel.x += (wx * speed - this.vel.x) * a;
-    this.vel.z += (wz * speed - this.vel.z) * a;
+    if (this.webFly && !this.onGround && !this.inWater) {
+      // Flying off a web: keep all that speed, steer a little.
+      this.vel.x += wx * 9 * dt;
+      this.vel.z += wz * 9 * dt;
+    } else {
+      this.vel.x += (wx * speed - this.vel.x) * a;
+      this.vel.z += (wz * speed - this.vel.z) * a;
+    }
     const jump = k.has('Space');
     if (flying) {
       // Fly cheat: no gravity. Space goes up, Shift goes down.
@@ -591,6 +603,8 @@ export class Player {
         g.sound.jump();
       }
     }
+    // Hanging on a web.
+    if (g.adventure) g.adventure.webs.swing(dt);
     const px = this.pos.x;
     const py = this.pos.y;
     const pz = this.pos.z;
@@ -641,7 +655,10 @@ export class Player {
     this.mineCd -= dt;
     this.nadeCd -= dt;
     if (weapon) this.updateGun(dt, weapon);
-    else {
+    else if (this.held === 7 && g.adventure) {
+      g.combat.beamTick(this, null, 0, false);
+      g.adventure.webs.input(dt);
+    } else {
       g.combat.beamTick(this, null, 0, false);
       if (inp.left && this.mineCd <= 0) this.mine();
       if (inp.right && this.placeCd <= 0) this.tryPlace();
@@ -1187,7 +1204,7 @@ export class Player {
     this.guns3p.forEach((gun, i) => {
       if (gun) gun.visible = i === this.held;
     });
-    this.block3p.visible = this.held >= 3;
+    this.block3p.visible = this.held >= 3 && this.held < 7;
     if (this.thirdPerson) {
       m.root.position.copy(this.pos);
       m.root.rotation.y = this.yaw + Math.PI;
@@ -1206,7 +1223,7 @@ export class Player {
     this.views.forEach((v, i) => {
       if (v) v.group.visible = firstPerson && i === this.held && !scoped;
     });
-    this.blockView.group.visible = firstPerson && this.held >= 3;
+    this.blockView.group.visible = firstPerson && this.held >= 3 && this.held < 7;
     const bob = this.walkAmt * (1 + this.sprintW * 0.9) * (1 - this.ads * 0.85);
     const bx = Math.sin(this.walkPhase) * 0.014 * bob;
     const by = -Math.abs(Math.cos(this.walkPhase)) * 0.016 * bob;

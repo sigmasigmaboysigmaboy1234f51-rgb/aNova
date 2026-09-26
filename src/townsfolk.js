@@ -184,7 +184,10 @@ export class Person {
     let moveX = 0;
     let moveZ = 0;
     let speed = 0;
-    if (this.knockT > 0) {
+    this.webT = Math.max(0, (this.webT || 0) - dt);
+    if (this.webT > 0) {
+      // Stuck to the spot in a web.
+    } else if (this.knockT > 0) {
       // Mid-dive.
       this.vel.y -= 20 * dt;
       this.pos.addScaledVector(this.vel, dt);
@@ -236,6 +239,7 @@ export class Person {
   }
 
   gesture() {
+    if (this.webT > 0) return 'flee';
     if (this.handsT > 0) return 'hands';
     if (this.callT >= 0) return 'phone';
     if (this.fleeT > 0) return 'flee';

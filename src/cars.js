@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rayBox } from './mob.js';
 import { LANE, GY } from './city.js';
-import { SEA } from './world.js';
+import { SEA, B } from './world.js';
 
 // Cars for Adventure mode. You can drive any car that's parked (press E),
 // and traffic drives itself round the road grid. Cars have working brake
@@ -12,21 +12,119 @@ import { SEA } from './world.js';
 export const CAR_TYPES = {
   sedan: { name: 'Sedan', shape: 'sedan', len: 4, wid: 1.9, hgt: 1.5, speed: 22, accel: 9, turn: 1, hp: 120, colors: ['#3d6fd8', '#d8392b', '#e8e4dc', '#2a2a2e', '#4d8a2c', '#8a8f96'] },
   taxi: { name: 'Taxi', shape: 'sedan', len: 4.1, wid: 1.9, hgt: 1.5, speed: 21, accel: 9, turn: 1, hp: 120, colors: ['#f2c230'] },
-  police: { name: 'Police Car', shape: 'sedan', len: 4.3, wid: 1.95, hgt: 1.5, speed: 27, accel: 12, turn: 1.05, hp: 170, colors: ['#f4f1ea'] },
+  police: { name: 'Police Car', shape: 'sedan', siren: true, len: 4.3, wid: 1.95, hgt: 1.5, speed: 27, accel: 12, turn: 1.05, hp: 170, colors: ['#f4f1ea'] },
   sports: { name: 'Sports Car', shape: 'sports', snd: 'sports', len: 4.3, wid: 1.95, hgt: 1.15, speed: 34, accel: 16, turn: 1.15, hp: 100, colors: ['#d8392b', '#ff7a2f', '#39b8ff', '#f2c230', '#1d1d20'] },
   suv: { name: 'SUV', shape: 'suv', len: 4.6, wid: 2.05, hgt: 1.85, lift: 0.12, speed: 23, accel: 10, turn: 0.95, hp: 170, colors: ['#2a2a2e', '#e8e4dc', '#6a1f24', '#3d4f6d', '#8a8f96'] },
   pickup: { name: 'Pickup Truck', shape: 'pickup', len: 4.8, wid: 2, hgt: 1.8, speed: 20, accel: 8, turn: 0.9, hp: 180, colors: ['#4d8a2c', '#8a5a33', '#2a2a2e', '#d8392b'] },
   monster: { name: 'Monster Truck', shape: 'pickup', snd: 'monster', len: 5, wid: 2.7, hgt: 3.1, lift: 0.95, wheelR: 0.85, speed: 26, accel: 12, turn: 0.9, hp: 360, crush: true, colors: ['#39b8ff', '#6fd35a', '#b46cff'] },
   van: { name: 'Gold Van', shape: 'van', snd: 'big', len: 4.8, wid: 2.1, hgt: 2.2, speed: 23, accel: 9, turn: 0.95, hp: 220, colors: ['#f2c230'] },
   bus: { name: 'Bus', shape: 'bus', snd: 'big', len: 8, wid: 2.3, hgt: 2.8, speed: 14, accel: 5, turn: 0.7, hp: 400, colors: ['#39b8ff'] },
+  ambulance: { name: 'Ambulance', shape: 'van', snd: 'big', siren: true, len: 5, wid: 2.1, hgt: 2.4, speed: 25, accel: 10, turn: 0.95, hp: 220, colors: ['#f4f1ea'] },
+  firetruck: { name: 'Fire Truck', shape: 'bus', snd: 'big', siren: true, len: 7.2, wid: 2.4, hgt: 2.7, speed: 20, accel: 7, turn: 0.75, hp: 450, colors: ['#d8392b'] },
   icecream: { name: 'Ice Cream Van', shape: 'van', snd: 'big', len: 4.9, wid: 2.1, hgt: 2.3, speed: 16, accel: 6, turn: 0.9, hp: 180, colors: ['#ff9dc0'] },
 };
 
 const mats = new Map();
+const SHARED = new Set();
 function mat(color, glow = false) {
   const key = `${color}|${glow}`;
-  if (!mats.has(key)) mats.set(key, glow ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color }));
+  if (!mats.has(key)) {
+    const m = glow ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color });
+    mats.set(key, m);
+    SHARED.add(m);
+  }
   return mats.get(key);
+}
+// Every car's body is merged into one mesh coloured per vertex.
+const VC_LAMBERT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const VC_BASIC = new THREE.MeshBasicMaterial({ vertexColors: true });
+
+// A box cut into segments, so it can be dented.
+function segBox(w, h, d) {
+  const key = `s${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}`;
+  if (!geos.has(key)) geos.set(key, new THREE.BoxGeometry(w, h, d, Math.max(2, Math.round(w * 3)), Math.max(2, Math.round(h * 4)), Math.max(2, Math.round(d * 3))));
+  return geos.get(key);
+}
+
+// Merge meshes into one geometry with vertex colours. mask marks the
+// vertices painted in `paint` (for resprays).
+function mergeParts(meshes, paint) {
+  let nv = 0;
+  let ni = 0;
+  for (const m of meshes) {
+    const g = m.geometry;
+    nv += g.attributes.position.count;
+    ni += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(nv * 3);
+  const nor = new Float32Array(nv * 3);
+  const col = new Float32Array(nv * 3);
+  const idx = new Uint32Array(ni);
+  const mask = new Uint8Array(nv);
+  const mtx = new THREE.Matrix4();
+  const nm = new THREE.Matrix3();
+  const v = new THREE.Vector3();
+  let vo = 0;
+  let io = 0;
+  for (const m of meshes) {
+    m.updateMatrix();
+    mtx.copy(m.matrix);
+    nm.getNormalMatrix(mtx);
+    const g = m.geometry;
+    const P = g.attributes.position;
+    const Nn = g.attributes.normal;
+    const c = m.material.color;
+    const painted = m.material === paint;
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i).applyMatrix4(mtx);
+      pos[(vo + i) * 3] = v.x;
+      pos[(vo + i) * 3 + 1] = v.y;
+      pos[(vo + i) * 3 + 2] = v.z;
+      v.fromBufferAttribute(Nn, i).applyMatrix3(nm).normalize();
+      nor[(vo + i) * 3] = v.x;
+      nor[(vo + i) * 3 + 1] = v.y;
+      nor[(vo + i) * 3 + 2] = v.z;
+      col[(vo + i) * 3] = c.r;
+      col[(vo + i) * 3 + 1] = c.g;
+      col[(vo + i) * 3 + 2] = c.b;
+      mask[vo + i] = painted ? 1 : 0;
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[io + i] = g.index.getX(i) + vo;
+    else for (let i = 0; i < P.count; i++) idx[io + i] = vo + i;
+    io += g.index ? g.index.count : P.count;
+    vo += P.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return { geo: out, mask };
+}
+
+// Merge a group's plain meshes into one, leaving the rest alone.
+function mergeGroup(group, paint, keep = []) {
+  const flat = [];
+  const glowing = [];
+  for (const ch of group.children) {
+    if (!ch.isMesh || keep.includes(ch) || !SHARED.has(ch.material)) continue;
+    (ch.material.isMeshBasicMaterial ? glowing : flat).push(ch);
+  }
+  const out = {};
+  if (flat.length) {
+    const { geo, mask } = mergeParts(flat, paint);
+    out.mesh = new THREE.Mesh(geo, VC_LAMBERT);
+    out.mask = mask;
+    for (const ch of flat) group.remove(ch);
+    group.add(out.mesh);
+  }
+  if (glowing.length) {
+    out.glow = new THREE.Mesh(mergeParts(glowing).geo, VC_BASIC);
+    for (const ch of glowing) group.remove(ch);
+    group.add(out.glow);
+  }
+  return out;
 }
 const geos = new Map();
 function geo(w, h, d) {
@@ -187,6 +285,12 @@ export function buildCar(type, color) {
     parent.add(mesh);
     return mesh;
   };
+  const addSeg = (w, h, dd, x, y, z, m) => {
+    const mesh = new THREE.Mesh(segBox(w, h, dd), m);
+    mesh.position.set(x, y, z);
+    body.add(mesh);
+    return mesh;
+  };
   // A thin panel between two points on the car's side profile.
   const slab = (w, t, y0, z0, y1, z1, m, x = 0, parent = body) => {
     const len = Math.hypot(y1 - y0, z1 - z0);
@@ -200,16 +304,35 @@ export function buildCar(type, color) {
     fn(1);
     fn(-1);
   };
-  const dents = [];
   let deck = base + 0.55;
   let door = null;
   let smokeZ = L * 0.34;
   let sirenParts = null;
 
-  if (shape === 'bus') {
+  if (type === 'firetruck') {
+    // --- A fire truck: a cab up front, lockers down the sides, a ladder. ---
+    deck = base + 0.7;
+    const cabBack = L / 2 - 1.8;
+    add(W, H - base - 0.2, 1.8, 0, (base + H - 0.2) / 2, L / 2 - 0.9, paint);
+    add(W - 0.2, 0.7, 0.05, 0, H - 0.75, L / 2 + 0.01, glass);
+    both((s) => add(0.04, 0.6, 1.1, (s * W) / 2, H - 0.8, L / 2 - 0.8, glass));
+    addSeg(W, H - base - 0.8, L - 1.8, 0, (base + H - 0.8) / 2, (cabBack - L / 2) / 2, paint);
+    add(W + 0.02, 0.14, L - 0.2, 0, base + 0.55, 0, mat('#f4f1ea'));
+    both((s) => {
+      for (let k = 0; k < 3; k++) add(0.03, 0.8, 1.3, s * (W / 2 + 0.01), base + 1.15, cabBack - 0.9 - k * 1.5, mat('#b8bcc4'));
+      add(0.02, 0.26, 2.2, s * (W / 2 + 0.02), H - 0.55, -0.6, textDecal('FIRE DEPT', null, '#f2c230', 256, 48));
+    });
+    // The ladder on top.
+    both((s) => add(0.08, 0.1, L - 1.6, s * 0.45, H - 0.7, -0.7, mat('#c9ced6')));
+    for (let k = 0; k < 10; k++) add(0.9, 0.06, 0.06, 0, H - 0.7, -L / 2 + 0.6 + k * 0.55, mat('#c9ced6'));
+    const red = add(0.6, 0.16, 0.26, -0.4, H - 0.08, L / 2 - 0.9, mat('#ff2a2a', true));
+    const blue = add(0.6, 0.16, 0.26, 0.4, H - 0.08, L / 2 - 0.9, mat('#ff2a2a', true));
+    sirenParts = { red, blue };
+    smokeZ = L / 2 - 0.9;
+  } else if (shape === 'bus') {
     // --- A city bus: one long box with a band of windows. ---
     deck = base + 0.7;
-    add(W, H - base, L, 0, (base + H) / 2, 0, paint);
+    addSeg(W, H - base, L, 0, (base + H) / 2, 0, paint);
     add(W + 0.02, 0.35, L - 0.1, 0, base + 0.5, 0, mat('#f4f1ea'));
     for (let i = 0; i < 6; i++) {
       const z = -L / 2 + 0.9 + i * ((L - 2.4) / 5);
@@ -229,16 +352,27 @@ export function buildCar(type, color) {
     // --- Box vans: the gold van and the ice cream van. ---
     deck = base + 0.6;
     const ice = type === 'icecream';
-    add(W, deck - base, L, 0, (base + deck) / 2, 0, paint);
+    addSeg(W, deck - base, L, 0, (base + deck) / 2, 0, paint);
     const boxBack = -L / 2;
     const boxFront = L * 0.14;
-    add(W - 0.04, H - deck, boxFront - boxBack, 0, (deck + H) / 2, (boxFront + boxBack) / 2, paint);
+    addSeg(W - 0.04, H - deck, boxFront - boxBack, 0, (deck + H) / 2, (boxFront + boxBack) / 2, paint);
     // The cab: a sloped windscreen in front of the box.
     const cab = profile(`van|${type}`, [[boxFront, deck], [L / 2 - 0.35, deck], [boxFront + 0.25, H - 0.15], [boxFront, H - 0.15]], W - 0.12);
     body.add(new THREE.Mesh(cab, glass));
     add(W - 0.1, 0.12, 0.5, 0, H - 0.1, boxFront + 0.18, paint);
     both((s) => add(0.07, H - deck - 0.1, 0.07, s * (W / 2 - 0.08), (deck + H) / 2, boxFront + 0.02, paint));
-    if (ice) {
+    if (type === 'ambulance') {
+      // A red stripe, a light bar and a big red cross.
+      add(W + 0.02, 0.2, L - 0.4, 0, deck + 0.3, -0.05, mat('#d8392b'));
+      both((s) => {
+        add(0.02, 0.3, 2, s * (W / 2 + 0.012), deck + 0.75, -L * 0.15, textDecal('AMBULANCE', null, '#d8392b', 256, 48));
+        add(0.02, 0.5, 0.5, s * (W / 2 + 0.012), deck + 1.2, -L * 0.36, textDecal('+', '#ffffff', '#d8392b', 64, 64, 0.95));
+      });
+      add(0.6, 0.6, 0.02, 0, deck + 0.9, -L / 2 - 0.02, textDecal('+', '#ffffff', '#d8392b', 64, 64, 0.95));
+      const red = add(0.5, 0.16, 0.26, -0.3, H + 0.08, boxFront - 0.2, mat('#ff2a2a', true));
+      const blue = add(0.5, 0.16, 0.26, 0.3, H + 0.08, boxFront - 0.2, mat('#2a6aff', true));
+      sirenParts = { red, blue };
+    } else if (ice) {
       // A serving hatch, a striped awning, a giant cone and a sign.
       add(0.04, 0.7, 1.6, -W / 2 - 0.01, deck + 0.55, -L * 0.12, glass);
       for (let i = 0; i < 5; i++) add(0.5, 0.06, 0.34, -W / 2 - 0.22, deck + 1.02, -L * 0.12 - 0.68 + i * 0.34, mat(i % 2 ? '#f4f1ea' : '#ff5a8a'));
@@ -265,7 +399,7 @@ export function buildCar(type, color) {
     const pickup = shape === 'pickup';
     deck = base + (sports ? 0.42 : suv ? 0.68 : pickup ? 0.62 : 0.55);
     // Lower body, a little hood bulge, side skirts.
-    add(W, deck - base, L, 0, (base + deck) / 2, 0, paint);
+    addSeg(W, deck - base, L, 0, (base + deck) / 2, 0, paint);
     add(W - 0.5, 0.05, L * 0.24, 0, deck + 0.02, L * 0.33, paint);
     add(W + 0.02, 0.1, L - 0.6, 0, base + 0.05, 0, mat(TRIM));
     // The cabin: [A-pillar base, roof front, roof back, C-pillar base] as
@@ -390,8 +524,8 @@ export function buildCar(type, color) {
     add(W * 0.4, 0.03, 0.06, 0, lightY + 0.02, front + 0.006, mat(CHROME));
   }
   const bumperMat = shape === 'sports' ? paint : mat(TRIM);
-  const fb = add(W + 0.06, 0.18, 0.2, 0, base + 0.1, front, bumperMat);
-  const rb = add(W + 0.06, 0.18, 0.2, 0, base + 0.1, -front, bumperMat);
+  add(W + 0.06, 0.18, 0.2, 0, base + 0.1, front, bumperMat);
+  add(W + 0.06, 0.18, 0.2, 0, base + 0.1, -front, bumperMat);
   const plate = plateMat();
   add(0.44, 0.11, 0.02, 0, base + 0.12, front + 0.11, plate);
   const rp = add(0.44, 0.11, 0.02, 0, base + 0.12, -front - 0.11, plate);
@@ -400,7 +534,6 @@ export function buildCar(type, color) {
   ex.rotation.y = Math.PI / 2;
   ex.position.set(-W / 2 + 0.4, base + 0.02, -front - 0.08);
   body.add(ex);
-  dents.push({ obj: fb, end: 1 }, { obj: rb, end: -1 });
 
   // --- Wheels: tyre, rim, hub and spokes, with an arch over each ---
   const wheels = [];
@@ -436,6 +569,15 @@ export function buildCar(type, color) {
     }
   }
 
+  // --- Merge: the whole body becomes one mesh (fast to draw, and it can be
+  // dented), the glowing lamps another, each wheel and the door one each ---
+  const keep = sirenParts ? [sirenParts.red, sirenParts.blue] : [];
+  const merged = mergeGroup(body, paint, keep);
+  for (const w of wheels) mergeGroup(w.g, paint);
+  if (door) mergeGroup(door, paint);
+  const shell = merged.mesh;
+  const orig = shell.geometry.attributes.position.array.slice();
+
   // --- Headlight glow and the light they throw on the road, for night ---
   const glow = new THREE.Group();
   const gm = new THREE.SpriteMaterial({ map: glowTexture(), depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9 });
@@ -460,7 +602,9 @@ export function buildCar(type, color) {
     wheels,
     siren: sirenParts,
     door,
-    dents,
+    shell,
+    orig,
+    paintMask: merged.mask,
     glow,
     pool,
     smoke: new THREE.Vector3(0, deck + 0.1, smokeZ),
@@ -470,6 +614,9 @@ export function buildCar(type, color) {
     dispose() {
       pool.geometry.dispose();
       for (const m of own) m.dispose();
+      root.traverse((o) => {
+        if (o.isMesh && (o.material === VC_LAMBERT || o.material === VC_BASIC)) o.geometry.dispose();
+      });
     },
   };
 }
@@ -521,6 +668,13 @@ const BLACK_SMOKE = [new THREE.Color('#2a2622'), new THREE.Color('#3a3530'), new
 const TYRE_SMOKE = [new THREE.Color('#d8d8d2'), new THREE.Color('#c4c4be')];
 
 let nextId = 1;
+// How heavy each vehicle is: heavy ones shove light ones out of the way.
+const MASS = { sedan: 1, taxi: 1, police: 1.2, sports: 0.9, suv: 1.4, pickup: 1.5, monster: 3.5, van: 1.7, bus: 4, icecream: 1.7, ambulance: 1.8, firetruck: 4 };
+const tA = new THREE.Vector3();
+const tB = new THREE.Vector3();
+const tQ = new THREE.Quaternion();
+const DEBRIS = [new THREE.Color('#fff6c8'), new THREE.Color('#ffd84a'), new THREE.Color('#9aa0a8'), new THREE.Color('#2a2a2e')];
+const SHARDS = [new THREE.Color('#cfe8f6'), new THREE.Color('#8cc0e0'), new THREE.Color('#ffffff')];
 
 export class Car {
   // opts: { ai: true for traffic, color }
@@ -563,6 +717,12 @@ export class Car {
     this.smokeT = 0;
     this.cracked = false;
     this.jingleT = 3 + Math.random() * 6;
+    this.spinV = 0;
+    this.air = false;
+    this.airT = 0;
+    this.stallT = 0;
+    this.pull = Math.random() < 0.5 ? -1 : 1;
+    this.mass = this.def.mass || MASS[type] || 1;
     this.sirenOn = type === 'police' && !!opts.ai && Math.random() < 0.3;
     this.sync(0);
   }
@@ -594,20 +754,27 @@ export class Car {
     const c = Math.cos(this.yaw);
     const { l, w: hw } = this.half;
     // The monster truck rolls right over anything a block high.
-    const heights = this.def.crush ? [1.3, 2.2] : [0.6, 1.3];
-    for (const [a, b] of [
-      [l, hw],
-      [l, -hw],
-      [-l, hw],
-      [-l, -hw],
-      [l, 0],
-      [-l, 0],
-      [0, hw],
-      [0, -hw],
-    ]) {
+    const heights = this.def.crush ? [1.3, 2.2] : [0.6, 1.4];
+    // Points all round the outline, no more than half a block apart.
+    const nl = Math.ceil(l * 2);
+    const nw = Math.ceil(hw * 2);
+    const hit = (a, b) => {
       const px = x + s * a + c * b;
       const pz = z + c * a - s * b;
-      for (const dy of heights) if (w.solidP(Math.floor(px), Math.floor(y + dy), Math.floor(pz))) return true;
+      for (const dy of heights) {
+        const id = w.get(Math.floor(px), Math.floor(y + dy), Math.floor(pz));
+        // Ramps (the striped blocks) can be driven up.
+        if ((id && id !== B.HAZARD) || !w.inBounds(Math.floor(px), 0, Math.floor(pz))) return true;
+      }
+      return false;
+    };
+    for (let i = 0; i <= nl; i++) {
+      const a = -l + (2 * l * i) / nl;
+      if (hit(a, hw) || hit(a, -hw)) return true;
+    }
+    for (let i = 1; i < nw; i++) {
+      const b = -hw + (2 * hw * i) / nw;
+      if (hit(l, b) || hit(-l, b)) return true;
     }
     return false;
   }
@@ -618,9 +785,15 @@ export class Car {
     this.braking = handbrake || (throttle < 0 && this.speed > 0.3) || (throttle > 0 && this.speed < -0.3);
     this.reversing = throttle < 0 && this.speed <= 0.3;
     this.handbrake = handbrake;
+    // A stalled engine (after a big crash) needs a moment; in the air the
+    // wheels can't do anything.
+    this.stallT -= dt;
+    if (this.stallT > 0 || this.air || this.webbed > 0) throttle = 0;
+    // A wrecked-looking car is slower.
+    const top = d.speed * (0.55 + 0.45 * Math.max(0, this.hp) / d.hp);
     if (throttle > 0) {
       if (this.speed < -0.3) this.speed = Math.min(0, this.speed + 18 * dt);
-      else this.speed += d.accel * throttle * dt * (1 - Math.max(0, this.speed) / d.speed);
+      else this.speed += d.accel * throttle * dt * (1 - Math.max(0, this.speed) / top);
     } else if (throttle < 0) {
       if (this.speed > 0.3) this.speed = Math.max(0, this.speed - 18 * dt);
       else this.speed = Math.max(-d.speed * 0.35, this.speed - d.accel * 0.6 * dt);
@@ -633,54 +806,108 @@ export class Car {
       this.speed = Math.abs(this.speed) < f ? 0 : this.speed - Math.sign(this.speed) * f;
     }
     this.speed *= 1 - 0.08 * dt;
-    // Steering eases in, and you can't turn standing still.
-    this.steer += (steerIn - this.steer) * Math.min(1, dt * 7);
+    // Steering eases in, and you can't turn standing still. Bent cars pull
+    // to one side.
+    const bent = (1 - Math.max(0, this.hp) / d.hp) * 0.18 * this.pull;
+    this.steer += (steerIn + bent - this.steer) * Math.min(1, dt * 7);
     const grip = handbrake ? 1.7 : 1;
     const sp = Math.min(Math.abs(this.speed), 12) * Math.sign(this.speed);
-    this.yaw += sp * this.steer * 0.19 * d.turn * grip * dt;
+    if (!this.air) this.yaw += sp * this.steer * 0.19 * d.turn * grip * dt;
     this.move(dt);
   }
 
   move(dt) {
     const g = this.game;
     // The car slides a little when the tyres can't keep up: a lot with the
-    // handbrake on, which is how you drift.
+    // handbrake on, which is how you drift. In the air it just flies.
     const fx = Math.sin(this.yaw) * this.speed;
     const fz = Math.cos(this.yaw) * this.speed;
     const grip = this.dead ? 3 : this.handbrake ? 1.6 : Math.abs(this.speed) > 14 && Math.abs(this.steer) > 0.7 ? 5 : 11;
-    const k = Math.min(1, grip * dt);
-    this.vel.x += (fx - this.vel.x) * k;
-    this.vel.z += (fz - this.vel.z) * k;
+    if (!this.air) {
+      const k = Math.min(1, grip * dt);
+      this.vel.x += (fx - this.vel.x) * k;
+      this.vel.z += (fz - this.vel.z) * k;
+    }
+    // Spinning from a crash.
+    this.yaw += this.spinV * dt;
+    this.spinV *= Math.exp(-2.5 * dt);
     // How much it's sliding sideways.
     this.slip = Math.abs(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw));
-    const nx = this.pos.x + this.vel.x * dt;
-    const nz = this.pos.z + this.vel.z * dt;
-    if (this.blocked(nx, nz, this.pos.y)) {
-      // Crash: bounce back, and a hard hit hurts.
-      const hit = Math.hypot(this.vel.x, this.vel.z);
-      if (hit > 7) {
-        const me = this.driver === 'player';
-        // Computer drivers bump into things a lot: go easy on them.
-        this.damage(hit * (me ? 2.2 : 0.5), null, me ? 'player' : null, Math.sign(this.speed) || 1);
-        g.sound.crash(Math.min(1, hit / 20) * (me ? 1 : 0.6));
-        if (me) g.player.shake = Math.max(g.player.shake, Math.min(0.5, hit / 40));
-        this.bounceV = -hit * 0.05;
+    // Move in small steps so fast cars can't jump through walls, sliding
+    // along whatever they hit.
+    const vx0 = this.vel.x;
+    const vz0 = this.vel.z;
+    const dist = Math.hypot(this.vel.x, this.vel.z) * dt;
+    const steps = Math.max(1, Math.ceil(dist / 0.3));
+    const h = dt / steps;
+    let impact = 0;
+    let nx0 = 0;
+    let nz0 = 0;
+    for (let i = 0; i < steps; i++) {
+      const nx = this.pos.x + this.vel.x * h;
+      const nz = this.pos.z + this.vel.z * h;
+      if (!this.blocked(nx, nz, this.pos.y)) {
+        this.pos.x = nx;
+        this.pos.z = nz;
+        continue;
       }
-      this.speed *= -0.25;
-      this.vel.x *= -0.25;
-      this.vel.z *= -0.25;
-    } else {
-      this.pos.x = nx;
-      this.pos.z = nz;
+      const okX = !this.blocked(nx, this.pos.z, this.pos.y);
+      const okZ = !okX && !this.blocked(this.pos.x, nz, this.pos.y);
+      let hitX = false;
+      let hitZ = false;
+      if (okX) {
+        this.pos.x = nx;
+        hitZ = true;
+      } else if (okZ) {
+        this.pos.z = nz;
+        hitX = true;
+      } else hitX = hitZ = true;
+      const iv = hitX && hitZ ? Math.hypot(this.vel.x, this.vel.z) : hitX ? Math.abs(this.vel.x) : Math.abs(this.vel.z);
+      if (iv > impact) {
+        impact = iv;
+        nx0 = hitX ? -Math.sign(this.vel.x) : 0;
+        nz0 = hitZ ? -Math.sign(this.vel.z) : 0;
+      }
+      // Lose the speed going into the wall and bounce back a little.
+      if (hitX) this.vel.x *= -0.25;
+      if (hitZ) this.vel.z *= -0.25;
     }
-    // Stay on the ground: step up curbs, fall off edges.
+    if (impact > 0) {
+      // Whatever speed is left, along the way the car points.
+      this.speed = this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw);
+      if (impact > 3) {
+        // Hitting a wall at an angle swings the car round.
+        const f = this.forward(tA);
+        this.spinV += (f.x * nz0 - f.z * nx0) * impact * 0.09;
+        // Where it hit: the side of the car facing the wall.
+        const vl = Math.hypot(vx0, vz0) || 1;
+        const ux = vx0 / vl;
+        const uz = vz0 / vl;
+        const along = Math.abs(ux * f.x + uz * f.z);
+        const reach = along * this.def.len * 0.5 + (1 - along) * this.def.wid * 0.5;
+        tB.set(this.pos.x + ux * reach, this.pos.y + 0.75, this.pos.z + uz * reach);
+        this.crash(impact, tB, tA.set(-ux, 0, -uz), null);
+      }
+    }
+    // Stay on the ground: step up curbs, fall off edges. Hitting a ramp (or
+    // a step) fast throws the car into the air.
     const step = this.def.crush ? 2.2 : 1.2;
-    const gy = this.adv.groundAt(this.pos.x, this.pos.z, this.pos.y + step);
+    // The ground under the middle, and under the front wheels (so the car
+    // rides up a ramp instead of into it).
+    let gy = this.adv.groundAt(this.pos.x, this.pos.z, this.pos.y + step);
+    const sp0 = Math.hypot(this.vel.x, this.vel.z);
+    if (sp0 > 0.5) {
+      const reach = this.def.len * 0.35;
+      const fy = this.adv.groundAt(this.pos.x + (this.vel.x / sp0) * reach, this.pos.z + (this.vel.z / sp0) * reach, this.pos.y + step);
+      if (fy > gy && fy - this.pos.y <= step) gy = fy;
+    }
     if (gy > this.pos.y + 0.01) {
-      this.pos.y += Math.min(gy - this.pos.y, 12 * dt);
-      this.vy = 0;
+      this.pos.y += Math.min(gy - this.pos.y, 14 * dt);
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      this.vy = sp > 7 && !this.dead ? Math.max(this.vy, Math.min(sp * 0.62, 12.5)) : 0;
     } else {
-      this.vy -= 25 * dt;
+      // A little floaty in the air, for good jumps.
+      this.vy -= (this.air ? 17 : 25) * dt;
       const was = this.vy;
       this.pos.y = Math.max(gy, this.pos.y + this.vy * dt);
       if (this.pos.y <= gy) {
@@ -688,12 +915,21 @@ export class Car {
         if (was < -5) {
           this.bounceV = was * 0.04;
           if (this.driver === 'player') g.sound.landThud(Math.min(1, -was / 15));
+          if (was < -16) this.damage((-was - 16) * 2, null, this.driver === 'player' ? 'player' : null);
         }
         this.vy = 0;
       }
     }
+    const wasAir = this.air;
+    this.air = this.pos.y > gy + 0.08;
+    if (this.air) this.airT += dt;
+    else if (wasAir) {
+      // Big air: a stunt jump!
+      if (this.airT > 0.9 && this.driver === 'player' && !this.dead) this.adv.stunt(this, this.airT);
+      this.airT = 0;
+    }
     // Skid marks and tyre smoke.
-    const skidding = this.slip > 2.4 || (this.handbrake && Math.abs(this.speed) > 4) || (this.braking && Math.abs(this.speed) > 12);
+    const skidding = !this.air && (this.slip > 2.4 || (this.handbrake && Math.abs(this.speed) > 4) || (this.braking && Math.abs(this.speed) > 12));
     this.skidding = skidding && this.pos.y - gy < 0.1;
     if (this.skidding && this.adv.skids) {
       const s = Math.sin(this.yaw);
@@ -705,6 +941,107 @@ export class Car {
         this.adv.skids.add(x, this.pos.y, z, Math.atan2(this.vel.x, this.vel.z), Math.hypot(this.vel.x, this.vel.z) * dt * 1.1);
         if (Math.random() < dt * 14) g.fx.burst(x, this.pos.y + 0.2, z, TYRE_SMOKE, 1, { speed: 0.6, size: 0.22, up: 0.8, life: 0.8, spread: 0.2, grav: -1 });
       }
+    }
+  }
+
+  // A crash: dents where it hit, bits flying off, and it hurts.
+  // at: where (world), dir: pushing into the car, by: who's to blame.
+  crash(impact, at, dir, by) {
+    const g = this.game;
+    const me = this.driver === 'player';
+    const k = Math.min(1, impact / 24);
+    this.dent(at, dir, 0.08 + k * 0.4);
+    // Computer drivers bump into things a lot: go easy on them.
+    const dmg = impact * (me || by === 'player' ? 2 : 0.6);
+    this.damage(dmg, null, me ? 'player' : by);
+    const paint = new THREE.Color(this.color);
+    g.fx.burst(at.x, at.y, at.z, [paint, ...DEBRIS], Math.round(4 + impact), { speed: 2 + impact * 0.25, size: 0.09, up: 2, life: 0.8, spread: 0.3 });
+    if (impact > 11) g.fx.burst(at.x, at.y + 0.3, at.z, SHARDS, Math.round(impact * 0.8), { speed: 2 + impact * 0.2, size: 0.06, up: 2.5, life: 0.9, spread: 0.3 });
+    g.sound.crash(k * (me || by === 'player' ? 1 : 0.6));
+    this.bounceV = -k * 1.4;
+    if (impact > 17) this.stallT = 0.9;
+    if (me) {
+      const p = g.player;
+      p.shake = Math.max(p.shake, 0.15 + k * 0.5);
+      // A really big crash hurts you too.
+      if (impact > 15 && !g.cheats.has('god')) {
+        const n = Math.floor((impact - 13) / 4);
+        p.hp -= n;
+        p.sinceHurt = 0;
+        p.hurtT = 0.3;
+        g.hud.damage();
+        g.sound.hurt();
+        if (p.hp <= 0) p.die('crash');
+      }
+    }
+  }
+
+  // Push the bodywork in round a point. The metal can only bend so far.
+  dent(at, dir, amount) {
+    const m = this.model;
+    const mesh = m.shell;
+    if (!mesh || this.dead) return;
+    mesh.updateWorldMatrix(true, false);
+    const lp = mesh.worldToLocal(tA.copy(at));
+    mesh.getWorldQuaternion(tQ).invert();
+    const ld = tB.copy(dir).applyQuaternion(tQ).normalize();
+    const pos = mesh.geometry.attributes.position;
+    const arr = pos.array;
+    const o = m.orig;
+    const R = 0.6 + amount * 1.8;
+    const maxD = 0.6;
+    for (let i = 0; i < pos.count; i++) {
+      const j = i * 3;
+      const d = Math.hypot(o[j] - lp.x, o[j + 1] - lp.y, o[j + 2] - lp.z);
+      if (d > R) continue;
+      const f = (1 - d / R) ** 1.5 * amount;
+      // Crumple: every point bends a slightly different way (the same way
+      // for points in the same place, so the panels stay joined).
+      const hx = Math.sin(o[j] * 12.9898 + o[j + 1] * 78.233 + o[j + 2] * 37.719) * 43758.5453;
+      const r1 = (hx - Math.floor(hx)) * 2 - 1;
+      const r2 = ((hx * 1.618) % 1) * 2 - 1;
+      let dx = arr[j] + ld.x * f + r1 * f * 0.45 - o[j];
+      let dy = arr[j + 1] + ld.y * f - Math.abs(r2) * f * 0.35 - o[j + 1];
+      let dz = arr[j + 2] + ld.z * f + r2 * f * 0.45 - o[j + 2];
+      const dl = Math.hypot(dx, dy, dz);
+      if (dl > maxD) {
+        dx *= maxD / dl;
+        dy *= maxD / dl;
+        dz *= maxD / dl;
+      }
+      arr[j] = o[j] + dx;
+      arr[j + 1] = o[j + 1] + dy;
+      arr[j + 2] = o[j + 2] + dz;
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    this.dented = true;
+  }
+
+  // Good as new (Block Fix): straightens the dents, fixes the glass, new paint.
+  repair(color) {
+    const m = this.model;
+    this.hp = this.def.hp;
+    this.squash = 0;
+    m.body.scale.y = 1;
+    const pos = m.shell.geometry.attributes.position;
+    pos.array.set(m.orig);
+    pos.needsUpdate = true;
+    m.shell.geometry.computeVertexNormals();
+    this.dented = false;
+    if (this.cracked) {
+      this.cracked = false;
+      const gm = m.mats.glass;
+      gm.map = null;
+      gm.color.set(GLASS);
+      gm.needsUpdate = true;
+    }
+    if (color) {
+      this.color = color;
+      const c = new THREE.Color(color);
+      const col = m.shell.geometry.attributes.color;
+      for (let i = 0; i < col.count; i++) if (m.paintMask[i]) col.setXYZ(i, c.r, c.g, c.b);
+      col.needsUpdate = true;
     }
   }
 
@@ -781,16 +1118,6 @@ export class Car {
     if (by) this.lastHitBy = by;
     this.hp -= amount;
     this.hurtT = 0.15;
-    // Big hits leave dents in the bumpers.
-    if (amount > 12) {
-      for (const dn of this.model.dents) {
-        if (end && dn.end !== end) continue;
-        const o = dn.obj;
-        o.rotation.z += (Math.random() - 0.5) * 0.12;
-        o.rotation.y += (Math.random() - 0.5) * 0.1;
-        o.position.z -= dn.end * Math.min(0.12, amount * 0.004);
-      }
-    }
     if (!this.cracked && this.hp < this.def.hp * 0.5) {
       this.cracked = true;
       const gm = this.model.mats.glass;
@@ -824,7 +1151,6 @@ export class Car {
     });
     this.model.glow.visible = false;
     if (this.model.door) this.model.door.rotation.y = -0.9 - Math.random() * 0.4;
-    for (const dn of this.model.dents) dn.obj.rotation.z += (Math.random() - 0.5) * 0.5;
     this.model.body.position.y = -0.12;
     if (this.onWreck) this.onWreck();
   }
@@ -850,6 +1176,19 @@ export class Car {
       if (!this.dead) this.damage(12 * dt, null);
     }
     this.handbrake = false;
+    // Webbed: the web glues it to the road for a bit.
+    if (this.webbed > 0) {
+      this.webbed -= dt;
+      this.speed *= 1 - Math.min(1, 5 * dt);
+      if (!this.webMesh && this.adv.webs) {
+        this.webMesh = new THREE.Mesh(this.adv.webs.splatGeo, this.adv.webs.splatMat);
+        this.webMesh.scale.setScalar(this.def.wid * 1.3);
+        this.webMesh.rotation.x = -Math.PI / 2;
+        this.webMesh.position.set(0, this.def.hgt + 0.06, this.def.len * 0.05);
+        this.model.root.add(this.webMesh);
+      }
+      if (this.webMesh) this.webMesh.visible = this.webbed > 0;
+    }
     if (this.dead) {
       this.deadT += dt;
       this.move(dt);
@@ -907,15 +1246,20 @@ export class Car {
     this.bounceV += (-this.bounce * 60 - this.bounceV * 6) * dt;
     this.bounce += this.bounceV * dt;
     if (!this.dead) {
-      m.body.rotation.x = -this.pitch;
+      // Nose up flying off a ramp, nose down coming back to earth.
+      const airPitch = this.air ? Math.max(-0.4, Math.min(0.4, -this.vy * 0.035)) : 0;
+      m.body.rotation.x = -this.pitch + airPitch;
       m.body.rotation.z = -this.steer * Math.min(1, Math.abs(this.speed) / 15) * 0.06;
       m.body.position.y = Math.max(-0.15, Math.min(0.15, this.bounce));
     }
     this.spin += (this.speed * dt) / (this.def.wheelR || 0.36);
-    for (const w of m.wheels) {
+    // Bent wheels wobble.
+    const wob = this.hp < this.def.hp * 0.5 && !this.dead ? (1 - this.hp / this.def.hp) * 0.12 : 0;
+    m.wheels.forEach((w, i) => {
       w.g.rotation.x = this.spin;
       w.g.rotation.y = w.front ? this.steer * 0.45 : 0;
-    }
+      w.g.rotation.z = wob ? Math.sin(this.spin * 1.3 + i) * wob : 0;
+    });
     if (m.siren) {
       const on = this.sirenOn || this.driver === 'cop' || (this.driver === 'player' && this.adv.siren);
       const f = Math.floor(performance.now() / 180) % 2;

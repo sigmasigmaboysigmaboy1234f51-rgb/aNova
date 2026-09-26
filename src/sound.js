@@ -1230,4 +1230,29 @@ export class Sound {
       return { g, srcs: [n, o, lfo], peak: 0.35 };
     });
   }
+
+  // --- Web shooters ----------------------------------------------------------
+
+  // Thwip! A web shooting out.
+  thwip(vol = 1) {
+    if (!this.ready('thwip', 60)) return;
+    const out = this.voice(0.12, 0.15);
+    this.noiseL({ out, dur: 0.09, vol: 0.2 * vol, filters: [['bandpass', 5200, 1800, 2.5]] });
+    this.oscL({ out, type: 'triangle', f0: 1900, f1: 700, dur: 0.07, vol: 0.05 * vol, attack: 0.002 });
+  }
+
+  // Air rushing past as you swing and fly.
+  whoosh(vol = 1) {
+    if (!this.ready('whoosh', 200)) return;
+    const out = this.voice(0.2);
+    this.noiseL({ out, dur: 0.45, vol: 0.2 * vol, attack: 0.12, color: 'pink', filters: [['bandpass', 500, 1500, 1.2]] });
+  }
+
+  // A web ball sticking to something.
+  splat() {
+    if (!this.ready('splat', 60)) return;
+    const out = this.voice(0.1);
+    this.noiseL({ out, dur: 0.12, vol: 0.14, filters: [['lowpass', 1800, 500, 1]] });
+    this.thump({ f0: 180, f1: 90, dur: 0.08, vol: 0.12, send: 0.05 });
+  }
 }

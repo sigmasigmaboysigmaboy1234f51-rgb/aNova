@@ -931,6 +931,14 @@ export class Mob {
       if (k <= 0) this.remove(false);
       return true;
     }
+    // Stuck in a web: can't move or attack until it wears off.
+    if (this.state === 'live' && this.webT > 0) {
+      this.webT -= dt;
+      this.vel.set(0, 0, 0);
+      this.sync(dt);
+      for (const mat of this.emissives.length ? this.emissives : this.model.materials) if (mat.emissive) mat.emissive.setRGB(0.42, 0.42, 0.4);
+      return true;
+    }
     if (this.state === 'live' && (this.frozenT > 0 || g.cheats.has('freeze'))) {
       this.frozenT = Math.max(0, (this.frozenT || 0) - dt);
       this.vel.set(0, 0, 0);

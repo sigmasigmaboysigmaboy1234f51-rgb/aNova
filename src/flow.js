@@ -80,7 +80,12 @@ export class FlowField {
       this.stand = new Int16Array(SX * SZ).fill(-1);
       this.heap = new MinHeap(SX * SZ * 9);
     }
-    world.computeStand(this.stand);
+    // Where things can stand only changes when blocks do.
+    if (this.standVersion !== world.version || this.standSize !== SX * SZ) {
+      world.computeStand(this.stand);
+      this.standVersion = world.version;
+      this.standSize = SX * SZ;
+    }
     const dist = this.dist;
     const stand = this.stand;
     dist.fill(Infinity);
@@ -98,6 +103,8 @@ export class FlowField {
       const i = heap.pop();
       const d = heap.lastKey;
       if (d > dist[i]) continue;
+      // Nothing that far away needs a path (keeps big maps fast).
+      if (d > 110) break;
       const x = i % SX;
       const z = (i / SX) | 0;
       const hc = stand[i];

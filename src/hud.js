@@ -4,6 +4,7 @@ import { drawBlockIcon } from './textures.js';
 import { BLOCKS } from './world.js';
 import { PLACEABLE } from './player.js';
 import { gunThumb } from './thumbs.js';
+import { drawWebIcon } from './webs.js';
 
 const HEART = ['.11...11.', '1331.1221', '132212221', '122222221', '.1222221.', '..12221..', '...121...', '....1....'];
 
@@ -97,6 +98,23 @@ export class Hud {
       bar.appendChild(slot);
       this.slots.push({ slot, icon, count, code: null });
     }
+    // Slot 8: web shooters (only shown in Adventure mode).
+    {
+      const slot = document.createElement('div');
+      slot.className = 'slot web-slot';
+      const key = document.createElement('span');
+      key.className = 'key';
+      key.textContent = '8';
+      const icon = document.createElement('canvas');
+      icon.width = icon.height = 64;
+      drawWebIcon(icon);
+      icon.title = 'Web Shooters';
+      const count = document.createElement('span');
+      count.className = 'count';
+      slot.append(key, icon, count);
+      bar.appendChild(slot);
+      this.slots.push({ slot, icon, count, code: null });
+    }
     this.slotName = $('#slot-name');
 
     this.ammoEl = $('#ammo');
@@ -186,7 +204,8 @@ export class Hud {
       this.slots.forEach((s, i) => s.slot.classList.toggle('sel', i === p.held));
     }
     const w = p.weapon;
-    const name = w ? w.def.name : BLOCKS[PLACEABLE[p.held - 3]].name;
+    const webs = p.held === 7;
+    const name = w ? w.def.name : webs ? 'Web Shooters' : BLOCKS[PLACEABLE[p.held - 3]].name;
     if (this.changed('name', name)) this.slotName.textContent = name;
     if (this.changed('blocks', p.blocks)) for (let i = 3; i < 7; i++) this.slots[i].count.textContent = String(p.blocks);
     for (let i = 0; i < 3; i++) {
@@ -209,6 +228,11 @@ export class Hud {
       max = `/${w.stats.mag}`;
       fill = reloading ? w.reloadFrac : w.ammo / w.stats.mag;
       status = reloading ? 'Reloading' : w.stats.proj === 'block' ? `Uses blocks: ${p.blocks} left` : 'R to reload';
+    } else if (webs) {
+      cur = '∞';
+      max = ' web';
+      fill = 1;
+      status = 'Hold right click: swing · Space: zip · Left click: web ball';
     } else {
       cur = String(p.blocks);
       max = ' blocks';

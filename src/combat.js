@@ -171,6 +171,8 @@ export class Combat {
     if (p.buff && p.buff('dmg')) dmg *= 2;
     if (g.cheats.has('onehit')) dmg *= 1000;
     if (h.car) {
+      // Bullet dents.
+      if (at) h.car.dent(at, vC.subVectors(at, p.pos).normalize(), 0.04);
       h.car.damage(dmg, p.pos, 'player');
       if (h.car.type === 'police' && !h.car.dead) g.adventure.police.crime('shootCop');
       if (at) g.fx.burst(at.x, at.y, at.z, SPARKS, 4, { speed: 3, size: 0.06, up: 1.5, life: 0.35, spread: 0.05 });

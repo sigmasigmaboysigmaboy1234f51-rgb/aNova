@@ -6,6 +6,7 @@ import { generateCity, roadNodes, sidewalkLoops, GY, LANE, CITY_SIZE } from './c
 import { Car, CAR_TYPES, Skids } from './cars.js';
 import { Person } from './townsfolk.js';
 import { Police, POLICE_NUMBER } from './police.js';
+import { Webs } from './webs.js';
 import { MOB_TYPES } from './mobtypes.js';
 import { BOSSES, Boss } from './boss.js';
 
@@ -13,7 +14,7 @@ import { BOSSES, Boss } from './boss.js';
 // (E), take jobs from people with a "!" over their heads, find the golden
 // cubes, and watch out for mobs at night.
 
-export const CITY_THEME = { ...THEMES.meadow, name: 'Blockton', fog: [70, 170] };
+export const CITY_THEME = { ...THEMES.meadow, name: 'Blockton', fog: [90, 230] };
 
 const V = () => new THREE.Vector3();
 const tmp = new THREE.Vector3();
@@ -28,6 +29,7 @@ const GIVERS = {
   van: { name: 'Chief', title: 'Chief Blocksworth', seed: 55 },
   cubes: { name: 'Kevin', title: 'Kid Kevin', seed: 66 },
   stadium: { name: 'Coach', title: 'Coach Cole', seed: 77 },
+  webs: { name: 'Webster', title: 'Web Master Webster', seed: 99 },
   site: { name: 'Fran', title: 'Foreman Fran', seed: 88 },
 };
 
@@ -127,10 +129,12 @@ const MISSIONS = {
     lines: ["Think you're fast? Beat my lap record round Blockton.", 'Hit every checkpoint before the clock runs out. The sports car over there is all yours.', 'Ready... set...'],
     start(a, m) {
       const N = a.traffic.nodes;
-      const at = (i, j) => N[j * 4 + i];
-      m.route = [at(1, 1), at(2, 1), at(3, 1), at(3, 2), at(3, 3), at(2, 3), at(1, 3), at(0, 3), at(0, 2), at(0, 1), at(1, 1)];
+      const n = Math.round(Math.sqrt(N.length));
+      const at = (i, j) => N[j * n + i];
+      // A lap round the middle of town.
+      m.route = [at(1, 1), at(2, 1), at(3, 1), at(4, 1), at(4, 2), at(4, 3), at(4, 4), at(3, 4), at(2, 4), at(1, 4), at(1, 3), at(1, 2), at(1, 1)];
       m.i = 0;
-      m.t = 80;
+      m.t = 75;
       m.go = false;
       const cp = m.route[0];
       a.setBeacon(cp.x, cp.z, 0x39b8ff);
@@ -229,6 +233,40 @@ const MISSIONS = {
       if (m.van) a.removeCarLater(m.van, 20);
     },
   },
+  webs: {
+    title: 'Rooftop Rings',
+    coins: 350,
+    xp: 400,
+    lines: [
+      'Nice web shooters! Press 8 to put them on.',
+      'Hold right click on a building to swing, let go to fly, and press Space to zip up your web.',
+      'Swing through all my rings on the rooftops before the time runs out. Go!',
+    ],
+    start(a, m) {
+      m.rings = a.rooftopRings(6);
+      m.i = 0;
+      m.t = 100;
+      a.showRing(m.rings[0]);
+      a.game.player.select(7);
+    },
+    update(a, m, dt) {
+      m.t -= dt;
+      const r = m.rings[m.i];
+      const p = a.game.player.pos;
+      if (Math.hypot(p.x - r.x, p.y + 1 - r.y, p.z - r.z) < 3.4) {
+        m.i++;
+        a.game.sound.coin();
+        a.game.hud.popup(`Ring ${m.i}/${m.rings.length}!`, 'power');
+        if (m.i >= m.rings.length) return 'win';
+        a.showRing(m.rings[m.i]);
+      }
+      return m.t <= 0 ? 'fail' : null;
+    },
+    objective: (a, m) => `Swing through ring ${m.i + 1} of ${m.rings.length} · ${Math.ceil(m.t)}s`,
+    cleanup(a) {
+      a.showRing(null);
+    },
+  },
   stadium: {
     title: 'Stadium Showdown',
     coins: 500,
@@ -318,10 +356,13 @@ export class Adventure {
     const g = this.game;
     this.info = generateCity(g.world, 7);
     g.world.flush();
+    // Clouds above the skyscrapers.
+    g.clouds.position.y = SY + 18;
     this.traffic = new Traffic(this);
     this.skids = new Skids(g.scene);
     this.nightK = 0;
     this.police = new Police(this);
+    this.webs = new Webs(this);
     this.buildSigns();
     // Parked cars.
     for (const s of this.info.parking) {
@@ -330,7 +371,7 @@ export class Adventure {
       if (s.type === 'player') c.mine = true;
     }
     // Traffic.
-    const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'sedan', 'police', 'sports', 'suv', 'bus', 'icecream'];
+    const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'sedan', 'police', 'sports', 'suv', 'bus', 'icecream', 'sedan', 'taxi', 'sedan', 'suv', 'pickup', 'sports', 'sedan', 'bus', 'taxi', 'police', 'sedan'];
     for (const t of types) {
       const r = this.traffic.randomSpot();
       const c = this.addCar(t, r.x, r.z, r.yaw, true);
@@ -338,7 +379,7 @@ export class Adventure {
     }
     // People out for a walk.
     const loops = sidewalkLoops();
-    for (let i = 0; i < 16; i++) this.addPerson({ loop: loops[i % loops.length] });
+    for (let i = 0; i < 34; i++) this.addPerson({ loop: loops[(i * 7) % loops.length] });
     // People with jobs.
     for (const [id, gv] of Object.entries(GIVERS)) {
       const spot = this.info.givers[id];
@@ -397,10 +438,16 @@ export class Adventure {
       this.glow = null;
     }
     this.clearBeacon();
+    g.clouds.position.y = 40;
     if (this.traffic) this.traffic.dispose();
     if (this.skids) this.skids.dispose();
     this.skids = null;
     if (this.police) this.police.dispose();
+    if (this.webs) this.webs.dispose();
+    document.body.classList.remove('adventure', 'web-ok');
+    const p = g.player;
+    if (p.held === 7) p.select(0);
+    p.webFly = false;
     for (const m of this.signs || []) {
       g.scene.remove(m);
       m.geometry.dispose();
@@ -427,6 +474,7 @@ export class Adventure {
   }
 
   showUI(on) {
+    document.body.classList.toggle('adventure', on);
     $('#minimap').hidden = !on;
     $('#drive-hud').hidden = true;
     $('#prompt').hidden = true;
@@ -447,33 +495,37 @@ export class Adventure {
   buildSigns() {
     const g = this.game;
     this.signs = [];
-    const sign = (lines, bg, fg, w, h, x, y, z, ry = 0) => {
+    for (const sg of this.info.signs || []) {
       const c = document.createElement('canvas');
-      c.width = 256;
-      c.height = Math.round((256 * h) / w);
+      c.width = Math.round(64 * sg.w);
+      c.height = Math.round(64 * sg.h);
       const ctx = c.getContext('2d');
-      ctx.fillStyle = bg;
+      ctx.fillStyle = sg.bg;
       ctx.fillRect(0, 0, c.width, c.height);
-      ctx.strokeStyle = fg;
-      ctx.lineWidth = 6;
-      ctx.strokeRect(5, 5, c.width - 10, c.height - 10);
-      ctx.fillStyle = fg;
+      ctx.strokeStyle = sg.fg;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
+      ctx.fillStyle = sg.fg;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      lines.forEach(([text, size], i) => {
-        ctx.font = `700 ${size}px 'Pixelify Sans', ui-monospace, monospace`;
-        ctx.fillText(text, c.width / 2, (c.height * (i + 0.5)) / lines.length + 2);
+      sg.lines.forEach(([text, size], i) => {
+        // Shrink the words until they fit.
+        let px = size;
+        do {
+          ctx.font = `700 ${px}px 'Pixelify Sans', ui-monospace, monospace`;
+          px -= 2;
+        } while (ctx.measureText(text).width > c.width - 18 && px > 8);
+        ctx.fillText(text, c.width / 2, (c.height * (i + 0.5)) / sg.lines.length + 2);
       });
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
-      m.position.set(x, y, z);
-      m.rotation.y = ry;
+      tex.anisotropy = 4;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(sg.w, sg.h), new THREE.MeshBasicMaterial({ map: tex }));
+      m.position.set(sg.x, sg.y, sg.z);
+      m.rotation.y = sg.ry;
       g.scene.add(m);
       this.signs.push(m);
-    };
-    const pd = this.info.police;
-    if (pd) sign([['BLOCKTON POLICE', 34], [`Emergency? Dial ${POLICE_NUMBER}`, 24]], '#1e3160', '#ffffff', 6, 1.5, pd.signX, GY + 6.2, pd.signZ + 1.02);
+    }
   }
 
   get hospital() {
@@ -603,12 +655,14 @@ export class Adventure {
         [
           [who, 'Psst! I hid golden cubes all over Blockton. On roofs, in alleys, even on the beach!'],
           [who, left ? `There are ${left} left to find. Each one is worth 50 coins, and if you find them all I'll give you 500 more!` : 'You found every single one. You are the best explorer in Blockton!'],
+          [who, 'Some are way up on the skyscrapers. Use your web shooters (press 8) to get up there!'],
         ],
         () => {},
       );
       return;
     }
     const M = MISSIONS[id];
+    if (!M) return;
     const again = this.prog.done[id];
     const lines = M.lines.map((t) => [who, t]);
     if (again) lines.unshift([who, `Back for more? Same job, smaller tip this time.`]);
@@ -663,7 +717,7 @@ export class Adventure {
     let best = null;
     let bd = r;
     for (const c of this.cars) {
-      if (c.dead || c.mission || (c.driver === 'ai' && Math.abs(c.speed) > 4)) continue;
+      if (c.dead || c.mission || (c.driver === 'ai' && Math.abs(c.speed) > 4) || Math.abs(c.pos.y - p.y) > 2.5) continue;
       // A police car the officers got out of is up for grabs...
       if (c.driver === 'cop' && !(c.unit && c.unit.mode === 'deployed')) continue;
       const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z) - c.def.wid / 2;
@@ -839,7 +893,13 @@ export class Adventure {
     const by = this.blastBy !== undefined ? this.blastBy : 'player';
     for (const c of this.cars) {
       const d = c.pos.distanceTo(at);
-      if (d < r + c.def.len / 2) c.damage(dmg * 1.5 * Math.max(0.3, 1 - d / (r + 2)), null, by);
+      if (d < r + c.def.len / 2) {
+        // Dent the side facing the blast.
+        const dir = V().subVectors(c.pos, at).setY(0).normalize();
+        c.dent(V().copy(c.pos).addScaledVector(dir, -c.def.wid * 0.6).setY(c.pos.y + 0.8), dir, 0.25 * Math.max(0.3, 1 - d / (r + 2)));
+        c.spinV += (Math.random() - 0.5) * 2;
+        c.damage(dmg * 1.5 * Math.max(0.3, 1 - d / (r + 2)), null, by);
+      }
     }
     for (const o of this.police.officers()) if (o.pos.distanceTo(at) < r + 0.5) o.damage(dmg, by === 'player');
     const heli = this.police.heli;
@@ -870,7 +930,7 @@ export class Adventure {
           const st = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
           car.drive(dt, th, st, k.has('Space'));
           if (inp.pressed.has('KeyH')) g.sound.horn(1);
-          if (inp.pressed.has('KeyF') && car.type === 'police') {
+          if (inp.pressed.has('KeyF') && car.def.siren) {
             this.siren = !this.siren;
             g.sound.siren(this.siren);
           }
@@ -901,6 +961,8 @@ export class Adventure {
     this.collide(dt);
     if (p.driving) p.pos.set(p.driving.pos.x, p.driving.pos.y + 0.3, p.driving.pos.z);
     this.updateThreats(dt);
+    this.updateRepair(dt);
+    this.webs.update(dt);
     this.police.update(dt);
     this.upkeep(dt);
     for (const person of this.people) person.update(dt);
@@ -911,6 +973,7 @@ export class Adventure {
     this.updateCubes(dt);
     this.updateNight(dt);
     if (this.beacon) this.beacon.material.opacity = 0.35 + Math.sin(performance.now() / 200) * 0.12;
+    if (this.ring) this.ring.rotation.y += dt * 1.2;
     // The job in progress.
     if (this.active) {
       const res = this.active.M.update(this, this.active, dt);
@@ -964,6 +1027,106 @@ export class Adventure {
     for (const person of this.people) person.aimedAt(person === target, dt, p.pos);
   }
 
+  // Spots high up on the tallest rooftops, one after another, for the
+  // Rooftop Rings job.
+  rooftopRings(n) {
+    const w = this.game.world;
+    const tops = [];
+    for (let z = 20; z < SZ - 20; z += 5) {
+      for (let x = 20; x < SX - 20; x += 5) {
+        let y = SY - 1;
+        while (y > GY && !w.solid(x, y, z)) y--;
+        if (y >= GY + 20) tops.push({ x: x + 0.5, y: y + 4, z: z + 0.5 });
+      }
+    }
+    const out = [];
+    let at = this.game.player.pos;
+    while (out.length < n && tops.length) {
+      // The nearest tall roof that isn't too close to the last one.
+      let best = -1;
+      let bd = Infinity;
+      tops.forEach((t, i) => {
+        const d = Math.hypot(t.x - at.x, t.z - at.z);
+        if (d > 22 && d < bd && out.every((o) => Math.hypot(o.x - t.x, o.z - t.z) > 22)) {
+          bd = d;
+          best = i;
+        }
+      });
+      if (best < 0) break;
+      const t = tops.splice(best, 1)[0];
+      out.push(t);
+      at = t;
+    }
+    return out;
+  }
+
+  // A big glowing ring to fly through (and a beacon to find it).
+  showRing(r) {
+    const g = this.game;
+    if (!this.ring) {
+      this.ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.28, 8, 24), new THREE.MeshBasicMaterial({ color: '#39b8ff' }));
+      g.scene.add(this.ring);
+    }
+    this.ring.visible = !!r;
+    if (r) {
+      this.ring.position.set(r.x, r.y, r.z);
+      this.setBeacon(r.x, r.z, 0x39b8ff);
+    } else {
+      this.clearBeacon();
+      g.scene.remove(this.ring);
+      this.ring.geometry.dispose();
+      this.ring.material.dispose();
+      this.ring = null;
+    }
+  }
+
+  // Landed a big jump.
+  stunt(car, airT) {
+    const g = this.game;
+    const coins = Math.round(airT * 25);
+    g.gainCoins(coins);
+    g.hud.showBanner('STUNT JUMP!', `${airT.toFixed(1)} seconds in the air · +${coins} coins`, 2.2);
+    g.sound.powerup();
+    g.progress.event('stunt', { t: airT });
+  }
+
+  // Block Fix: drive in and stop, and they fix your car for 50 coins.
+  updateRepair(dt) {
+    const g = this.game;
+    const car = g.player.driving;
+    const r = this.info.repair;
+    if (!r) return;
+    const inside = car && car.pos.x > r[0] && car.pos.x < r[2] && car.pos.z > r[1] && car.pos.z < r[3];
+    if (!inside) {
+      this.repairT = 0;
+      this.repaired = false;
+      return;
+    }
+    if (this.repaired || Math.abs(car.speed) > 1) return;
+    this.repairT = (this.repairT || 0) + dt;
+    if (this.repairT < 1.2) return;
+    this.repaired = true;
+    const cost = 50;
+    if (g.profile.coins < cost && car.hp >= car.def.hp && !car.dented) return;
+    if (g.profile.coins < cost) {
+      g.hud.showBanner('Block Fix', `A repair costs ${cost} coins. Come back when you have some!`, 2.5);
+      return;
+    }
+    g.profile.coins -= cost;
+    g.profile.changed();
+    const cols = car.def.colors.length > 1 ? car.def.colors.filter((c) => c !== car.color) : ['#3d6fd8', '#d8392b', '#2a2a2e', '#e8e4dc', '#4d8a2c', '#ff7a2f', '#b46cff'];
+    car.repair(cols[Math.floor(Math.random() * cols.length)]);
+    g.fx.burst(car.pos.x, car.pos.y + 1.5, car.pos.z, [new THREE.Color(car.color), new THREE.Color('#ffffff')], 40, { speed: 3, size: 0.12, up: 2, life: 1, spread: 1.2 });
+    g.sound.buy();
+    let sub = `Fixed and resprayed for ${cost} coins.`;
+    // A new colour: the police can't find you any more.
+    if (this.police.stars > 0 && !this.police.seen) {
+      this.police.reset();
+      sub += ' The police lost you!';
+    }
+    g.hud.showBanner('Good as new!', sub, 3);
+  }
+
   // Clear away old wrecks and keep the roads busy.
   upkeep(dt) {
     this.upkeepT = (this.upkeepT || 0) - dt;
@@ -973,7 +1136,7 @@ export class Adventure {
     const far = (c) => Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z) > 35;
     for (const c of this.cars.filter((c) => c.dead && c.deadT > 40 && far(c))) this.removeCar(c);
     const traffic = this.cars.filter((c) => c.driver === 'ai' && !c.dead && !c.mission).length;
-    if (traffic < 10) {
+    if (traffic < 20) {
       const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'police', 'sports', 'bus', 'icecream'];
       for (let k = 0; k < 6; k++) {
         const r = this.traffic.randomSpot();
@@ -1040,27 +1203,38 @@ export class Adventure {
           if (Math.random() < dt * 8) g.sound.crash(0.5);
           continue;
         }
-        // Push them apart along the shallowest axis.
+        // Push them apart along the shallowest axis (heavier cars move less).
         const [ux, uz, depth] = hit;
-        a.pos.x -= ux * depth * 0.5;
-        a.pos.z -= uz * depth * 0.5;
-        b.pos.x += ux * depth * 0.5;
-        b.pos.z += uz * depth * 0.5;
-        // Only a real bump (closing speed) slows them down and dents them.
-        const va = [Math.sin(a.yaw) * a.speed, Math.cos(a.yaw) * a.speed];
-        const vb = [Math.sin(b.yaw) * b.speed, Math.cos(b.yaw) * b.speed];
-        const closing = (va[0] - vb[0]) * ux + (va[1] - vb[1]) * uz;
-        if (closing <= 0.5) continue;
-        if (closing > 6) {
+        const ma = a.mass;
+        const mb = b.mass;
+        const ka = mb / (ma + mb);
+        a.pos.x -= ux * depth * ka;
+        a.pos.z -= uz * depth * ka;
+        b.pos.x += ux * depth * (1 - ka);
+        b.pos.z += uz * depth * (1 - ka);
+        // A bump: swap momentum along the line between them.
+        const closing = (a.vel.x - b.vel.x) * ux + (a.vel.z - b.vel.z) * uz;
+        if (closing <= 0.3) continue;
+        const imp = (1.3 * closing) / (1 / ma + 1 / mb);
+        a.vel.x -= (imp / ma) * ux;
+        a.vel.z -= (imp / ma) * uz;
+        b.vel.x += (imp / mb) * ux;
+        b.vel.z += (imp / mb) * uz;
+        a.speed = a.vel.x * Math.sin(a.yaw) + a.vel.z * Math.cos(a.yaw);
+        b.speed = b.vel.x * Math.sin(b.yaw) + b.vel.z * Math.cos(b.yaw);
+        // Where they touch: hitting off-centre spins them.
+        const ea = Math.abs(ux * Math.sin(a.yaw) + uz * Math.cos(a.yaw)) * a.def.len * 0.5 + Math.abs(ux * Math.cos(a.yaw) - uz * Math.sin(a.yaw)) * a.def.wid * 0.5;
+        const cx = a.pos.x + ux * ea;
+        const cz = a.pos.z + uz * ea;
+        a.spinV += (((cx - a.pos.x) * -uz - (cz - a.pos.z) * -ux) * imp * 0.05) / ma + (Math.random() - 0.5) * closing * 0.03;
+        b.spinV += (((cx - b.pos.x) * uz - (cz - b.pos.z) * ux) * imp * 0.05) / mb + (Math.random() - 0.5) * closing * 0.03;
+        if (closing > 5) {
           const byA = a.driver === 'player' ? 'player' : null;
           const byB = b.driver === 'player' ? 'player' : null;
-          a.damage(closing * 1.4, null, byB || byA);
-          b.damage(closing * 1.4, null, byA || byB);
-          g.sound.crash(Math.min(1, closing / 15) * (a.driver === 'player' || b.driver === 'player' ? 1 : 0.6));
-          if (a.driver === 'player' || b.driver === 'player') g.player.shake = Math.max(g.player.shake, Math.min(0.4, closing / 40));
+          const at = V().set(cx, (a.pos.y + b.pos.y) / 2 + 0.75, cz);
+          a.crash(closing * 1.4 * ka, at, V().set(-ux, 0, -uz), byB);
+          b.crash(closing * 1.4 * (1 - ka), at, V().set(ux, 0, uz), byA);
         }
-        a.speed *= 0.5;
-        b.speed *= 0.5;
       }
       if (Math.abs(a.speed) < 2.5 || a.dead) continue;
       const f = a.forward(V());
@@ -1215,12 +1389,21 @@ export class Adventure {
     const cv = $('#minimap');
     const ctx = cv.getContext('2d');
     const S = cv.width;
-    const k = S / SX;
+    // A window of the map round you.
+    const VIEW = Math.min(SX, 110);
+    const k = S / VIEW;
+    const p = this.game.player;
+    const ox = Math.max(0, Math.min(SX - VIEW, p.pos.x - VIEW / 2));
+    const oz = Math.max(0, Math.min(SZ - VIEW, p.pos.z - VIEW / 2));
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.mapBase, 0, 0, S, S);
+    ctx.drawImage(this.mapBase, ox, oz, VIEW, VIEW, 0, 0, S, S);
+    const X = (x) => (x - ox) * k;
+    const Z = (z) => (z - oz) * k;
+    const inside = (x, z) => x >= ox && z >= oz && x <= ox + VIEW && z <= oz + VIEW;
     const dot = (x, z, r, color) => {
+      if (!inside(x, z)) return;
       ctx.fillStyle = color;
-      ctx.fillRect(x * k - r, z * k - r, r * 2, r * 2);
+      ctx.fillRect(X(x) - r, Z(z) - r, r * 2, r * 2);
     };
     const blink = Math.floor(performance.now() / 250) % 2;
     // Where the police think you are.
@@ -1228,26 +1411,44 @@ export class Adventure {
     if (pol.stars > 0 && !pol.seen) {
       ctx.fillStyle = 'rgba(255, 60, 60, 0.25)';
       ctx.beginPath();
-      ctx.arc(pol.lastKnown.x * k, pol.lastKnown.z * k, 14 * k, 0, Math.PI * 2);
+      ctx.arc(X(pol.lastKnown.x), Z(pol.lastKnown.z), 14 * k, 0, Math.PI * 2);
       ctx.fill();
     }
     for (const c of this.cars) {
       if (c.dead) continue;
       const cop = c.driver === 'cop';
-      dot(c.pos.x, c.pos.z, cop ? 2.4 : 1.5, cop ? (blink ? '#ff3a3a' : '#3a7aff') : c.mine ? '#f2c230' : '#cfd4da');
+      dot(c.pos.x, c.pos.z, cop ? 2.6 : 1.8, cop ? (blink ? '#ff3a3a' : '#3a7aff') : c.mine ? '#f2c230' : '#cfd4da');
     }
-    for (const o of pol.officers()) dot(o.pos.x, o.pos.z, 1.5, '#3a7aff');
-    if (pol.heli && !pol.heli.dead) dot(pol.heli.pos.x, pol.heli.pos.z, 3, blink ? '#3a7aff' : '#ffffff');
-    if (!this.active) for (const [id, person] of Object.entries(this.givers)) if (this.showMark(person)) dot(person.pos.x, person.pos.z, 3, id === 'cubes' ? '#ffd84a' : '#ffd23f');
+    for (const o of pol.officers()) dot(o.pos.x, o.pos.z, 1.8, '#3a7aff');
+    if (pol.heli && !pol.heli.dead) dot(pol.heli.pos.x, pol.heli.pos.z, 3.5, blink ? '#3a7aff' : '#ffffff');
+    if (!this.active) for (const [id, person] of Object.entries(this.givers)) if (this.showMark(person)) dot(person.pos.x, person.pos.z, 3.5, id === 'cubes' ? '#ffd84a' : '#ffd23f');
+    for (const c of this.cubes) if (this.prog.met.cubes) dot(c.x, c.z, 2, '#ffe14a');
     if (this.beaconAt) {
-      const pulse = 3 + Math.sin(performance.now() / 150) * 1.2;
-      dot(this.beaconAt[0], this.beaconAt[1], pulse, '#ff4a3a');
+      const [bx, bz] = this.beaconAt;
+      if (inside(bx, bz)) {
+        const pulse = 3.5 + Math.sin(performance.now() / 150) * 1.2;
+        dot(bx, bz, pulse, '#ff4a3a');
+      } else {
+        // Off the map: an arrow on the edge pointing at it.
+        const a = Math.atan2(Z(bz) - S / 2, X(bx) - S / 2);
+        const r = S / 2 - 8;
+        ctx.save();
+        ctx.translate(S / 2 + Math.cos(a) * r, S / 2 + Math.sin(a) * r);
+        ctx.rotate(a);
+        ctx.fillStyle = blink ? '#ff4a3a' : '#ffd23f';
+        ctx.beginPath();
+        ctx.moveTo(7, 0);
+        ctx.lineTo(-5, -5);
+        ctx.lineTo(-5, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
     }
     // You: an arrow pointing where you face.
-    const p = this.game.player;
     const yaw = p.driving ? p.driving.yaw + Math.PI : p.yaw;
-    const px = p.pos.x * k;
-    const pz = p.pos.z * k;
+    const px = X(p.pos.x);
+    const pz = Z(p.pos.z);
     ctx.save();
     ctx.translate(px, pz);
     ctx.rotate(-yaw + Math.PI);

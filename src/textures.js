@@ -5,7 +5,7 @@ import { mulberry32 } from './rng.js';
 
 export const TILE = 16;
 const COLS = 8;
-const ROWS = 5;
+const ROWS = 8;
 
 export const T = {
   GRASS_TOP: 0,
@@ -46,6 +46,31 @@ export const T = {
   AWNING: 35,
   ROOF: 36,
   SIDING: 37,
+  WIN_FRAME: 38,
+  GLASS_BLUE: 39,
+  GLASS_DARK: 40,
+  STUCCO: 41,
+  STUCCO_PEACH: 42,
+  STUCCO_MINT: 43,
+  STONE_BRICK: 44,
+  ROOF_DARK: 45,
+  DOOR_LOW: 46,
+  DOOR_HIGH: 47,
+  SHOP_WIN: 48,
+  PILLAR_SIDE: 49,
+  PILLAR_TOP: 50,
+  HEDGE: 51,
+  FLOWERS_TOP: 52,
+  TILES: 53,
+  CURTAIN_WIN: 54,
+  VENT: 55,
+  HELIPAD_TOP: 56,
+  HAZARD: 57,
+  GARAGE: 58,
+  BRICK_DARK: 59,
+  TAR: 60,
+  WOOD_DARK: 61,
+  RED_PANEL: 62,
 };
 
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -58,6 +83,17 @@ function fillAll(set, rng, palette) {
 function asphalt(set, rng) {
   fillAll(set, rng, ['#3a3b3e', '#35363a', '#404145', '#38393c', '#2f3033']);
   for (let i = 0; i < 6; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#55565a');
+}
+
+// Plaster in any colour: speckled, with a faint darker band at the bottom.
+function stucco(set, rng, base, dark, light) {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, rng() < 0.12 ? dark : rng() < 0.12 ? light : base);
+}
+
+// A window pane with a frame: sky reflected in the glass.
+function pane(set, rng, x, y, frame, deep, mid, hi) {
+  const k = (x + (15 - y)) / 30;
+  set(x, y, frame ? frame : k > 0.66 && rng() < 0.6 ? hi : k > 0.45 ? mid : deep);
 }
 
 function dirt(set, rng) {
@@ -361,6 +397,182 @@ const PAINTERS = {
         set(x, y, rng() < 0.12 ? '#7c3a2c' : rng() < 0.06 ? '#b8664e' : base);
       }
     }
+  },
+
+  [T.WIN_FRAME](set, rng) {
+    // A tall window in a white frame, with a sill.
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const wall = x < 2 || x > 13 || y < 1;
+        const frame = x === 2 || x === 13 || y === 1 || y === 14 || x === 7 || x === 8 || y === 7;
+        if (wall) set(x, y, pick(rng, ['#d9d5cb', '#d2cec4', '#dfdbd1']));
+        else if (y === 15) set(x, y, '#f4f1ea');
+        else if (frame) set(x, y, '#f7f5f0');
+        else pane(set, rng, x, y, null, '#35607e', '#5b8fb4', '#bfe0f2');
+      }
+    }
+  },
+  [T.GLASS_BLUE](set, rng) {
+    // A glass curtain wall: big blue panes between thin silver mullions.
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (x === 0 || x === 8) set(x, y, '#b9c6d0');
+        else if (y === 0) set(x, y, '#8fa3b2');
+        else {
+          const k = ((x % 8) + (15 - y)) / 22;
+          set(x, y, k > 0.78 ? '#bfe4f7' : k > 0.5 ? '#63a9d6' : rng() < 0.05 ? '#4f93c2' : '#3d7fb2');
+        }
+      }
+    }
+  },
+  [T.GLASS_DARK](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (x === 0 || y === 0 || y === 8) set(x, y, '#b8964a');
+        else {
+          const k = (x + (15 - y)) / 30;
+          set(x, y, k > 0.72 ? '#4c6a74' : rng() < 0.06 ? '#2a3c44' : '#1f2e36');
+        }
+      }
+    }
+  },
+  [T.STUCCO]: (set, rng) => stucco(set, rng, '#ece3cf', '#ddd3bd', '#f4ecdb'),
+  [T.STUCCO_PEACH]: (set, rng) => stucco(set, rng, '#f0bf9c', '#e2ad89', '#f6cfb1'),
+  [T.STUCCO_MINT]: (set, rng) => stucco(set, rng, '#a9dcc6', '#96ccb4', '#bce8d4'),
+  [T.STONE_BRICK](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      const row = y >> 3;
+      for (let x = 0; x < 16; x++) {
+        const off = row ? 8 : 0;
+        if (y % 8 === 7 || (x + off) % 16 === 15) set(x, y, '#8d8b86');
+        else set(x, y, pick(rng, ['#c2bfb7', '#bab7af', '#c9c6be', '#b4b1a9']));
+      }
+    }
+  },
+  [T.ROOF_DARK](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      const off = (y >> 2) % 2 ? 2 : 0;
+      for (let x = 0; x < 16; x++) {
+        if (y % 4 === 3) set(x, y, '#1d1f24');
+        else if ((x + off) % 4 === 0) set(x, y, '#2a2d33');
+        else set(x, y, pick(rng, ['#454a53', '#3d424a', '#4c525b']));
+      }
+    }
+  },
+  [T.DOOR_LOW](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const frame = x < 2 || x > 13;
+        const panel = (x === 4 || x === 11) && y > 2 && y < 13;
+        const knob = x === 11 && y === 1;
+        set(x, y, frame ? '#f4f1ea' : knob ? '#e0b848' : panel ? '#5a3418' : pick(rng, ['#7a4a26', '#734522', '#80502b']));
+      }
+    }
+  },
+  [T.DOOR_HIGH](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const frame = x < 2 || x > 13 || y < 1;
+        const glass = x > 3 && x < 12 && y > 2 && y < 10;
+        if (frame) set(x, y, '#f4f1ea');
+        else if (glass) pane(set, rng, x, y, x === 7 || x === 8 ? '#5a3418' : null, '#35607e', '#5b8fb4', '#bfe0f2');
+        else set(x, y, pick(rng, ['#7a4a26', '#734522', '#80502b']));
+      }
+    }
+  },
+  [T.SHOP_WIN](set, rng) {
+    // A big shop window with things on display along the bottom.
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (x === 0 || y === 0 || y === 15) set(x, y, '#2a2b2e');
+        else if (y > 10) set(x, y, pick(rng, ['#e0752d', '#3c7dd9', '#d94c4c', '#3f9a55', '#e6c229', '#f0f0ea']));
+        else pane(set, rng, x, y, null, '#6e98b4', '#9cc2da', '#e2f2fb');
+      }
+    }
+  },
+  [T.PILLAR_SIDE](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x % 4 === 0 ? '#c9c4b8' : x % 4 === 2 ? '#fbf9f4' : pick(rng, ['#eeeae1', '#e8e4db']));
+  },
+  [T.PILLAR_TOP](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x === 0 || y === 0 || x === 15 || y === 15 ? '#c9c4b8' : pick(rng, ['#eeeae1', '#f4f1ea']));
+  },
+  [T.HEDGE](set, rng) {
+    fillAll(set, rng, ['#3d7a2a', '#35701f', '#468630', '#2d6419', '#4e8f38']);
+    for (let i = 0; i < 10; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#1f4a14');
+  },
+  [T.FLOWERS_TOP](set, rng) {
+    fillAll(set, rng, GREENS);
+    const petals = ['#ff5a8a', '#ffd23f', '#f4f1ea', '#b46cff', '#ff7a2f'];
+    for (let i = 0; i < 9; i++) {
+      const x = (rng() * 15) | 0;
+      const y = (rng() * 15) | 0;
+      const c = pick(rng, petals);
+      set(x, y, c);
+      set(x + 1, y, c);
+      set(x, y + 1, c);
+      set(x + 1, y + 1, '#ffe14a');
+    }
+  },
+  [T.TILES](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const light = ((x >> 3) + (y >> 3)) % 2 === 0;
+      const seam = x % 8 === 0 || y % 8 === 0;
+      set(x, y, seam ? '#9a968e' : light ? pick(rng, ['#e8e2d4', '#e2dccd']) : pick(rng, ['#b8a78a', '#b09f82']));
+    }
+  },
+  [T.CURTAIN_WIN](set, rng) {
+    // An apartment window: warm light and curtains.
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const wall = x < 2 || x > 13 || y < 2 || y > 13;
+        const frame = x === 2 || x === 13 || y === 2 || y === 13 || x === 7 || x === 8;
+        const curtain = (x > 2 && x < 5) || (x > 10 && x < 13);
+        if (wall) set(x, y, pick(rng, ['#d9d5cb', '#d2cec4']));
+        else if (frame) set(x, y, '#f7f5f0');
+        else if (curtain) set(x, y, y % 3 === 0 ? '#a8323a' : '#c43c46');
+        else set(x, y, rng() < 0.2 ? '#ffe7a8' : '#f7d27c');
+      }
+    }
+  },
+  [T.VENT](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const edge = x === 0 || x === 15 || y === 0 || y === 15;
+      set(x, y, edge ? '#6c7178' : y % 3 === 0 ? '#50555c' : pick(rng, ['#a4aab2', '#9aa0a8']));
+    }
+  },
+  [T.HELIPAD_TOP](set, rng) {
+    const H = (x, y) => (x === 4 || x === 11) && y > 3 && y < 12 ? true : y === 7 && x > 4 && x < 11;
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const ring = Math.abs(Math.hypot(x - 7.5, y - 7.5) - 7) < 0.7;
+      set(x, y, H(x, y) || ring ? '#ffd23f' : pick(rng, ['#4a4c50', '#45474b', '#505256']));
+    }
+  },
+  [T.HAZARD](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, ((x + y) >> 2) % 2 ? '#1d1d20' : rng() < 0.08 ? '#e6b020' : '#f2c230');
+  },
+  [T.GARAGE](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y % 4 === 0 ? '#7c828a' : y % 4 === 1 ? '#c4c9d0' : pick(rng, ['#aab0b8', '#a2a8b0']));
+  },
+  [T.BRICK_DARK](set, rng) {
+    const shades = ['#5a3a2e', '#523428', '#664234'];
+    for (let y = 0; y < 16; y++) {
+      const row = y >> 2;
+      const off = row % 2 ? 4 : 0;
+      for (let x = 0; x < 16; x++) {
+        if (y % 4 === 3 || (x + off) % 8 === 7) set(x, y, '#8a8278');
+        else set(x, y, shades[(Math.floor((x + off) / 8) + row * 3) % 3]);
+      }
+    }
+  },
+  [T.TAR](set, rng) {
+    fillAll(set, rng, ['#4a4b4e', '#444548', '#505154', '#47484b']);
+    for (let i = 0; i < 8; i++) set((rng() * 16) | 0, (rng() * 16) | 0, '#6a6b6e');
+  },
+  [T.WOOD_DARK](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y % 4 === 3 ? '#3a2616' : pick(rng, ['#6a4428', '#634024', '#70482b']));
+  },
+  [T.RED_PANEL](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x % 4 === 3 ? '#8a1c14' : pick(rng, ['#c42a1e', '#b82618', '#cc3024']));
   },
 };
 

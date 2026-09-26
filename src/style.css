@@ -868,3 +868,8 @@ body.driving #crosshair, body.driving .hud-bottom, body.driving #scope { display
 #ph-fill { height: 100%; width: 0; background: #3fbf5a; }
 @media (max-width: 700px) { .phone { top: calc(226px + env(safe-area-inset-top, 0px)); width: 170px; } }
 
+/* ---- Web shooters ---- */
+.web-slot { display: none; }
+body.adventure .web-slot { display: grid; border-left: 4px solid var(--edge); }
+body.web-ok #crosshair b { width: 14px; height: 14px; left: -7px; top: -7px; background: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+

@@ -36,7 +36,8 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | V or F5 | Switch to third person to see your skin |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
 | E | Adventure: get in or out of a car, talk to people |
-| H / F (in a car) | Horn / police siren |
+| H / F (in a car) | Horn / siren (police car, ambulance, fire truck) |
+| 8 | Adventure: web shooters (right click swing, Space zip, left click web ball) |
 | ` (under Esc) | Cheat menu |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
@@ -51,14 +52,18 @@ There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloo
 
 ## Adventure
 
-Click **Adventure** on the title screen to explore **Blockton**, a modern town on an island.
+Click **Adventure** on the title screen to explore **Blockton**, a big modern town on an island: 25 city blocks on a 6 by 6 grid of streets, with a downtown of glass skyscrapers, neighbourhoods of houses with porches, gardens and pools, shopping streets, apartments with balconies, the police and fire stations, a hospital with a helipad, a school, a mall, Hotel Cube, a stadium, a building site, a big park with a skate park, the Block Fix garage, and beaches with palm trees and a pier.
 
-- **Drive anything.** Your own car is parked in your driveway. Walk up to any car and press **E** to get in: sedans, taxis, police cars (press **F** for the siren), sports cars, SUVs, pickup trucks, the bus, the ice cream van (it plays a tune) and a **monster truck** at the stadium that drives right over other cars. You can even take a car that's stopped at a light (the driver won't be happy). **W/S** drive and reverse, **A/D** steer, **Space** is the handbrake (hold it in a turn to drift and leave skid marks), **H** honks. Move the mouse to look around.
-- **Proper cars.** Brake lights, indicators, reversing lights, headlights that light up the road at night, doors that open, engines that change gear, tyre screech, dents, cracked windows, smoke and fire when they're badly hurt, and a big bang at the end.
+- **Web shooters.** Press **8**. Hold **right click** on a building to shoot a web and swing, let go to fly, and press **Space** to zip up the web onto a roof. **Left click** shoots a web ball that sticks mobs, cars, police officers and people to the spot.
+- **Drive anything.** Your own car is parked in your driveway. Walk up to any car and press **E** to get in: sedans, taxis, police cars, the ambulance and the fire truck (press **F** for the siren), sports cars, SUVs, pickup trucks, the bus, the ice cream van (it plays a tune) and a **monster truck** at the stadium that drives right over other cars. You can even take a car that's stopped at a light (the driver won't be happy). **W/S** drive and reverse, **A/D** steer, **Space** is the handbrake (hold it in a turn to drift and leave skid marks), **H** honks. Move the mouse to look around.
+- **Proper cars.** Brake lights, indicators, reversing lights, headlights that light up the road at night, doors that open, engines that change gear and tyre screech.
+- **Real crashes.** Cars slide along walls, spin when they're hit at an angle, and heavy vehicles shove light ones out of the way. The bodywork crumples where it gets hit: bullets leave little dents, crashes and explosions bend it in. Big crashes hurt you and can stall the engine, and a bent car is slower and pulls to one side. Then come cracked windows, smoke, fire and a big bang.
+- **Stunt jumps.** Drive fast up a striped ramp (in the skate park or at the stadium) to fly. A second or more in the air pays coins.
+- **Block Fix.** Drive into the garage and stop: for 50 coins they straighten out the dents, fix the glass and give it a new colour, and if the police can't see you they lose track of you.
 - **A living town.** Traffic drives on the right, uses its indicators, stops at red lights, honks when you're in the way and pulls over for sirens. People walk the sidewalks, jump out of the way of cars and run away from gunfire.
 - **The police.** Point a gun at someone and they put their hands up, then run off and phone the police: **5-0-5-0**. Wreck cars, attack officers or steal a police car and your **wanted stars** go up. Police cars chase you with their sirens on, officers jump out and run after you, at 3 stars they shoot back, and at 4 the police helicopter comes out with its searchlight. Get out of sight and hide until the stars stop flashing to lose them. If an officer catches you standing still you're **BUSTED**: a small fine and a trip to the police station.
-- **Jobs.** People with a yellow **!** over their head have work for you: deliver pizzas against the clock, drive a taxi, win a street race, clear mobs out of the park, chase down the Golden Overlord's gold getaway van, beat a boss at the stadium and defend the building site. Jobs pay coins and XP.
-- **10 golden cubes** are hidden around town: on rooftops (the towers have stairs), on the crane, behind a house and on the beach. Kid Kevin in the park pays a bonus for finding them all.
+- **Jobs.** People with a yellow **!** over their head have work for you: deliver pizzas against the clock, drive a taxi, win a street race, clear mobs out of the park, chase down the Golden Overlord's gold getaway van, beat a boss at the stadium, defend the building site, and swing through Web Master Webster's rings on the rooftops. Jobs pay coins and XP.
+- **10 golden cubes** are hidden around town: on skyscrapers and roofs (swing up with your web shooters), on the crane, in the playground, in your back garden and at the end of the pier. Kid Kevin in the park pays a bonus for finding them all.
 - **Watch out at night.** When it gets dark the street lamps come on, and so do the mobs.
 - Cars can be shot, crashed and blown up. If you get cubed you wake up at the hospital.
 
@@ -307,6 +312,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights and the minimap |
 | `src/cars.js`, `src/townsfolk.js` | Drivable cars and traffic, and the people of Blockton |
 | `src/police.js` | Wanted stars, police cars, officers, the helicopter and phone calls to 5-0-5-0 |
+| `src/webs.js` | Web shooters: swinging, zipping and web balls |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |

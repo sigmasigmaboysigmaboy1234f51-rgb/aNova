@@ -5,7 +5,8 @@ import { mulberry32, fbm2, smoothstep } from './rng.js';
 // The world is 64 x 64 for most modes and 128 x 128 for Adventure. These
 // are live bindings: resize() changes them for every module at once.
 export let SX = 64;
-export const SY = 32;
+// World height. The Adventure town is taller (for skyscrapers).
+export let SY = 32;
 export let SZ = 64;
 export const CHUNK = 16;
 export const SEA = 6;
@@ -48,6 +49,30 @@ export const B = {
   AWNING: 32,
   ROOF: 33,
   SIDING: 34,
+  WIN_FRAME: 35,
+  GLASS_BLUE: 36,
+  GLASS_DARK: 37,
+  STUCCO: 38,
+  STUCCO_PEACH: 39,
+  STUCCO_MINT: 40,
+  STONE_BRICK: 41,
+  ROOF_DARK: 42,
+  DOOR_LOW: 43,
+  DOOR_HIGH: 44,
+  SHOP_WIN: 45,
+  PILLAR: 46,
+  HEDGE: 47,
+  FLOWERS: 48,
+  TILES: 49,
+  CURTAIN_WIN: 50,
+  VENT: 51,
+  HELIPAD: 52,
+  HAZARD: 53,
+  GARAGE: 54,
+  BRICK_DARK: 55,
+  TAR: 56,
+  WOOD_DARK: 57,
+  RED_PANEL: 58,
 };
 
 const def = (name, hp, sound, top, side = top, bottom = top) => ({ name, hp, sound, top, side, bottom });
@@ -87,6 +112,30 @@ export const BLOCKS = [
   def('Awning', 1, 'soft', T.AWNING),
   def('Roof tiles', 3, 'hard', T.ROOF),
   def('Siding', 3, 'wood', T.SIDING),
+  def('Window', 2, 'hard', T.WIN_FRAME),
+  def('Blue glass', 3, 'hard', T.GLASS_BLUE),
+  def('Dark glass', 3, 'hard', T.GLASS_DARK),
+  def('Plaster', 4, 'hard', T.STUCCO),
+  def('Plaster', 4, 'hard', T.STUCCO_PEACH),
+  def('Plaster', 4, 'hard', T.STUCCO_MINT),
+  def('Stone bricks', 6, 'hard', T.STONE_BRICK),
+  def('Shingles', 3, 'hard', T.ROOF_DARK),
+  def('Door', 3, 'wood', T.DOOR_LOW),
+  def('Door', 3, 'wood', T.DOOR_HIGH),
+  def('Shop window', 2, 'hard', T.SHOP_WIN),
+  def('Pillar', 6, 'hard', T.PILLAR_TOP, T.PILLAR_SIDE, T.PILLAR_TOP),
+  def('Hedge', 1, 'leaf', T.HEDGE),
+  def('Flowers', 2, 'soft', T.FLOWERS_TOP, T.GRASS_SIDE, T.DIRT),
+  def('Tiles', 5, 'hard', T.TILES),
+  def('Window', 2, 'hard', T.CURTAIN_WIN),
+  def('Vent', 5, 'hard', T.VENT),
+  def('Helipad', 6, 'hard', T.HELIPAD_TOP, T.CONCRETE, T.CONCRETE),
+  def('Hazard stripes', 6, 'hard', T.HAZARD),
+  def('Garage door', 5, 'hard', T.GARAGE),
+  def('Dark bricks', 5, 'hard', T.BRICK_DARK),
+  def('Flat roof', 5, 'hard', T.TAR, T.CONCRETE, T.CONCRETE),
+  def('Dark wood', 3, 'wood', T.WOOD_DARK),
+  def('Red panels', 5, 'hard', T.RED_PANEL),
 ];
 
 // Faces list corners in bottom-left, bottom-right, top-right, top-left order
@@ -151,8 +200,8 @@ export class World {
   }
 
   // Change the world's size. Everything in it is thrown away.
-  resize(sx, sz) {
-    if (sx === SX && sz === SZ) return;
+  resize(sx, sz, sy = 32) {
+    if (sx === SX && sz === SZ && sy === SY) return;
     for (const m of this.meshes) {
       if (!m) continue;
       this.group.remove(m);
@@ -162,6 +211,7 @@ export class World {
     this.damage.clear();
     SX = sx;
     SZ = sz;
+    SY = sy;
     NCX = SX / CHUNK;
     NCZ = SZ / CHUNK;
     this.data = new Uint8Array(SX * SY * SZ);
