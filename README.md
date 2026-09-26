@@ -6,12 +6,15 @@ Everything is drawn by code: the block textures, the characters, the sounds. The
 
 ## Get it
 
-- **Windows app:** open the repo's **Actions** tab on GitHub, click the latest **Build Windows app** run, and download **Blockfire-Windows** under *Artifacts*. Inside the zip:
-  - `Blockfire-Setup-<version>.exe` installs the game with a desktop shortcut.
-  - `Blockfire-<version>-portable.exe` runs without installing.
+**Download page:** [github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest](https://github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest). No GitHub account needed. Under *Assets*:
 
-  Windows may warn that the app is from an unknown publisher, because it isn't code-signed. Click **More info → Run anyway**.
-- **In a browser:** download `index.html` and double-click it, or put it online with GitHub Pages (see below).
+- `Blockfire-Setup-<version>.exe` installs the game on Windows with a desktop shortcut.
+- `Blockfire-<version>-portable.exe` runs without installing.
+- `Blockfire.html` is the whole game in one file. Double-click it to play in a browser.
+
+Windows may warn that the app is from an unknown publisher, because it isn't code-signed. Click **More info → Run anyway**.
+
+The newest test build (before it gets a release) is on the **Actions** tab: click the latest **Build Windows app** run and download **Blockfire-Windows** under *Artifacts* (you need to be logged in to GitHub). You can also put the game online with GitHub Pages (see below).
 
 You need a keyboard and mouse to play. The skin editor also works on phones and tablets.
 
@@ -296,7 +299,7 @@ npm run server     # run a dedicated multiplayer server
 npm run dist:win   # build the Windows .exe (on Windows)
 ```
 
-GitHub builds the Windows app automatically on every push (`.github/workflows/desktop.yml`). Pushing a tag like `v1.2.0` also attaches the .exe files to a GitHub Release.
+GitHub builds the Windows app automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, set the version in `package.json` and push a tag like `v2.1.0` (`git tag v2.1.0 && git push origin v2.1.0`). The build then makes a GitHub Release with the installer, the portable .exe and `Blockfire.html`, using the text in `.github/release-notes.md`.
 
 | File | What it does |
 | --- | --- |

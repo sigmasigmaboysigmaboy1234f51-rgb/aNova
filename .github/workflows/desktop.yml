@@ -1,6 +1,6 @@
 # Builds the Windows app (installer + portable .exe) on every push.
 # Download it from the run's "Artifacts" section on the Actions tab.
-# Pushing a tag like v1.1.0 also attaches the .exe files to a GitHub Release.
+# Pushing a tag like v2.0.0 also makes a GitHub Release (download page).
 name: Build Windows app
 
 on:
@@ -29,7 +29,16 @@ jobs:
           name: Blockfire-Windows
           path: dist/*.exe
           if-no-files-found: error
+      # A tag like v2.0.0 makes a download page (GitHub Release) with the
+      # installer, the portable .exe and the one-file web version.
+      - if: startsWith(github.ref, 'refs/tags/v')
+        run: cp index.html dist/Blockfire.html
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          name: Blockfire ${{ github.ref_name }}
+          body_path: .github/release-notes.md
+          make_latest: true
+          files: |
+            dist/*.exe
+            dist/Blockfire.html
