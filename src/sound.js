@@ -1248,6 +1248,77 @@ export class Sound {
     this.noiseL({ out, dur: 0.45, vol: 0.2 * vol, attack: 0.12, color: 'pink', filters: [['bandpass', 500, 1500, 1.2]] });
   }
 
+  // The spider suit spreading over you: a rising shimmer and a snap.
+  suitUp(vol = 1) {
+    if (!this.ready('suitUp', 300)) return;
+    const out = this.voice(0.35);
+    this.noiseL({ out, dur: 0.55, vol: 0.14 * vol, attack: 0.25, color: 'pink', filters: [['bandpass', 600, 4200, 1.4]] });
+    [660, 880, 1320, 1760].forEach((f, i) => this.oscL({ out, t: 0.08 + i * 0.07, type: 'triangle', f0: f, dur: 0.18, vol: 0.03 * vol, attack: 0.004 }));
+    this.thump({ t: 0.5, f0: 220, f1: 70, dur: 0.12, vol: 0.2 * vol, send: 0.1 });
+  }
+
+  // Spider-sense: a high, wobbly ring.
+  tingle(vol = 1) {
+    if (!this.ready('tingle', 400)) return;
+    const out = this.voice(0.4);
+    for (const [f, d] of [
+      [2600, 0],
+      [3100, 7],
+      [3900, -9],
+    ])
+      this.oscL({ out, type: 'sine', f0: f, f1: f * 1.04, dur: 0.6, vol: 0.022 * vol, attack: 0.02, vibrato: [23, 60], detune: d });
+    this.noiseL({ out, dur: 0.3, vol: 0.04 * vol, attack: 0.02, filters: [['highpass', 6000]] });
+  }
+
+  // Being pulled fast along a web.
+  zip(vol = 1) {
+    if (!this.ready('zip', 150)) return;
+    const out = this.voice(0.15);
+    this.noiseL({ out, dur: 0.35, vol: 0.16 * vol, attack: 0.02, filters: [['bandpass', 900, 3600, 2]] });
+    this.oscL({ out, type: 'sawtooth', f0: 180, f1: 900, dur: 0.3, vol: 0.02 * vol, attack: 0.01 });
+  }
+
+  // Charging a Web Blast.
+  webCharge(vol = 1) {
+    if (!this.ready('webCharge', 200)) return;
+    const out = this.voice(0.2);
+    this.oscL({ out, type: 'triangle', f0: 300, f1: 1400, dur: 0.45, vol: 0.04 * vol, attack: 0.05 });
+  }
+
+  // A big web bomb going off.
+  webBlast(vol = 1) {
+    if (!this.ready('webBlast', 100)) return;
+    const out = this.voice(0.25);
+    this.noiseL({ out, dur: 0.3, vol: 0.28 * vol, attack: 0.003, filters: [['lowpass', 3500, 400, 1]] });
+    this.thump({ f0: 140, f1: 50, dur: 0.2, vol: 0.35 * vol, send: 0.15 });
+  }
+
+  // Police radio crackle and beeps for a crime alert.
+  radio(vol = 1) {
+    if (!this.ready('radio', 500)) return;
+    const out = this.voice(0.1);
+    this.noiseL({ out, dur: 0.25, vol: 0.1 * vol, attack: 0.005, filters: [['bandpass', 1800, 1800, 3]] });
+    [0.28, 0.42].forEach((t) => this.oscL({ out, t, type: 'square', f0: 1320, dur: 0.08, vol: 0.03 * vol, attack: 0.003 }));
+  }
+
+  // Wind rushing past while you swing and fly.
+  wind(level) {
+    this.loop('windNode', level, (c) => {
+      const n = c.createBufferSource();
+      n.buffer = this.pink || this.white;
+      n.loop = true;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 700;
+      bp.Q.value = 0.8;
+      const g = c.createGain();
+      g.gain.value = 0;
+      n.connect(bp).connect(g).connect(this.voice(0.1));
+      n.start();
+      return { g, srcs: [n], peak: 0.22 };
+    });
+  }
+
   // A web ball sticking to something.
   splat() {
     if (!this.ready('splat', 60)) return;

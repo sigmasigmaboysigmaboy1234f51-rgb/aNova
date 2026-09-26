@@ -471,6 +471,7 @@ export class Adventure {
     snd.copSiren(0);
     snd.heli(0);
     snd.skid(0);
+    snd.wind(0);
   }
 
   showUI(on) {
@@ -1152,6 +1153,8 @@ export class Adventure {
   objective() {
     const m = this.active;
     if (m) return [m.M.title, m.M.objective(this, m)];
+    const crime = this.webs && this.webs.crimes.objective();
+    if (crime) return crime;
     const left = this.info.cubes.length - this.prog.cubes.length;
     const night = this.game.sky.isNight();
     return ['Blockton', night ? 'Night time: mobs are out. Stay safe!' : `Talk to people with a ! for jobs · Golden cubes ${this.prog.cubes.length}/${this.info.cubes.length}${left ? '' : ' ★'}`];

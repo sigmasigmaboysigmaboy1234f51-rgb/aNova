@@ -873,5 +873,25 @@ body.driving #crosshair, body.driving .hud-bottom, body.driving #scope { display
 /* ---- Web shooters ---- */
 .web-slot { display: none; }
 body.adventure .web-slot { display: grid; border-left: 4px solid var(--edge); }
+/* Web shooters: speed lines, spider-sense, the suit going on, a charged shot. */
+#speedlines, #sense, #suit-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+#speedlines {
+  transition: opacity 0.25s;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, transparent 0deg 2.6deg, rgba(255, 255, 255, 0.28) 2.6deg 3deg, transparent 3deg 7deg);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 38%, #000 80%);
+  mask-image: radial-gradient(circle at 50% 50%, transparent 38%, #000 80%);
+}
+#sense { transition: opacity 0.15s; background: radial-gradient(circle at 50% 50%, transparent 55%, rgba(255, 150, 40, 0.28) 100%); }
+body.sense #sense { opacity: 1; animation: sense-pulse 0.25s ease-in-out infinite alternate; }
+#sense i { position: absolute; left: 50%; top: 50%; width: 80vmin; height: 80vmin; margin: -40vmin 0 0 -40vmin; transform: rotate(var(--dir, 0rad)); }
+#sense i::before {
+  content: ''; position: absolute; left: 36%; width: 28%; top: -4%; height: 16%;
+  background: repeating-linear-gradient(100deg, transparent 0 6px, rgba(255, 200, 80, 0.85) 6px 9px, transparent 9px 16px);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 100%, #000 30%, transparent 70%);
+  mask-image: radial-gradient(ellipse at 50% 100%, #000 30%, transparent 70%);
+}
+@keyframes sense-pulse { from { filter: brightness(0.8); } to { filter: brightness(1.4); } }
+#suit-flash { background: radial-gradient(circle at 50% 50%, transparent 30%, var(--a, #c8202e) 75%, var(--b, #1f3f9e) 100%); }
+body.web-charge #crosshair b, body.web-charge.web-ok #crosshair b { width: 22px; height: 22px; left: -11px; top: -11px; background: none; border: 3px solid #8fe8ff; border-radius: 50%; box-shadow: 0 0 10px #8fe8ff; }
 body.web-ok #crosshair b { width: 14px; height: 14px; left: -7px; top: -7px; background: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
 

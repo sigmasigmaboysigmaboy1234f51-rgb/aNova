@@ -8,6 +8,7 @@ export class Input {
     this.left = false;
     this.right = false;
     this.leftPressed = false;
+    this.rightPressed = false;
     this.mx = 0;
     this.my = 0;
     this.wheel = 0;
@@ -44,7 +45,10 @@ export class Input {
         this.left = true;
         this.leftPressed = true;
       }
-      if (e.button === 2) this.right = true;
+      if (e.button === 2) {
+        this.right = true;
+        this.rightPressed = true;
+      }
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.left = false;
@@ -99,6 +103,7 @@ export class Input {
   endFrame() {
     this.pressed.clear();
     this.leftPressed = false;
+    this.rightPressed = false;
     this.wheel = 0;
   }
 }

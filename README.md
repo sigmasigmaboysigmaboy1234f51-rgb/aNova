@@ -37,7 +37,8 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
 | E | Adventure: get in or out of a car, talk to people |
 | H / F (in a car) | Horn / siren (police car, ambulance, fire truck) |
-| 8 | Adventure: web shooters (right click swing, Space zip, left click web ball) |
+| 8 | Adventure: web shooters and the spider suit (see below) |
+| R / N (web shooters out) | Web zip to where you aim / next suit |
 | ` (under Esc) | Cheat menu |
 | T | Chat (multiplayer) |
 | Tab (hold) | Player list and scores (multiplayer) |
@@ -54,7 +55,16 @@ There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloo
 
 Click **Adventure** on the title screen to explore **Blockton**, a big modern town on an island: 25 city blocks on a 6 by 6 grid of streets, with a downtown of glass skyscrapers, neighbourhoods of houses with porches, gardens and pools, shopping streets, apartments with balconies, the police and fire stations, a hospital with a helipad, a school, a mall, Hotel Cube, a stadium, a building site, a big park with a skate park, the Block Fix garage, and beaches with palm trees and a pier.
 
-- **Web shooters.** Press **8**. Hold **right click** on a building to shoot a web and swing, let go to fly, and press **Space** to zip up the web onto a roof. **Left click** shoots a web ball that sticks mobs, cars, police officers and people to the spot.
+- **Web shooters and the spider suit.** Press **8** and the spider suit spreads over you from the chest (it covers you even if you're tall or buff from the cheat menu). In the suit you run faster, jump higher, take less damage and land like a superhero.
+  - **Swing:** hold **right click**. It finds a building up ahead near where you aim, and you swing round a point out over the street. Let go at the top to fly (going fast, you do a flip), and keep holding to catch the next building. **W** pumps the swing, **Space** zips you up the web. Swing 5 times in a row without touching the ground for coins.
+  - **Web zip:** press **R** to shoot a web at where you aim and zip straight there.
+  - **Yank:** right click on a person, mob or police officer to pull them over to you, wrapped in a cocoon. Right click on a car to zip over to it.
+  - **Web balls:** tap **left click** to wrap mobs, cars, officers and people in a cocoon. Hold it and let go for a **Web Blast** that wraps up everything around where it lands.
+  - **Wall crawl:** walk or fly into a wall and you stick to it. **W** up, **S** down, **A**/**D** sideways, **Space** leaps off, **Shift** lets go. Climb over the top onto the roof.
+  - **Glide:** hold **Space** in the air to spread your web wings.
+  - **Spider-sense:** the edge of the screen tingles on the side of danger (a car about to hit you, an officer about to shoot, a mob winding up), time slows for a moment, and shots miss you more often.
+  - **5 suits:** Classic, Shadow, Street, Iron (with four robot spider legs on your back) and Future. Press **N** to change.
+  - **Crime alerts:** in the suit, the police radio calls for help every minute or so. Catch fleeing robbers with their bags of money, or web a getaway car four times to stop it and then catch the robbers who jump out.
 - **Drive anything.** Your own car is parked in your driveway. Walk up to any car and press **E** to get in: sedans, taxis, police cars, the ambulance and the fire truck (press **F** for the siren), sports cars, SUVs, pickup trucks, the bus, the ice cream van (it plays a tune) and a **monster truck** at the stadium that drives right over other cars. You can even take a car that's stopped at a light (the driver won't be happy). **W/S** drive and reverse, **A/D** steer, **Space** is the handbrake (hold it in a turn to drift and leave skid marks), **H** honks. Move the mouse to look around.
 - **Proper cars.** Brake lights, indicators, reversing lights, headlights that light up the road at night, doors that open, engines that change gear and tyre screech.
 - **Real crashes.** Cars slide along walls, spin when they're hit at an angle, and heavy vehicles shove light ones out of the way. The bodywork crumples where it gets hit: bullets leave little dents, crashes and explosions bend it in. Big crashes hurt you and can stall the engine, and a bent car is slower and pulls to one side. Then come cracked windows, smoke, fire and a big bang.
@@ -71,7 +81,7 @@ Click **Adventure** on the title screen to explore **Blockton**, a big modern to
 
 - Everything you do earns **XP**. Each level pays out coins.
 - **3 daily challenges** that change every day, like "Beat 15 Skitters" or "Reach wave 10 in Endless".
-- **36 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
+- **38 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
 - **Weapon mastery:** every gun ranks up as you beat mobs with it, from Iron to Master. Ranks pay coins, and Bronze, Diamond and Lava paints can only be earned this way. The Armory shows each gun's rank.
 - **Lucky Wheel:** one free spin every day, more for 200 coins. Win coins, XP, gun parts, Style items or the 2,000 coin jackpot.
 
@@ -314,7 +324,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights and the minimap |
 | `src/cars.js`, `src/townsfolk.js` | Drivable cars and traffic, and the people of Blockton |
 | `src/police.js` | Wanted stars, police cars, officers, the helicopter and phone calls to 5-0-5-0 |
-| `src/webs.js` | Web shooters: swinging, zipping and web balls |
+| `src/webs.js`, `src/suit.js`, `src/crimes.js` | Web shooters (swinging, zipping, yanking, crawling, gliding, spider-sense), the spider suits and crime alerts |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |
 | `src/skin.js` | Skin layout, outfit generator, mob skins, PNG loading |

@@ -1311,7 +1311,8 @@ class Game {
     const s = this.state;
 
     // Multiplayer never pauses: the world keeps going for everyone else.
-    if (this.inGame && (this.mp || s === 'playing' || s === 'dead')) this.updatePlay(dt);
+    // Spider-sense slows time for a moment (never online).
+    if (this.inGame && (this.mp || s === 'playing' || s === 'dead')) this.updatePlay(this.mp ? dt : dt * (this.timeScale || 1));
     else if (s === 'menu' || s === 'mp') this.updateMenu(dt);
     if (this.mp && !this.inGame) this.mp.update(dt);
 

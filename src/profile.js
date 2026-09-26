@@ -42,7 +42,7 @@ export class Profile {
     this.wheel = (data && data.wheel) || null;
     // Adventure mode: jobs done, golden cubes found, people met.
     const adv = (data && data.adv) || {};
-    this.adv = { done: { ...(adv.done || {}) }, cubes: Array.isArray(adv.cubes) ? adv.cubes.filter(Number.isInteger) : [], met: { ...(adv.met || {}) } };
+    this.adv = { done: { ...(adv.done || {}) }, cubes: Array.isArray(adv.cubes) ? adv.cubes.filter(Number.isInteger) : [], met: { ...(adv.met || {}) }, crimes: Math.max(0, Math.floor(Number(adv.crimes) || 0)) };
     this.listeners = new Set();
     this.saveTimer = 0;
   }

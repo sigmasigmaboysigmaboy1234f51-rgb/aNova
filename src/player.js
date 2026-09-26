@@ -670,6 +670,9 @@ export class Player {
     if (this.buff('speed')) speed *= 1.45;
     if (cheats.has('speed')) speed *= 2;
     speed *= 1 + (this.size - 1) * 0.38;
+    // Spider powers in the suit.
+    const suited = g.adventure && g.adventure.webs.suited;
+    if (suited) speed *= 1.2;
     if (flying) speed *= 1.6;
     if (this.slowT > 0) speed *= 1 - this.slowAmt;
     if (weapon) speed *= weapon.stats.mobility * (1 - this.ads * 0.4) * (weapon.spin > 0.3 ? 0.7 : 1);
@@ -696,12 +699,12 @@ export class Player {
     } else {
       this.vel.y = Math.max(this.vel.y - 30 * dt, -45);
       if (jump && this.onGround) {
-        this.vel.y = (cheats.has('jump') ? 19 : 9) * Math.sqrt(Math.max(1, this.size));
+        this.vel.y = (cheats.has('jump') ? 19 : 9) * Math.sqrt(Math.max(1, this.size)) * (suited ? 1.35 : 1);
         g.sound.jump();
       }
     }
-    // Hanging on a web.
-    if (g.adventure) g.adventure.webs.swing(dt);
+    // Web swinging, zipping, wall crawling and gliding.
+    if (g.adventure) g.adventure.webs.move(dt);
     const px = this.pos.x;
     const py = this.pos.y;
     const pz = this.pos.z;
@@ -712,6 +715,7 @@ export class Player {
     moveEntity(w, this, dt);
     // Big players step straight up onto blocks.
     if (this.size >= 1.5 && wasGround && !flying && (this.hitX || this.hitZ) && len > 0) this.stepUp(px, py, pz, vx0, vz0, dt);
+    if (g.adventure) g.adventure.webs.after(dt, wasGround, vyBefore);
 
     // Crouching never walks you off an edge.
     if (this.crouch && wasGround && !this.onGround && vyBefore <= 0 && !this.supported(this.pos.x, py, this.pos.z)) {
@@ -1089,6 +1093,8 @@ export class Player {
       g.sound.zap(0.8);
     }
     this.applyStatus(fx, source);
+    // The spider suit is tough.
+    if (g.adventure && g.adventure.webs.suited && source !== 'cheat') amount = Math.ceil(amount * 0.6);
     const knock = fx && fx.knock ? fx.knock : 1;
     this.hp -= amount;
     this.invuln = 0.4;
@@ -1228,7 +1234,8 @@ export class Player {
     this.hurtRoll *= Math.exp(-7 * dt);
     const eye = this.eyePos(vA);
     eye.y -= Math.sin(this.landDip * Math.PI * 0.5) * 0.16 * this.size + this.stepDip;
-    let roll = this.hurtRoll + this.strafeRoll;
+    const webs = this.game.adventure && this.game.adventure.webs;
+    let roll = this.hurtRoll + this.strafeRoll + (webs ? webs.roll : 0);
     if (this.dead) {
       const k = Math.min(1, this.deadT / 0.7);
       eye.y -= ease(k) * (this.eye - 0.25);
@@ -1264,7 +1271,7 @@ export class Player {
       cam.position.copy(eye);
     }
     const moving = Math.hypot(this.vel.x, this.vel.z) > 2;
-    const target = ((this.game.settings.fov || BASE_FOV) + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0)) / (this.thirdPerson ? 1 : this.zoom());
+    const target = ((this.game.settings.fov || BASE_FOV) + (this.sprint && moving ? 9 : 0) - (this.inWater ? 5 : 0) + (webs ? webs.fovKick : 0)) / (this.thirdPerson ? 1 : this.zoom());
     this.fov = damp(this.fov, target, 12, dt);
     if (Math.abs(cam.fov - this.fov) > 0.01) {
       cam.fov = this.fov;
@@ -1318,6 +1325,7 @@ export class Player {
       posePlayer(this.rig, this.animState(), dt);
       if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
       if (this.emote) poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
+      if (this.game.adventure) this.game.adventure.webs.pose(m, dt);
       animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     }
     this.landed = 0;

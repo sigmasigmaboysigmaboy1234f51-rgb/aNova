@@ -68,6 +68,7 @@ export class Person {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.canvas.height = 64;
     paintOutfit(this.canvas, randomOutfit(rng), false, seed);
+    if (opts.paint) opts.paint(this.canvas);
     this.texture = makeSkinTexture(this.canvas);
     this.model = buildHumanoid(this.texture, { slim: rng() < 0.4 });
     this.rig = new Rig(this.model);
@@ -133,7 +134,7 @@ export class Person {
 
   // Something scary happened near here.
   scare(from, t = 5) {
-    if (this.giver) return;
+    if (this.giver || this.robber) return;
     this.fleeT = Math.max(this.fleeT, t);
     this.fleeFrom.copy(from);
   }
@@ -150,7 +151,7 @@ export class Person {
 
   // You're pointing a gun at them (on = true while you aim).
   aimedAt(on, dt, from) {
-    if (this.giver) return;
+    if (this.giver || this.robber) return;
     if (on) {
       this.threatT += dt;
       this.handsT = 0.6;
@@ -202,7 +203,7 @@ export class Person {
       this.fleeT -= dt;
       moveX = this.pos.x - this.fleeFrom.x;
       moveZ = this.pos.z - this.fleeFrom.z;
-      speed = 4.2;
+      speed = this.robberRun || 4.2;
     } else if (this.loop && !this.giver) {
       this.chatT -= dt;
       if (this.chatT < -12 && Math.random() < dt * 0.1) this.chatT = 2 + Math.random() * 3;

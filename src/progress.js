@@ -57,6 +57,8 @@ export const ACHIEVEMENTS = [
   { id: 'jobs', name: 'Hero of Blockton', desc: 'Finish all 7 Adventure jobs', coins: 800, goal: 7, get: (p) => Object.keys(p.adv.done).length },
   { id: 'cubes', name: 'Cube Hunter', desc: 'Find all 10 golden cubes in Blockton', coins: 500, goal: 10, get: (p) => p.adv.cubes.length },
   { id: 'driver', name: 'Road Trip', desc: 'Drive 5 km in Adventure', coins: 300, goal: 5000, get: (p) => p.totals.driven || 0 },
+  { id: 'crime1', name: 'Friendly Neighbour', desc: 'Stop a crime in the spider suit', coins: 150, goal: 1, get: (p) => p.adv.crimes || 0 },
+  { id: 'crime10', name: 'Web Head', desc: 'Stop 10 crimes in the spider suit', coins: 600, goal: 10, get: (p) => p.adv.crimes || 0 },
 ];
 
 // Weapon mastery: beat mobs with one gun to rank it up. Some ranks unlock a

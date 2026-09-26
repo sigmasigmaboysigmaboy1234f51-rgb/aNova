@@ -232,7 +232,7 @@ export class Hud {
       cur = '∞';
       max = ' web';
       fill = 1;
-      status = 'Hold right click: swing · Space: zip · Left click: web ball';
+      status = 'Right: swing / yank · Left: web (hold: blast) · R: zip · Space: glide · N: suit';
     } else {
       cur = String(p.blocks);
       max = ' blocks';

@@ -265,7 +265,8 @@ class Officer {
     const at = v2.set(p.pos.x, p.pos.y + (p.driving ? 0.8 : 1.1), p.pos.z);
     const dist = from.distanceTo(at);
     const fast = p.driving ? Math.abs(p.driving.speed) : Math.hypot(p.vel.x, p.vel.z);
-    const chance = 0.5 - dist * 0.012 - fast * 0.015 + (pol.stars >= 5 ? 0.1 : 0);
+    const dodge = g.adventure && g.adventure.webs.dodging ? 0.35 : 1;
+    const chance = (0.5 - dist * 0.012 - fast * 0.015 + (pol.stars >= 5 ? 0.1 : 0)) * dodge;
     const hit = Math.random() < chance;
     if (!hit) at.add(new THREE.Vector3((Math.random() - 0.5) * 2.4, (Math.random() - 0.3) * 1.5, (Math.random() - 0.5) * 2.4));
     // Muzzle roughly at the hand.
@@ -368,6 +369,11 @@ class Officer {
         const shootRange = pol.stars >= 3 && pol.seen && dist < 24 && dist > 3.5 && pol.lineOfSight(this.pos, 1.5);
         if (shootRange && (this.aimT > 0 || Math.random() < dt * 0.9)) {
           this.aimT += dt;
+          // Spider-sense tingles just before they fire.
+          if (this.aimT > 0.2 && !this.sensed) {
+            this.sensed = true;
+            if (g.adventure) g.adventure.webs.sense(this.pos);
+          }
           gesture = 'aim';
           this.yaw = Math.atan2(dx, dz);
           this.pitch = Math.atan2(p.pos.y - this.pos.y, dist);
@@ -375,6 +381,7 @@ class Officer {
           if (this.aimT > 2.6) this.aimT = 0;
         } else {
           this.aimT = 0;
+          this.sensed = false;
           const step = dist > 2.5 && pol.seen ? this.pathStep() : null;
           if (!pol.seen && dist < 2) {
             // Nobody here: look around.
@@ -672,7 +679,9 @@ class Heli {
         this.shootCd = 2.2 + Math.random();
         const from = this.pos.clone().add(new THREE.Vector3(0, -0.8, 0));
         const at = p.pos.clone().add(new THREE.Vector3(0, 1, 0));
-        const hit = Math.random() < 0.35;
+        const webs = g.adventure && g.adventure.webs;
+        if (webs) webs.sense(this.pos);
+        const hit = Math.random() < 0.35 * (webs && webs.dodging ? 0.35 : 1);
         if (!hit) at.add(new THREE.Vector3((Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3));
         g.tracers.fire(from, at, 0xffe08a, 0.03);
         g.sound.gunshot('rifle', false, 0.4);
