@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildHumanoid, holdGun, setBulk, PX } from './model.js';
-import { chadLook, applyChad, removeChad, chadStance } from './chad.js';
+import { chadLook, applyChad, removeChad, chadStance, chadFinish } from './chad.js';
 import { GUNS, parseBuildCode } from './weapons.js';
 import { B } from './world.js';
 import { rayBox } from './mob.js';
@@ -353,12 +353,13 @@ class RemotePlayer {
       },
       dt,
     );
+    if (m.chad) chadStance(m, this.rig);
     if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
     if (this.emote) {
       this.emoteT += dt;
       poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
     }
-    if (m.chad) chadStance(m, this.rig);
+    if (m.chad) chadFinish(m);
     // A Giga Chad flexing puts his gun away for a moment.
     const posing = m.chad && this.emote === 'flex';
     this.gun.visible = this.heldGun !== false && !posing;

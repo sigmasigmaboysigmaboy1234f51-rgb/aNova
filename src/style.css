@@ -898,6 +898,7 @@ body.sense #sense { opacity: 1; animation: sense-pulse 0.25s ease-in-out infinit
 #game { transition: filter 0.35s; }
 body.chad-moment #game { filter: grayscale(1) contrast(1.75) brightness(0.85); }
 #hud { transition: opacity 0.3s; }
+body.front-view #crosshair { display: none; }
 body.chad-moment #hud { opacity: 0; }
 #chad-moment {
   position: absolute; inset: 0; pointer-events: none; opacity: 0;

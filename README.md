@@ -36,7 +36,7 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | R | Reload. Your left hand swaps the magazine (or loads shells, or swings out the cylinder) |
 | I | Inspect your gun |
 | B | Armory: buy guns and parts, build your loadout |
-| V or F5 | Switch to third person to see your skin |
+| V or F5 | Camera: first person, then from behind you, then from the front (so you can see your face) |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
 | E | Adventure: get in or out of a car, talk to people |
 | H / F (in a car) | Horn / siren (police car, ambulance, fire truck) |

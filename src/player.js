@@ -12,7 +12,7 @@ import { EMOTES, EMOTE_KEYS, emoteWeight, poseEmote } from './emotes.js';
 import { reloadStyle, gunPoints, buildLeftArm, buildShell, reloadPose, inspectPose } from './viewanim.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
-import { chadLook, applyChad, removeChad, chadViewArm, chadMaterial, chadStance } from './chad.js';
+import { chadLook, applyChad, removeChad, chadViewArm, chadMaterial, chadStance, chadFinish } from './chad.js';
 
 export const PLACEABLE = [B.COBBLE, B.PLANKS, B.BRICK, B.MOSSY];
 export const MAX_HP = 20;
@@ -658,10 +658,18 @@ export class Player {
     for (let i = 0; i < slots; i++) if (inp.pressed.has('Digit' + (i + 1))) this.select(i);
     if (inp.wheel) this.cycle(inp.wheel > 0 ? 1 : -1);
     if (inp.pressed.has('KeyQ')) this.select(this.lastHeld);
+    // F5 or V: first person, then from behind, then from the front.
     if (inp.pressed.has('KeyV') || inp.pressed.has('F5')) {
-      this.thirdPerson = !this.thirdPerson;
+      if (!this.thirdPerson) this.thirdPerson = true;
+      else if (!this.frontView) this.frontView = true;
+      else {
+        this.thirdPerson = false;
+        this.frontView = false;
+      }
       this.emoteView = false;
     }
+    if (!this.thirdPerson) this.frontView = false;
+    document.body.classList.toggle('front-view', !!this.frontView);
     for (const [key, id] of EMOTE_KEYS) if (inp.pressed.has(key)) this.startEmote(id);
     // I: show off your gun.
     if (inp.pressed.has('KeyI') && this.weapon && this.weapon.reloadT <= 0) this.inspectT = 0.001;
@@ -1313,11 +1321,16 @@ export class Player {
     const s = this.shake;
     // During an emote the camera circles to your front. For the Giga Chad
     // it comes in close and low, on his chest.
-    const ew = this.emoteCam || 0;
+    // The front view (F5 twice) swings round to face you and tips the
+    // opposite way to your look, so you look at yourself.
+    this.frontCam = damp(this.frontCam || 0, this.frontView && this.thirdPerson ? 1 : 0, 8, dt);
+    const fw = this.frontCam;
+    const ew = Math.max(this.emoteCam || 0, fw);
     const cw = this.chadCam || 0;
     eye.y -= 0.32 * cw * this.size;
     const cy = this.yaw + Math.PI * ew;
-    const cp = (this.pitch + this.kick) * (1 - ew) - 0.18 * ew + 0.3 * cw;
+    const look = this.pitch + this.kick;
+    const cp = look * (1 - ew) + (-0.18 * ew) * (1 - fw) + (-look * 0.7 - 0.12) * fw * (1 - (this.emoteCam || 0)) + 0.3 * cw;
     cam.rotation.set(cp + (Math.random() - 0.5) * s * 0.3, cy + (Math.random() - 0.5) * s * 0.3, roll, 'YXZ');
     if (this.thirdPerson && !this.dead) {
       const d = ew > 0.001 ? vB.set(-Math.sin(cy) * Math.cos(cp), Math.sin(cp), -Math.cos(cy) * Math.cos(cp)) : this.aimDir(vB);
@@ -1441,10 +1454,11 @@ export class Player {
       m.root.position.copy(this.pos);
       m.root.rotation.y = this.yaw + Math.PI;
       posePlayer(this.rig, this.animState(), dt);
+      if (m.chad) chadStance(m, this.rig);
       if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
       if (this.emote) poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
       if (this.game.adventure) this.game.adventure.webs.pose(m, dt);
-      if (m.chad) chadStance(m, this.rig);
+      if (m.chad) chadFinish(m);
       animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     }
     this.landed = 0;

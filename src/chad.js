@@ -15,14 +15,37 @@ import { LAYOUT, partSize, faceRects } from './skin.js';
 //
 // All sizes here are skin pixels (1.8 m = 32 px), x to his left, z forward.
 
+// The muscles are drawn at an ordinary athletic size, then each part is
+// bulked up: the torso wider and deeper, arms and legs thicker round their
+// own middle, and the head a bit bigger. SIZE says how much, and each
+// part's space turns a point on the big body back into the drawing.
+const SIZE = { torso: [1.3, 1.24], arm: 1.38, armOut: 1.28, leg: 1.36, legOut: 0.45, head: 1.14 };
+const NECK = [0, 28.35, -0.2];
+const SPACE = {
+  head: (x, y, z) => [NECK[0] + (x - NECK[0]) / SIZE.head, NECK[1] + (y - NECK[1]) / SIZE.head, NECK[2] + (z - NECK[2]) / SIZE.head],
+  torso: (x, y, z) => [x / SIZE.torso[0], y, z / SIZE.torso[1]],
+  // Arms and legs: s is -1 for his right side, 1 for his left.
+  arm: (x, y, z) => {
+    const s = x < 0 ? -1 : 1;
+    return [(x - s * (4.55 + SIZE.armOut)) / SIZE.arm + s * 4.55, y, z / SIZE.arm];
+  },
+  leg: (x, y, z) => {
+    const s = x < 0 ? -1 : 1;
+    return [(x - s * (1.6 + SIZE.legOut)) / SIZE.leg + s * 1.6, y, z / SIZE.leg];
+  },
+};
+const SCALE = { head: SIZE.head, torso: 1, arm: 1, leg: 1 };
+// From the drawing out to the big body (for the joints).
+const armOut = ([x, y, z]) => [(x - 4.55) * SIZE.arm + 4.55 + SIZE.armOut, y, z * SIZE.arm];
+
 // Where the joints are (feet at y = 0).
 export const CHAD = {
   hipY: 15.6, // legs and the upper body turn here
-  legX: 1.75,
-  neck: [0, 28.35, -0.2], // the head turns here
-  shoulder: [4.35, 25.3, 0], // arms (x is for his left arm)
-  elbow: [4.8, 19.5, -0.15],
-  fist: [5.02, 13.6, 0.25],
+  legX: (1.75 - 1.6) * SIZE.leg + 1.6 + SIZE.legOut,
+  neck: NECK, // the head turns here
+  shoulder: armOut([4.35, 25.3, 0]), // arms (x is for his left arm)
+  elbow: armOut([4.8, 19.5, -0.15]),
+  fist: armOut([5.02, 13.6, 0.25]),
 };
 
 // --- Distance field shapes ------------------------------------------------
@@ -172,7 +195,7 @@ const BROWS = [1, -1].flatMap((s) => [
   cone([s * 0.18, 29.99, 1.53], [s * 0.62, 30.1, 1.46], 0.11, 0.095),
   cone([s * 0.62, 30.1, 1.46], [s * 1.02, 30.04, 1.22], 0.095, 0.05),
 ]);
-const LIPS = [ell([0, 28.43, 1.43], [0.42, 0.12, 0.2]), ell([0, 28.22, 1.39], [0.36, 0.13, 0.2])];
+const LIPS = [ell([0, 28.43, 1.34], [0.4, 0.11, 0.18]), ell([0, 28.23, 1.3], [0.34, 0.12, 0.18])];
 
 function headShapes() {
   const S = [
@@ -184,9 +207,9 @@ function headShapes() {
     ['add', ell([0, 27.45, 0.35], [0.9, 0.7, 0.8]), 0.5],
     // A heavy brow over deep-set eyes, and high cheekbones.
     ['add', ell([0, 29.98, 1.05], [1.18, 0.28, 0.5]), 0.3],
-    ['add', ell([0, 28.75, 0.95], [0.95, 0.75, 0.75]), 0.4],
+    ['add', ell([0, 28.75, 0.85], [0.85, 0.72, 0.72]), 0.4],
     // The jaw: wide, square and sharp, with a strong chin.
-    ['add', ell([0, 28.05, 0.3], [1.25, 0.74, 1.2]), 0.5],
+    ['add', ell([0, 28.05, 0.18], [1.22, 0.72, 1.1]), 0.5],
     ['add', ell([0, 27.52, 1.18], [0.64, 0.43, 0.43]), 0.2],
     ['sub', cone([0, 27.3, 1.62], [0, 27.68, 1.6], 0.07), 0.1],
     // Nose.
@@ -198,7 +221,7 @@ function headShapes() {
   ];
   for (const s of [1, -1]) {
     S.push(
-      ['add', ell([s * 0.85, 29.2, 0.95], [0.42, 0.3, 0.48]), 0.3],
+      ['add', ell([s * 0.8, 29.22, 0.98], [0.36, 0.26, 0.42]), 0.3],
       ['add', cone([s * 1.15, 27.98, -0.45], [s * 0.5, 27.45, 1.12], 0.36, 0.34), 0.35],
       ['add', cone([s * 1.18, 28.95, -0.5], [s * 1.15, 27.98, -0.45], 0.37, 0.36), 0.35],
       ['add', ell([s * 0.21, 28.86, 1.57], [0.17, 0.15, 0.17]), 0.12],
@@ -228,8 +251,9 @@ function torsoShapes() {
     add(ell([s * 2.9, 23.8, -0.5], [0.85, 1.7, 1.05], [0, 0, -s * 0.35]), 0.6);
     add(ell([s * 1.05, 15.55, -1.0], [1.2, 1.35, 1.05]), 0.5); // glutes
     add(ell([s * 3.5, 25.75, -0.15], [0.7, 0.55, 0.9]), 0.5); // top of the shoulder
-    // Traps sloping from the neck down to the shoulders.
+    // Traps sloping from the neck down to the shoulders, big and high.
     add(ell([s * 1.55, 26.35, -0.55], [1.75, 0.8, 1.05], [0, 0, -s * 0.42]), 0.7);
+    add(ell([s * 1.2, 27.0, -0.7], [1.2, 0.95, 0.85]), 0.6);
   }
   add(cone([0, 25.4, -0.25], [0, 27.9, -0.2], 1.35, 1.12), 0.9);
   const base = field(S.slice());
@@ -237,7 +261,7 @@ function torsoShapes() {
     add(cone([s * 0.85, 28.5, -0.25], [s * 0.25, 25.9, 0.9], 0.28, 0.24), 0.35); // neck straps
     add(cone([s * 0.35, 25.8, 1.0], [s * 3.2, 26.05, 0.15], 0.15, 0.15), 0.45); // collarbones
     // Pecs: big plates with a sharp lower edge, tied in under the arm.
-    add(ell([s * 1.5, 24.0, 1.0], [1.62, 1.18, 0.9], [0, s * 0.3, s * 0.12]), 0.3);
+    add(ell([s * 1.5, 24.0, 1.02], [1.7, 1.24, 1.0], [0, s * 0.3, s * 0.12]), 0.3);
     add(ell([s * 1.65, 24.95, 0.7], [1.45, 0.72, 0.72]), 0.55);
     add(ell([s * 2.9, 24.5, 0.5], [0.7, 0.8, 0.6]), 0.5);
   }
@@ -245,27 +269,23 @@ function torsoShapes() {
   [21.55, 20.5, 19.45, 18.35].forEach((y, i) => {
     for (const s of [1, -1]) {
       const [x0, y0, z0] = surface(base, s * 0.58, y, 4, 0, 0, -1);
-      add(rbox([x0, y0, z0 - 0.19], [0.5, i === 3 ? 0.52 : 0.44, 0.3], 0.26), 0.22);
+      add(rbox([x0, y0, z0 - 0.24], [0.5, i === 3 ? 0.52 : 0.45, 0.33], 0.31), 0.28);
     }
   });
   for (const s of [1, -1]) {
-    // Obliques and the serratus "fingers" along the ribs.
+    // Obliques.
     add(ell([s * 1.95, 19.4, 0.3], [0.45, 1.7, 0.85], [0, 0, s * 0.18]), 0.55);
-    for (let i = 0; i < 3; i++) {
-      const [x0, y0, z0] = surface(base, s * 4, 23.3 - i * 0.62, 3.2 - i * 0.1, -s * 0.7, 0, -0.7);
-      add(ell([x0 - s * 0.06, y0, z0 - 0.06], [0.3, 0.2, 0.34], [0, s * 0.5, s * 0.5]), 0.18);
-    }
     // The V lines from the hips down under the shorts.
     sub(cone([s * 2.1, 17.6, 1.05], [s * 0.75, 15.6, 1.45], 0.12, 0.1), 0.22);
     // Shoulder blades and the long back muscles either side of the spine.
     const [bx, by, bz] = surface(base, s * 1.8, 24.2, -4, 0, 0, 1);
-    add(ell([bx, by, bz + 0.2], [1.0, 0.95, 0.45], [0, 0, s * 0.4]), 0.35);
+    add(ell([bx, by, bz + 0.26], [1.1, 1.0, 0.3], [0, 0, s * 0.4]), 0.55);
     const [ex, ey, ez] = surface(base, s * 0.62, 18.6, -4, 0, 0, 1);
     add(ell([ex, ey, ez + 0.28], [0.5, 2.4, 0.45]), 0.35);
   }
   // The groove down the middle of the back.
   const spine = [25.6, 22.5, 19.5, 17.2].map((y) => surface(base, 0, y, -4, 0, 0, 1));
-  for (let i = 0; i < spine.length - 1; i++) sub(cone(spine[i], spine[i + 1], 0.07), 0.3);
+  for (let i = 0; i < spine.length - 1; i++) sub(cone(spine[i], spine[i + 1], 0.02), 0.3);
   // Shorts over the hips, up to a waistband.
   const shorts = ell([0, 15.7, -0.15], [2.42, 1.9, 1.68]);
   add(bound(shorts.b, shorts.b[3], (x, y, z) => smax(shorts(x, y, z), y - 16.4, 0.08)), 0.12);
@@ -314,11 +334,11 @@ function legShapes(s) {
     ['add', ell([X(1.75), 12.3, -0.75], [1.0, 3.0, 0.9]), 0.45],
     ['add', ell([X(1.45), 8.65, 0.25], [0.72, 0.8, 0.8]), 0.3],
     ['add', ell([X(1.43), 8.8, 0.88], [0.38, 0.45, 0.2]), 0.15],
-    ['add', cone([X(1.45), 8.3, 0.1], [X(1.48), 1.7, 0.0], 0.7, 0.44), 0.3],
+    ['add', cone([X(1.45), 8.3, 0.1], [X(1.48), 1.7, 0.0], 0.74, 0.44), 0.3],
     ['add', ell([X(1.65), 6.4, 0.5], [0.38, 1.9, 0.38]), 0.25],
     // Calves: two heads and the soleus under them.
-    ['add', ell([X(1.12), 6.3, -0.55], [0.62, 1.6, 0.72]), 0.3],
-    ['add', ell([X(1.78), 6.5, -0.5], [0.55, 1.45, 0.62]), 0.3],
+    ['add', ell([X(1.12), 6.3, -0.58], [0.7, 1.65, 0.8]), 0.3],
+    ['add', ell([X(1.78), 6.5, -0.52], [0.62, 1.5, 0.7]), 0.3],
     ['add', ell([X(1.47), 4.7, -0.32], [0.66, 1.45, 0.58]), 0.4],
     ['add', ell([X(1.47), 1.55, 0], [0.45, 0.45, 0.5]), 0.3],
     // Sneakers.
@@ -327,7 +347,7 @@ function legShapes(s) {
     ['add', rbox([X(1.47), 0.17, 0.85], [0.7, 0.17, 1.95], 0.12), 0.06],
   ];
   // Gym shorts down to the middle of the thigh, with a clean hem.
-  const cloth = cone([X(1.8), 14.9, -0.08], [X(1.6), 11.2, 0.12], 1.68, 1.5);
+  const cloth = cone([X(1.8), 14.9, -0.08], [X(1.6), 11.2, 0.12], 1.58, 1.4);
   S.push(['add', bound(cloth.b, cloth.b[3], (x, y, z) => smax(cloth(x, y, z), 11.1 - y, 0.1)), 0.08]);
   return S;
 }
@@ -451,7 +471,13 @@ function* finish(f, { pos, quads }) {
       occ += w * Math.max(0, t - f(x + gx * t, y + gy * t, z + gz * t));
       w *= 0.6;
     }
-    ao[i] = Math.max(0.42, Math.min(1, 1 - occ * 1.6));
+    // Creases between muscles darker, the round bellies a touch lighter, so
+    // the muscles read from far away.
+    const e = 0.14;
+    const c = f(x, y, z);
+    const lap = (f(x + e, y, z) + f(x - e, y, z) + f(x, y + e, z) + f(x, y - e, z) + f(x, y, z + e) + f(x, y, z - e) - 6 * c) / (e * e);
+    const curve = Math.max(0.72, Math.min(1.08, 1 + 0.045 * lap));
+    ao[i] = Math.max(0.36, Math.min(1.08, (1 - occ * 1.8) * curve));
   }
   // Two triangles per quad, facing out, split along the shorter diagonal.
   const tris = [];
@@ -534,7 +560,7 @@ function faceMaps(part, slim) {
 // (relative to its joint), in world units. Each triangle gets the skin face
 // it looks at most, so suits and paint land where they would on a block.
 function* partGeometry(part, net, slim, pivot, [lo, hi] = netBox(net)) {
-  const { pos, nor, ao, tris } = net;
+  const { pos, nor, ao, tris, space } = net;
   const maps = faceMaps(part, slim);
   const span = [0, 1, 2].map((a) => 1 / Math.max(1e-6, hi[a] - lo[a]));
   // What you see looking at the part from each of its six sides: the
@@ -649,6 +675,14 @@ function* partGeometry(part, net, slim, pivot, [lo, hi] = netBox(net)) {
         N[o * 3 + a] = nor[v + a];
         Cl[o * 3 + a] = ao[t[k]];
       }
+      // Painting works in the drawing's space (where the hairline and
+      // shorts are).
+      if (space) {
+        const d = space(G[o * 3], G[o * 3 + 1], G[o * 3 + 2]);
+        G[o * 3] = d[0];
+        G[o * 3 + 1] = d[1];
+        G[o * 3 + 2] = d[2];
+      }
       const U = m.u0 + q[m.a] * m.ua + q[m.b] * m.ub;
       const V = m.v0 + q[m.a] * m.va + q[m.b] * m.vb;
       T[o * 2] = U < m.lo[0] ? m.lo[0] : U > m.hi[0] ? m.hi[0] : U;
@@ -689,7 +723,9 @@ function mirror({ pos, nor, ao, tris }) {
     p[i] = -p[i];
     n[i] = -n[i];
   }
-  return { pos: p, nor: n, ao, tris: tris.map(([a, b, c]) => [a, c, b]) };
+  const to = arguments[0].space;
+  const space = to ? (x, y, z) => to(x, y, z) : null;
+  return { pos: p, nor: n, ao, tris: tris.map(([a, b, c]) => [a, c, b]), space };
 }
 
 function merge(a, b) {
@@ -700,27 +736,41 @@ function merge(a, b) {
   const ao = new Float32Array(a.ao.length + b.ao.length);
   ao.set(a.ao);
   ao.set(b.ao, a.ao.length);
-  return { pos: [...a.pos, ...b.pos], nor, ao, tris: [...a.tris, ...b.tris.map((t) => t.map((v) => v + off))] };
+  return { pos: [...a.pos, ...b.pos], nor, ao, tris: [...a.tris, ...b.tris.map((t) => t.map((v) => v + off))], space: a.space };
 }
 
-function* sculpt(shapes, box, h) {
-  const f = field(shapes);
+// Meshes a part: shapes drawn in its own space, bulked up (see SIZE).
+function* sculpt(shapes, box, h, space) {
+  const f0 = field(shapes);
+  const to = SPACE[space];
+  const k = SCALE[space];
+  const f = (x, y, z) => {
+    const d = to(x, y, z);
+    return f0(d[0], d[1], d[2]) * k;
+  };
   const m = yield* mesh(f, box, h);
-  return yield* finish(f, m);
+  const net = yield* finish(f, m);
+  net.space = to;
+  return net;
 }
 
 function* build(slim) {
   const out = { slim };
-  const head = yield* sculpt(headShapes(), [-2.3, 24.9, -2.9, 2.3, 33.3, 2.6], 0.16);
+  const hs = SIZE.head;
+  const head = yield* sculpt(headShapes(), [-2.3 * hs, NECK[1] - 3.45 * hs, -2.8 * hs, 2.3 * hs, NECK[1] + 4.95 * hs, 2.9 * hs], 0.17, 'head');
   out.head = yield* partGeometry('head', head, slim, CHAD.neck);
   yield;
-  const torso = yield* sculpt(torsoShapes(), [-5.0, 13.0, -3.2, 5.0, 29.9, 3.2], 0.2);
+  const [tx, tz] = SIZE.torso;
+  const torso = yield* sculpt(torsoShapes(), [-5.0 * tx, 13.0, -3.2 * tz, 5.0 * tx, 29.9, 3.2 * tz], 0.21, 'torso');
   out.body = yield* partGeometry('body', torso, slim, [0, CHAD.hipY, 0]);
   yield;
+  // Right side only; the left is its mirror image.
+  const ax = (x) => -((-x - 4.55) * SIZE.arm + 4.55 + SIZE.armOut);
+  const lx = (x) => -((-x - 1.6) * SIZE.leg + 1.6 + SIZE.legOut);
   const nets = {
-    arm: yield* sculpt(upperArmShapes(-1), [-6.6, 18.2, -2.3, -2.6, 27.4, 2.3], 0.2),
-    fore: yield* sculpt(foreArmShapes(-1), [-6.6, 11.9, -1.9, -3.4, 20.8, 2.1], 0.16),
-    leg: yield* sculpt(legShapes(-1), [-4.2, -0.8, -2.6, 1.0, 17.8, 3.6], 0.22),
+    arm: yield* sculpt(upperArmShapes(-1), [ax(-6.6), 17.8, -2.3 * SIZE.arm, ax(-2.6), 27.4, 2.3 * SIZE.arm], 0.21, 'arm'),
+    fore: yield* sculpt(foreArmShapes(-1), [ax(-6.6), 11.9, -1.9 * SIZE.arm, ax(-3.4), 20.8, 2.1 * SIZE.arm], 0.17, 'arm'),
+    leg: yield* sculpt(legShapes(-1), [lx(-4.2), -0.8, -2.6 * SIZE.leg, lx(1.0), 17.8, 3.6 * SIZE.leg], 0.23, 'leg'),
   };
   for (const s of [-1, 1]) {
     const side = s < 0 ? 'R' : 'L';
@@ -1110,7 +1160,7 @@ export function chadLook(skinCanvas, slim = false) {
 
 // Where the grip of a gun sits in his fist, relative to his elbow.
 const at = (p, s) => [s * p[0], p[1], p[2]];
-const GRIP = [0.62, -11.95, 1.05]; // from the shoulder (x for his left arm)
+const GRIP = [CHAD.fist[0] - CHAD.shoulder[0] - 0.05, -11.95, CHAD.fist[2] + 0.8]; // from the shoulder (x for his left arm)
 
 // Puts the Chad body on a humanoid model (from model.js) in place of its
 // blocks. Joints move to where a person's are and the arms get elbows.
@@ -1252,14 +1302,25 @@ export function chadMaterial(map) {
   return new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness: 0.62, metalness: 0 });
 }
 
-// How he stands: lats so wide his arms hang out a little, and a neck that
-// only bends so far (a person's head can't fold flat like a block's).
+// How he stands (after the normal pose, before emotes): not aiming, his
+// free arm hangs loose instead of the blocky across-the-body carry, his
+// elbows bend a little with the gun held low and ready, and his lats are
+// so wide his arms hang out a little.
 export function chadStance(model, rig) {
   const P = model.parts;
-  const aim = rig ? rig.get('aim') : 0;
-  const out = 0.13 * (1 - aim);
-  P.armR.rotation.z -= out;
-  P.armL.rotation.z += out;
+  const k = 1 - (rig ? rig.get('aim') : 0);
+  P.armL.rotation.x += 0.82 * k;
+  P.armL.rotation.y *= 1 - k;
+  P.armR.rotation.z -= 0.13 * k;
+  P.armL.rotation.z += 0.13 * k;
+  model.chad.bend.R = [-0.55 * k, 0, 0];
+  model.chad.bend.L = [-0.22 * k, 0, 0];
+}
+
+// After emotes: bend the elbows, and a neck that only bends so far (a
+// person's head can't fold flat like a block's).
+export function chadFinish(model) {
+  const P = model.parts;
   P.head.rotation.x = Math.max(-0.8, Math.min(0.65, P.head.rotation.x));
   const c = model.chad;
   for (const side of ['R', 'L']) {
