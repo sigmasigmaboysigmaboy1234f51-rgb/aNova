@@ -8,6 +8,7 @@ import { HATS, CAPES, KILL_FX } from './cosmetics.js';
 import { PETS } from './pets.js';
 import { xpForLevel } from './progress.js';
 import { BOT_NAMES } from './bots.js';
+import { CAR_TYPES } from './cars.js';
 
 // The cheat menu. Press ` (the key under Esc) in a game, or click Cheats.
 // In single player everything works. Online, only the host can use
@@ -308,6 +309,15 @@ export class Cheats {
       mobSel.appendChild(grp);
     }
 
+    // Every car, the Hyper Car first.
+    const carSel = $('#cz-car');
+    for (const id of ['super', ...Object.keys(CAR_TYPES).filter((k) => k !== 'super')]) {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = CAR_TYPES[id].name;
+      carSel.appendChild(o);
+    }
+
     const act = (id, fn) => $(id).addEventListener('click', () => {
       if (!this.allowed()) return this.msg('Only the host can use cheats in an online game.');
       const text = fn();
@@ -325,6 +335,7 @@ export class Cheats {
     act('#cz-unban', () => this.unbanAll());
     act('#cz-heal', () => this.fullHeal());
     act('#cz-power', () => this.allPowers());
+    act('#cz-spawncar', () => this.spawnCar(carSel.value));
     act('#cz-coins', () => this.coins(10000));
     act('#cz-unlockgear', () => this.unlockGear());
     act('#cz-style', () => this.unlockStyle());
@@ -372,6 +383,9 @@ export class Cheats {
     $('#cz-addbot').disabled = !ok || g.bots.length >= 5;
     $('#cz-unban').disabled = !ok || !(this.banned.size || this.bannedBots.size);
     for (const id of ['#cz-heal', '#cz-power']) $(id).disabled = !ok || !inGame;
+    const adv = inGame && !!g.adventure;
+    $('#cz-spawncar').disabled = !ok || !adv;
+    $('#cz-car-note').hidden = !inGame || adv;
     for (const id of ['#cz-coins', '#cz-unlockgear', '#cz-style', '#cz-level', '#cz-spin']) $(id).disabled = !ok;
     $('#cz-world-note').hidden = inGame;
     this.updateHud();
@@ -412,6 +426,59 @@ export class Cheats {
     for (const m of this.liveMobs()) m.remove(true);
     if (g.waveState === 'rest') g.waveTimer = 0;
     return `Skipped wave ${g.wave}.`;
+  }
+
+  // A car right in front of you (Adventure only). Yours to keep while you
+  // play; the oldest goes when you spawn a fourth.
+  spawnCar(type) {
+    const g = this.game;
+    const a = g.adventure;
+    if (!a || !CAR_TYPES[type]) return 'Cars only work in Adventure.';
+    this.used();
+    const p = g.player;
+    if (p.driving) a.exitCar(true);
+    this.cars = (this.cars || []).filter((c) => a.cars.includes(c) && !c.dead);
+    while (this.cars.length >= 3) {
+      const old = this.cars.shift();
+      if (p.driving !== old) a.removeCar(old);
+    }
+    // Look for a clear spot: in front of you, then to the sides, then behind.
+    const d = p.aimDir(new THREE.Vector3()).setY(0);
+    if (d.lengthSq() < 1e-4) d.set(0, 0, -1);
+    d.normalize();
+    const car = a.addCar(type, p.pos.x, p.pos.z, 0, false);
+    const def = car.def;
+    let placed = false;
+    for (const turn of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+      const c = Math.cos(turn);
+      const s = Math.sin(turn);
+      const dx = d.x * c - d.z * s;
+      const dz = d.x * s + d.z * c;
+      for (const reach of [def.len / 2 + 2, def.len / 2 + 4]) {
+        const x = p.pos.x + dx * reach;
+        const z = p.pos.z + dz * reach;
+        const y = a.groundAt(x, z, p.pos.y + 1.5);
+        car.yaw = Math.atan2(dx, dz);
+        if (Math.abs(y - p.pos.y) > 2.5 || car.blocked(x, z, y)) continue;
+        car.pos.set(x, y, z);
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) {
+      // Somewhere crowded: out on the nearest road instead.
+      const r = a.police.roadPoint({ x: p.pos.x, z: p.pos.z });
+      car.yaw = r.road === 'z' ? 0 : Math.PI / 2;
+      car.pos.set(r.x, a.groundAt(r.x, r.z, 9), r.z);
+      a.setBeacon(r.x, r.z, 0xf2c230);
+    }
+    car.mine = true;
+    car.sync(0);
+    this.cars.push(car);
+    g.fx.burst(car.pos.x, car.pos.y + 1, car.pos.z, [new THREE.Color('#ffd84a'), new THREE.Color('#ffffff')], 30, { speed: 3, size: 0.12, up: 2, life: 0.8, spread: 1.2 });
+    g.sound.powerup();
+    return `${def.name} spawned${placed ? ' right next to you' : ' on the nearest road'}! Walk up to it and press E.`;
   }
 
   spawnBoss(i) {

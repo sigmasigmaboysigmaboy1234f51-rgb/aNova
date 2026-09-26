@@ -167,7 +167,7 @@ The cheat menu is **locked with a secret password** that only the game's owner k
   - **Launch Gun** blasts you toward wherever you point.
 - **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks, **Super buff** (huge muscles; your hits do double damage and knock mobs flying) and **Giga Chad** (see below).
 - **Size:** Tiny, Normal, Tall, Giant or Titan. Tiny players squeeze through one-block gaps. Tall and bigger players walk straight up blocks, and Giants and Titans stomp the ground when they land, flattening mobs nearby. Other players see how big (and how buff) you are.
-- **World:** freeze every mob, pause the waves, knock out every mob, skip a wave, summon any boss, spawn any mob, day or night, any weather, add bots to a Bot Duel, full health, every power-up at once.
+- **World:** freeze every mob, pause the waves, knock out every mob, skip a wave, summon any boss, spawn any mob, day or night, any weather, add bots to a Bot Duel, full health, every power-up at once, and in Adventure **spawn any car** right next to you (the Hyper Car is picked first). Up to 3 spawned cars stay; a 4th replaces the oldest.
 - **Goodies:** +10,000 coins, unlock every gun and part, unlock every Style item, level up, a free Lucky Wheel spin.
 
 Runs with cheats on don't count for your best score.
