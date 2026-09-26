@@ -455,6 +455,7 @@ export class Webs {
     this.swings++;
     // Swings in a row without touching the ground.
     if (!p.onGround) this.streak = (this.streak || 0) + 1;
+    if (this.streak >= 2) g.voices.say('swing', { chance: 0.35, cd: 10 });
     // A little hop off the ground to get going.
     if (p.onGround) p.vel.y = Math.max(p.vel.y, 6);
   }
@@ -716,6 +717,7 @@ export class Webs {
       const cols = below ? g.atlas.colors[BLOCKS[below].top] : WHITE;
       g.fx.burst(p.pos.x, p.pos.y + 0.1, p.pos.z, cols, 24, { speed: 6, size: 0.14, up: 1.5, life: 0.7, spread: 0.6 });
       g.sound.landThud(1);
+      g.voices.say('landing', { cd: 6 });
     }
     if (p.onGround) this.flip = 0;
     // Landed after a long run of swings: coins.
@@ -757,7 +759,10 @@ export class Webs {
     mesh.position.copy(from);
     g.scene.add(mesh);
     this.balls.push({ pos: from, vel: dir.multiplyScalar(big ? 38 : 50).addScaledVector(p.vel, 0.3), life: big ? 1.3 : 1.6, mesh, big });
-    if (big) g.sound.webBlast(0.7);
+    if (big) {
+      g.sound.webBlast(0.7);
+      g.voices.say('blast', { cd: 3, force: true });
+    }
     else g.sound.thwip(0.8);
   }
 
@@ -839,6 +844,7 @@ export class Webs {
     // 0 = straight ahead of you, clockwise.
     this.senseDir = -(a - (p.yaw + Math.PI));
     g.sound.tingle(1);
+    g.voices.say('sense', { cd: 8 });
   }
 
   // A few moments after spider-sense, shots miss more.
@@ -854,6 +860,7 @@ export class Webs {
     const cols = [new THREE.Color(def.main), new THREE.Color(def.second), new THREE.Color('#ffffff')];
     g.fx.burst(p.pos.x, p.pos.y + p.h * 0.6, p.pos.z, cols, 36, { speed: 3.5, size: 0.09, up: 1.5, life: 0.7, spread: 0.5 * p.size });
     g.sound.suitUp(swap ? 0.6 : 1);
+    if (!swap) g.voices.say('suit', { cd: 8 });
     const fl = $('#suit-flash');
     if (fl) {
       fl.style.setProperty('--a', def.main);

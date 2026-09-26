@@ -23,7 +23,18 @@ const result = await build({
   banner: { js: `/*! ${NOTICE} */` },
   write: false,
 });
-const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+// Built-in voices: a voice pack saved from the Voice Studio, if there is one.
+let voices = '';
+try {
+  const pack = JSON.parse(await readFile('voices/pack.json', 'utf8'));
+  if (pack && pack.app === 'blockfire-voices' && Array.isArray(pack.clips)) {
+    voices = `window.BLOCKFIRE_VOICES=${JSON.stringify(pack)};`;
+    console.log(`voices/pack.json  ${pack.clips.length} built-in recordings`);
+  }
+} catch {
+  // No voice pack: that's fine.
+}
+const js = (voices + result.outputFiles[0].text).replace(/<\/script/gi, '<\\/script');
 // Fonts are inlined as data URIs so the page is one self-contained file.
 let css = await readFile('src/style.css', 'utf8');
 for (const [, file] of [...css.matchAll(/url\((fonts\/[\w.-]+\.woff2)\)/g)]) {

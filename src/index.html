@@ -138,6 +138,7 @@
         <div class="btn-row">
           <button id="btn-wheel" class="btn btn-gold" type="button">Lucky Wheel <span id="wheel-dot" class="dot" hidden></span></button>
           <button id="btn-skin" class="btn" type="button">Edit skin</button>
+          <button id="btn-voices" class="btn btn-new" type="button">Voices</button>
         </div>
         <div class="btn-row">
           <button id="btn-settings" class="btn btn-quiet" type="button">Settings</button>
@@ -490,6 +491,29 @@
       <button id="set-done" class="btn btn-go" type="button">Done</button>
       <button id="set-reset" class="btn btn-quiet" type="button">Reset to defaults</button>
     </div>
+  </div>
+</section>
+
+<section id="voices" class="screen overlay" hidden aria-label="Voice Studio">
+  <div class="panel vs-panel">
+    <header class="vs-head">
+      <div>
+        <h2 class="overlay-title">Voice Studio</h2>
+        <p class="note">Record your own voice for the game, up to 3 takes for each line (it picks one at random). Using a voice changer? Pick it as the microphone.</p>
+      </div>
+      <button id="vs-done" class="btn btn-go" type="button">Done</button>
+    </header>
+    <div class="vs-bar">
+      <label class="field vs-micfield" for="vs-mic"><span>Microphone</span><select id="vs-mic"><option value="">Default microphone</option></select></label>
+      <div class="vs-meter" aria-hidden="true"><i id="vs-level"></i></div>
+      <label class="check" for="vs-on"><input id="vs-on" type="checkbox" checked><span>Play my voices in the game</span></label>
+      <span id="vs-count" class="vs-count"></span>
+      <button id="vs-export" class="btn btn-small" type="button">Save voice pack</button>
+      <label class="btn btn-small" for="vs-import">Load voice pack</label>
+      <input id="vs-import" type="file" accept=".json,application/json" hidden>
+    </div>
+    <p id="vs-msg" class="vs-msg" role="status" aria-live="polite"></p>
+    <div id="vs-list" class="vs-list"></div>
   </div>
 </section>
 

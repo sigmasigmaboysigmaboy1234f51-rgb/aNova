@@ -850,6 +850,7 @@ export class Player {
     this.sprintLatch = false;
     this.game.sound.reload(w.stats.reload * (this.buff("rapid") ? 0.5 : 1), w.def.frame);
     this.game.combat.beamTick(this, null, 0, false);
+    this.game.voices.say('reload', { chance: 0.3, cd: 12 });
   }
 
   fire(w) {
@@ -1096,6 +1097,7 @@ export class Player {
     // The spider suit is tough.
     if (g.adventure && g.adventure.webs.suited && source !== 'cheat') amount = Math.ceil(amount * 0.6);
     const knock = fx && fx.knock ? fx.knock : 1;
+    if (amount >= 3 && amount < this.hp) g.voices.say('hurt', { cd: 5 });
     this.hp -= amount;
     this.invuln = 0.4;
     this.sinceHurt = 0;

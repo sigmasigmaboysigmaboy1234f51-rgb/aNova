@@ -163,6 +163,7 @@ export class Crimes {
     }
     g.hud.showBanner('CRIME ALERT!', pick(RADIO[kind]), 3.5);
     g.sound.radio(1);
+    g.voices.say('radio', { force: true, cut: true, cd: 2 });
     this.webs.sense(a.beaconAt ? new THREE.Vector3(a.beaconAt[0], g.player.pos.y, a.beaconAt[1]) : g.player.pos);
   }
 
@@ -201,6 +202,7 @@ export class Crimes {
     if (r.caught) return;
     r.caught = true;
     r.webT = 1e6;
+    this.game.voices.say('robber', { cd: 2 });
     const c = this.active;
     const left = c ? c.robbers.filter((x) => !x.caught).length : 0;
     if (c && left) this.game.hud.popup(`Robber caught! ${left} to go`);
@@ -221,6 +223,7 @@ export class Crimes {
       g.progress.addXp(150);
       g.progress.event('crime', { n: a.prog.crimes });
       g.hud.showBanner('Crime stopped!', `Your friendly neighbourhood hero · +${coins} coins`, 3.5);
+      g.voices.say('stopped', { force: true, cd: 2 });
       g.sound.cleared();
       g.profile.scheduleSave();
     } else if (result === 'fail' && !quiet) {

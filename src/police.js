@@ -819,6 +819,7 @@ export class Police {
     this.lastKnown.copy(p);
     if (this.stars > before) {
       g.sound.chirp();
+      if (before === 0) g.voices.say('cop', { cd: 20 });
       const pop = $('#wanted');
       pop.classList.remove('bump');
       void pop.offsetWidth;
@@ -834,6 +835,7 @@ export class Police {
     this.calls = this.calls.filter((c) => c !== person);
     this.calls.push(person);
     this.game.sound.dial();
+    if (person.pos.distanceTo(this.game.player.pos) < 25) this.game.voices.say('call', { cd: 10 });
   }
 
   // ...and got through.
@@ -1024,6 +1026,7 @@ export class Police {
 
   busted() {
     const g = this.game;
+    g.voices.say('busted', { force: true, cut: true });
     const adv = this.adv;
     const fine = Math.min(g.profile.coins, this.stars * 25);
     if (g.player.driving) adv.exitCar(true);

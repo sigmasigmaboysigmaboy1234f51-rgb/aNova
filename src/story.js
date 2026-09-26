@@ -115,6 +115,9 @@ export class Dialogue {
     drawPortrait(this.pic, who, this.game.skin.canvas);
     this.name.textContent = c.name;
     this.name.style.color = c.color;
+    // Your recorded voice for whoever is talking.
+    const voice = who === 'gran' || who === 'pip' || who === 'you' ? who : typeof who === 'string' && CAST[who] ? 'villain' : null;
+    if (voice) this.game.voices.say(voice, { force: true, cut: true, cd: 0.2 });
     this.full = text;
     this.typed = 0;
     this.text.textContent = '';

@@ -117,6 +117,16 @@ Other players see your whole look online.
 - **Kill streaks:** 5, 10, 15, 20, 30, 50 and 100 in a row without getting cubed get big callouts and bonus coins.
 - **Damage numbers** pop out of mobs when you hit them (you can turn them off in Settings).
 
+## Voice Studio: your own voice in the game
+
+Click **Voices** on the title screen and record your own voice for 23 moments in the game: the spider suit going on, swinging, Web Blasts, spider-sense, the police radio, robbers getting caught, the police shouting "Freeze!", people calling 5-0-5-0, new waves, bosses, headshots, kill streaks, getting hurt or knocked out, reloading, winning, and the voices of You, Grandma Brick, Pip and the bosses in the story.
+
+- **Record:** click **● Record**, say the line, click **■ Stop** (it stops by itself after 5 seconds). Silence at the start and end is cut off. Each line holds 3 takes and the game picks one at random.
+- **Voice changer:** pick your voice changer as the **Microphone** at the top, and the game records the changed voice.
+- **Effects:** every line can also have an effect: Deep, Squeaky, Robot, Monster, Police radio, Phone or Echo.
+- **Saving:** recordings stay on this computer. **Save voice pack** puts them all in one file, and **Load voice pack** brings them back (on another computer too). Put a voice pack in the project as `voices/pack.json` and the next build has those voices built in for everyone; your own recordings still play instead.
+- Recording needs the desktop app, or the game's `index.html` opened in Chrome or Edge (with the microphone allowed).
+
 ## Cheats
 
 Press **`** (the key under Esc) in a game, or click **Cheats** on the title screen or the pause menu.
@@ -324,6 +334,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights and the minimap |
 | `src/cars.js`, `src/townsfolk.js` | Drivable cars and traffic, and the people of Blockton |
 | `src/police.js` | Wanted stars, police cars, officers, the helicopter and phone calls to 5-0-5-0 |
+| `src/voices.js` | The Voice Studio: recording, voice effects and playing your lines in the game |
 | `src/webs.js`, `src/suit.js`, `src/crimes.js` | Web shooters (swinging, zipping, yanking, crawling, gliding, spider-sense), the spider suits and crime alerts |
 | `server/server.cjs` | Optional dedicated server (Node.js) |
 | `desktop/` | The Windows/desktop app (Electron) |

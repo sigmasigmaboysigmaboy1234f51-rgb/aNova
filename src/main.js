@@ -22,6 +22,7 @@ import { Modes, VARIANTS, bestFor } from './modes.js';
 import { Pet } from './pets.js';
 import { DamageNumbers } from './popnums.js';
 import { SettingsScreen, loadSettings } from './settings.js';
+import { VoiceBank, VoiceStudio } from './voices.js';
 import { Sky } from './sky.js';
 import { Wheel } from './wheel.js';
 import { Cheats } from './cheats.js';
@@ -158,6 +159,7 @@ class Game {
     this.dnums = new DamageNumbers(this, $('#dnums'));
     this.settings = loadSettings();
     this.sound.setMuted(this.settings.muted);
+    this.voices = new VoiceBank(this);
     this.stats = { kills: 0, heads: 0, placed: 0, shots: 0, score: 0, coins: 0 };
     this.profile = new Profile();
     this.combat = new Combat(this);
@@ -376,6 +378,8 @@ class Game {
       modes.appendChild(o);
     }
 
+    this.voiceStudio = new VoiceStudio(this);
+    $('#btn-voices').addEventListener('click', () => this.voiceStudio.open('menu'));
     this.settingsScreen = new SettingsScreen(this);
     $('#btn-settings').addEventListener('click', () => this.settingsScreen.open('menu'));
     $('#btn-pause-settings').addEventListener('click', () => this.settingsScreen.open('paused'));
@@ -486,6 +490,9 @@ class Game {
     else this.wardrobe.hide();
     if (s === 'settings') this.settingsScreen.show();
     else this.settingsScreen.hide();
+    if (s === 'playing') this.voices.warm();
+    if (s === 'voices') this.voiceStudio.show();
+    else if (this.voiceStudio && !this.voiceStudio.el.hidden) this.voiceStudio.hide();
     if (s === 'wheel') this.wheel.show();
     else if (this.wheel.open) this.wheel.hide();
     if (s === 'cheats') this.cheats.show();
@@ -607,6 +614,7 @@ class Game {
 
   storyWin(index, stars, rewards, time) {
     this.input.exitLock();
+    this.voices.say('win', { force: true, cd: 3 });
     $('#sw-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     const why = $('#sw-why');
     why.textContent = '';
@@ -1052,12 +1060,14 @@ class Game {
       const sub = `${b.name}: ${b.title}`;
       this.hud.showBanner(`Boss wave ${n}`, sub, 3.5);
       this.sound.roar(1);
+      this.voices.say('boss', { force: true, cd: 10 });
       if (this.mp) this.mp.sendBanner(`Boss wave ${n}`, sub, 'wave');
       return;
     }
     const tip = WAVE_TIPS[n] || LATE_TIPS[n % LATE_TIPS.length];
     this.hud.showBanner(`Wave ${n}`, tip);
     this.sound.wave();
+    this.voices.say('wave', { cd: 20 });
     if (this.mp) this.mp.sendBanner(`Wave ${n}`, tip, 'wave');
   }
 
@@ -1177,6 +1187,7 @@ class Game {
       const sub = 'It dropped a supply crate!';
       this.hud.showBanner(`${mob.def.name} defeated!`, sub, 3.5);
       this.sound.cleared();
+      this.voices.say('win', { force: true, cd: 3 });
       if (this.mp) this.mp.sendBanner(`${mob.def.name} defeated!`, sub, '');
       return;
     }
@@ -1204,6 +1215,7 @@ class Game {
     pts = Math.round(pts * mult);
     this.stats.score += pts;
     this.hud.popup(head ? `Headshot +${pts}` : `+${pts}`, head ? 'head' : '');
+    if (head) this.voices.say('head', { chance: 0.35, cd: 6 });
     // Streaks: kills without dying.
     this.streak = (this.streak || 0) + 1;
     this.stats.bestStreak = Math.max(this.stats.bestStreak || 0, this.streak);
@@ -1212,6 +1224,7 @@ class Game {
       const coins = call.n * 4;
       this.hud.streak(call.name, `${call.n} in a row without getting cubed. +${coins} coins`);
       this.sound.streak(STREAKS.indexOf(call));
+      this.voices.say('streak', { force: true, cd: 3 });
       this.gainCoins(coins);
       this.progress.event('streak', { n: call.n });
       if (this.mp) this.mp.system(`${this.mp.name} is on a ${call.name.replace('!', '').toLowerCase()} (${call.n} in a row)`);
@@ -1220,6 +1233,7 @@ class Game {
 
   onPlayerDeath() {
     this.hud.banner.hidden = true;
+    this.voices.say('down', { force: true, cut: true, cd: 2 });
     this.streak = 0;
     this.combo = 0;
     this.comboT = 0;
