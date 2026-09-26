@@ -73,6 +73,23 @@ export const B = {
   TAR: 56,
   WOOD_DARK: 57,
   RED_PANEL: 58,
+  CARPET: 59,
+  BED: 60,
+  COUNTER: 61,
+  SHELF: 62,
+  BOOKS: 63,
+  BOARD: 64,
+  BARS: 65,
+  FARMLAND: 66,
+  WHEAT: 67,
+  HAY: 68,
+  CONTAINER_RED: 69,
+  CONTAINER_BLUE: 70,
+  CONTAINER_GREEN: 71,
+  LOCKER: 72,
+  FREEZER: 73,
+  SCREEN: 74,
+  RUBBER: 75,
 };
 
 const def = (name, hp, sound, top, side = top, bottom = top) => ({ name, hp, sound, top, side, bottom });
@@ -136,6 +153,23 @@ export const BLOCKS = [
   def('Flat roof', 5, 'hard', T.TAR, T.CONCRETE, T.CONCRETE),
   def('Dark wood', 3, 'wood', T.WOOD_DARK),
   def('Red panels', 5, 'hard', T.RED_PANEL),
+  def('Carpet', 2, 'soft', T.CARPET),
+  def('Bed', 2, 'soft', T.BED_TOP, T.BED_SIDE, T.WOOD_DARK),
+  def('Counter', 3, 'wood', T.COUNTER_TOP, T.COUNTER_SIDE, T.WOOD_DARK),
+  def('Shelves', 3, 'wood', T.COUNTER_TOP, T.SHELF, T.COUNTER_TOP),
+  def('Bookshelf', 3, 'wood', T.PLANKS, T.BOOKS, T.PLANKS),
+  def('Chalkboard', 3, 'wood', T.WOOD_DARK, T.BOARD, T.WOOD_DARK),
+  def('Bars', Infinity, 'hard', T.METAL, T.BARS, T.METAL),
+  def('Farmland', 2, 'soft', T.FARMLAND, T.DIRT),
+  def('Wheat', 1, 'leaf', T.WHEAT_TOP, T.WHEAT_SIDE, T.DIRT),
+  def('Hay bale', 2, 'soft', T.HAY_TOP, T.HAY_SIDE),
+  def('Container', 7, 'hard', T.CONTAINER_RED),
+  def('Container', 7, 'hard', T.CONTAINER_BLUE),
+  def('Container', 7, 'hard', T.CONTAINER_GREEN),
+  def('Lockers', 5, 'hard', T.METAL, T.LOCKER, T.METAL),
+  def('Fridge', 3, 'hard', T.METAL, T.FREEZER, T.METAL),
+  def('Screen', 2, 'hard', T.METAL, T.SCREEN, T.METAL),
+  def('Gym floor', 4, 'soft', T.RUBBER),
 ];
 
 // Faces list corners in bottom-left, bottom-right, top-right, top-left order
@@ -170,6 +204,18 @@ const FACES = [
   }),
 }));
 
+// Chunk offsets within r of the middle, nearest first.
+const SPIRALS = new Map();
+function spiral(r) {
+  if (!SPIRALS.has(r)) {
+    const out = [];
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dz * dz <= r * r) out.push([dx, dz, dx * dx + dz * dz]);
+    out.sort((a, b) => a[2] - b[2]);
+    SPIRALS.set(r, out);
+  }
+  return SPIRALS.get(r);
+}
+
 export class World {
   constructor(scene, atlas) {
     this.data = new Uint8Array(SX * SY * SZ);
@@ -193,6 +239,12 @@ export class World {
     this.meshes = new Array(NCX * NCZ).fill(null);
     this.dirty = new Set();
     this.version = 0;
+    // Big worlds stream: only chunks within streamR of you are built and
+    // drawn (see stream()). 0 means build everything.
+    this.streamR = 0;
+    // Columns changed since the mobs last looked (see flow.js). null means
+    // everything changed.
+    this.editedCols = null;
   }
 
   idx(x, y, z) {
@@ -217,6 +269,10 @@ export class World {
     this.data = new Uint8Array(SX * SY * SZ);
     this.meshes = new Array(NCX * NCZ).fill(null);
     this.dirty = new Set();
+    this.editedCols = null;
+    this.focusCX = null;
+    // A new size of world is built whole unless it asks to stream.
+    this.streamR = 0;
     this.version++;
   }
 
@@ -248,6 +304,7 @@ export class World {
     const k = this.idx(x, y, z);
     if (this.data[k] === id) return;
     this.data[k] = id;
+    if (this.editedCols) this.editedCols.push(z * SX + x);
     if (!silent && this.onEdit) this.onEdit(x, y, z, id);
     this.clearDamage(k);
     for (let dz = -1; dz <= 1; dz++) {
@@ -382,6 +439,8 @@ export class World {
 
   markAllDirty() {
     for (let i = 0; i < NCX * NCZ; i++) this.dirty.add(i);
+    this.editedCols = null;
+    this.focusCX = null;
     this.version++;
   }
 
@@ -618,12 +677,82 @@ export class World {
     return null;
   }
 
+  // Streaming: build the chunks nearest (x, z) that need it (up to `r`
+  // chunks away) for about `ms` milliseconds, show the ones in range and
+  // free far ones.
+  stream(x, z, ms = 5, r = this.streamR) {
+    const R = this.streamR;
+    const fx = Math.floor(x / CHUNK);
+    const fz = Math.floor(z / CHUNK);
+    // Chunks this close get built now, however long it takes.
+    let must = 0;
+    if (fx !== this.focusCX || fz !== this.focusCZ) {
+      // A big jump (a teleport, a respawn): build what's right round you.
+      if (this.focusCX !== null && this.focusCX !== undefined && Math.hypot(fx - this.focusCX, fz - this.focusCZ) > 4) must = 4;
+      this.focusCX = fx;
+      this.focusCZ = fz;
+      for (let ci = 0; ci < this.meshes.length; ci++) {
+        const m = this.meshes[ci];
+        if (!m) continue;
+        const d = Math.hypot((ci % NCX) - fx, Math.floor(ci / NCX) - fz);
+        if (d > R + 3) {
+          // Far away: free it, and build it again when you come back.
+          this.group.remove(m);
+          m.geometry.dispose();
+          this.meshes[ci] = null;
+          this.dirty.add(ci);
+        } else m.visible = d <= R + 0.5;
+      }
+    }
+    const end = performance.now() + ms;
+    for (const [dx, dz, d2] of spiral(r)) {
+      const cx = fx + dx;
+      const cz = fz + dz;
+      if (cx < 0 || cz < 0 || cx >= NCX || cz >= NCZ) continue;
+      const ci = cz * NCX + cx;
+      if (!this.dirty.has(ci)) continue;
+      this.buildChunk(ci);
+      this.dirty.delete(ci);
+      if (d2 > must * must && performance.now() > end) break;
+    }
+  }
+
   flush(limit = Infinity) {
     let n = 0;
     for (const ci of this.dirty) {
       this.buildChunk(ci);
       this.dirty.delete(ci);
       if (++n >= limit) break;
+    }
+  }
+
+  // Is every chunk within r of (x, z) built? (For showing the world only
+  // once the part round you is ready.)
+  readyNear(x, z, r) {
+    const fx = Math.floor(x / CHUNK);
+    const fz = Math.floor(z / CHUNK);
+    for (const [dx, dz] of spiral(r)) {
+      const cx = fx + dx;
+      const cz = fz + dz;
+      if (cx < 0 || cz < 0 || cx >= NCX || cz >= NCZ) continue;
+      if (this.dirty.has(cz * NCX + cx)) return false;
+    }
+    return true;
+  }
+
+  // Heights where things can stand, for just the columns in `cols`.
+  computeStandCols(out, cols) {
+    for (const k of cols) {
+      const x = k % SX;
+      const z = (k / SX) | 0;
+      let s = -1;
+      for (let y = 1; y < SY - 1; y++) {
+        if (this.solid(x, y - 1, z) && !this.solid(x, y, z) && !this.solid(x, y + 1, z)) {
+          s = y;
+          break;
+        }
+      }
+      out[k] = s;
     }
   }
 
@@ -680,6 +809,7 @@ export class World {
       this.meshes[ci] = mesh;
       this.group.add(mesh);
     }
+    mesh.visible = true;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));

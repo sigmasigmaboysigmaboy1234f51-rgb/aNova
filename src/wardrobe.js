@@ -42,11 +42,11 @@ export class Wardrobe {
     this.sel = null;
     this.queue = [];
     $('#st-coin-icon').src = COIN_ICON;
-    $('#st-done').addEventListener('click', () => game.setState('menu'));
+    $('#st-done').addEventListener('click', () => game.closeStyle());
     this.el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        game.setState('menu');
+        game.closeStyle();
       }
     });
     for (const b of this.el.querySelectorAll('[data-tab]')) {

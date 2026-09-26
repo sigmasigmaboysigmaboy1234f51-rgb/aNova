@@ -59,7 +59,7 @@ export class FlowField {
   constructor() {
     this.dist = new Float32Array(SX * SZ).fill(Infinity);
     this.stand = new Int16Array(SX * SZ).fill(-1);
-    this.heap = new MinHeap(SX * SZ * 9);
+    this.heap = new MinHeap(Math.min(SX * SZ * 9, 1500000));
   }
 
   at(x, z) {
@@ -78,11 +78,14 @@ export class FlowField {
     if (this.dist.length !== SX * SZ) {
       this.dist = new Float32Array(SX * SZ).fill(Infinity);
       this.stand = new Int16Array(SX * SZ).fill(-1);
-      this.heap = new MinHeap(SX * SZ * 9);
+      this.heap = new MinHeap(Math.min(SX * SZ * 9, 1500000));
     }
-    // Where things can stand only changes when blocks do.
+    // Where things can stand only changes when blocks do: just the columns
+    // that changed, or everything after a new world.
     if (this.standVersion !== world.version || this.standSize !== SX * SZ) {
-      world.computeStand(this.stand);
+      if (this.standSize === SX * SZ && world.editedCols && world.editedCols.length < 20000) world.computeStandCols(this.stand, world.editedCols);
+      else world.computeStand(this.stand);
+      world.editedCols = [];
       this.standVersion = world.version;
       this.standSize = SX * SZ;
     }
@@ -97,14 +100,16 @@ export class FlowField {
       dist[tz * SX + tx] = 0;
       heap.push(0, tz * SX + tx);
     }
+    // Blockton County is huge: mobs there only need paths from nearby.
+    const limit = SX > 300 ? 72 : 110;
     // Can a mob step from column b into column a? One block up at most.
     const ok = (a, b) => a >= 0 && b >= 0 && a - b <= 1 && b - a <= 4;
     while (heap.n > 0) {
       const i = heap.pop();
       const d = heap.lastKey;
       if (d > dist[i]) continue;
-      // Nothing that far away needs a path (keeps big maps fast).
-      if (d > 110) break;
+        // Nothing that far away needs a path (keeps big maps fast).
+      if (d > limit) break;
       const x = i % SX;
       const z = (i / SX) | 0;
       const hc = stand[i];

@@ -5,7 +5,7 @@ import { mulberry32 } from './rng.js';
 
 export const TILE = 16;
 const COLS = 8;
-const ROWS = 8;
+const ROWS = 16;
 
 export const T = {
   GRASS_TOP: 0,
@@ -71,6 +71,28 @@ export const T = {
   TAR: 60,
   WOOD_DARK: 61,
   RED_PANEL: 62,
+  // Inside buildings, farms and the docks.
+  CARPET: 63,
+  BED_TOP: 64,
+  BED_SIDE: 65,
+  COUNTER_TOP: 66,
+  COUNTER_SIDE: 67,
+  SHELF: 68,
+  BOOKS: 69,
+  BOARD: 70,
+  BARS: 71,
+  FARMLAND: 72,
+  WHEAT_TOP: 73,
+  WHEAT_SIDE: 74,
+  HAY_TOP: 75,
+  HAY_SIDE: 76,
+  CONTAINER_RED: 77,
+  CONTAINER_BLUE: 78,
+  CONTAINER_GREEN: 79,
+  LOCKER: 80,
+  FREEZER: 81,
+  SCREEN: 82,
+  RUBBER: 83,
 };
 
 const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
@@ -574,7 +596,153 @@ const PAINTERS = {
   [T.RED_PANEL](set, rng) {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x % 4 === 3 ? '#8a1c14' : pick(rng, ['#c42a1e', '#b82618', '#cc3024']));
   },
+  // A red carpet with a gold border pattern.
+  [T.CARPET](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const e = Math.min(x, y, 15 - x, 15 - y);
+        const diamond = Math.abs(x - 7.5) + Math.abs(y - 7.5) < 4.5 && (x + y) % 2 === 0;
+        set(x, y, e === 1 || diamond ? '#d8a940' : pick(rng, ['#9c1f2a', '#a52330', '#931c26']));
+      }
+    }
+  },
+  // A bed from above: pillow at one end, a blanket over the rest.
+  [T.BED_TOP](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        let c;
+        if (x === 0 || x === 15) c = '#6a4428';
+        else if (y < 5) c = y === 0 ? '#6a4428' : x === 1 || x === 14 || y === 4 ? '#d8d6d0' : pick(rng, ['#f6f5f0', '#eeede6']);
+        else if (y === 5) c = '#f0efe8';
+        else c = (x + y) % 6 === 0 ? '#2f5fb0' : pick(rng, ['#3c74cf', '#3a70c8', '#4079d4']);
+        set(x, y, c);
+      }
+    }
+  },
+  [T.BED_SIDE](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y < 3 ? pick(rng, ['#f6f5f0', '#eeede6']) : y < 10 ? pick(rng, ['#3c74cf', '#3a70c8']) : y < 12 ? '#4a2e18' : x < 2 || x > 13 ? '#4a2e18' : '#1e1e22');
+  },
+  [T.COUNTER_TOP](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, (x + y * 3) % 11 === 0 ? '#e8e4dc' : pick(rng, ['#d9d4c8', '#d2cdc0', '#dcd8cd']));
+  },
+  [T.COUNTER_SIDE](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y < 2 ? '#d9d4c8' : y === 2 ? '#3a2616' : x % 8 === 0 ? '#4e331d' : pick(rng, ['#7a5230', '#744e2d', '#80572f']));
+  },
+  // Shop shelves stacked with boxes, cans and bottles.
+  [T.SHELF](set, rng) {
+    const goods = ['#d94c4c', '#3c7dd9', '#e6c229', '#3f9a55', '#f0f0ea', '#e0752d', '#b46cff'];
+    for (let y = 0; y < 16; y++) {
+      const band = y >> 2;
+      for (let x = 0; x < 16; x++) {
+        if (y % 4 === 3) set(x, y, '#8a8f96');
+        else if (x === 0 || x === 15) set(x, y, '#6c7178');
+        else {
+          const slot = (x >> 1) + band * 5;
+          set(x, y, y % 4 === 0 && (slot * 7) % 3 === 0 ? '#2a2b2e' : goods[(slot * 5 + band) % goods.length]);
+        }
+      }
+    }
+  },
+  [T.BOOKS](set, rng) {
+    const spines = ['#8a2a22', '#2a4a8a', '#3a6a2a', '#8a6a1a', '#5a2a6a', '#2a6a6a', '#c8b89a'];
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (y % 8 === 7 || y % 8 === 0) set(x, y, '#6a4428');
+        else if (x === 0 || x === 15) set(x, y, '#5a3a20');
+        else {
+          const book = ((x + (y >> 3) * 5) * 13) % spines.length;
+          set(x, y, (y % 8 === 1 || y % 8 === 6) && x % 2 ? '#e8d8a0' : spines[book]);
+        }
+      }
+    }
+  },
+  // A chalkboard: a wooden frame, green board and chalk sums.
+  [T.BOARD](set, rng) {
+    const chalk = [
+      '................',
+      '................',
+      '..#.#..###..#...',
+      '..###....#..#...',
+      '....#..###..#...',
+      '....#..#....#...',
+      '....#..###..#...',
+      '................',
+      '..##.....##.....',
+      '....#...#..#....',
+      '...#...#....#...',
+      '..###..#....#...',
+      '.......##..##...',
+      '................',
+    ];
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (y === 0 || y === 15 || x === 0 || x === 15) set(x, y, '#7a5230');
+        else if (chalk[y - 1] && chalk[y - 1][x] === '#') set(x, y, '#e8eee8');
+        else set(x, y, pick(rng, ['#2f4a3a', '#2c4636', '#324e3e']));
+      }
+    }
+  },
+  // Jail bars in front of a dark cell.
+  [T.BARS](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y === 0 || y === 15 || y === 7 ? '#5a5f66' : x % 4 === 1 ? '#9aa0a8' : x % 4 === 2 ? '#6c7178' : pick(rng, ['#1a1b1e', '#202124']));
+  },
+  [T.FARMLAND](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y % 4 === 0 ? '#3e2716' : y % 4 === 1 ? pick(rng, ['#5c3b22', '#553620']) : pick(rng, ['#6d4a2f', '#735033', '#684629']));
+  },
+  [T.WHEAT_TOP](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, rng() < 0.18 ? '#8a6a1a' : pick(rng, ['#e6c24a', '#d8b13a', '#f0d060', '#c9a236']));
+  },
+  [T.WHEAT_SIDE](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const stalk = x % 3 === 1;
+        const ear = y < 5 && (x + y) % 3 !== 2;
+        set(x, y, ear ? pick(rng, ['#e6c24a', '#d8b13a', '#f0d060']) : stalk ? pick(rng, ['#b09a3a', '#a08a30', '#8aa040']) : y > 12 ? '#5c3b22' : pick(rng, ['#c9a236', '#9a8a30']));
+      }
+    }
+  },
+  [T.HAY_TOP](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x === 5 || x === 10 ? '#7a2a1a' : pick(rng, ['#d9b24a', '#cfa640', '#e2bc55', '#c49a38']));
+  },
+  [T.HAY_SIDE](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y === 5 || y === 10 ? '#7a2a1a' : (x + y * 2) % 5 === 0 ? '#b8902e' : pick(rng, ['#d9b24a', '#cfa640', '#e2bc55']));
+  },
+  [T.CONTAINER_RED]: (set, rng) => container(set, rng, ['#b8322a', '#a82c24', '#c23a30'], '#7a1e18'),
+  [T.CONTAINER_BLUE]: (set, rng) => container(set, rng, ['#2f5fa8', '#2a579c', '#3668b4'], '#1a3a6a'),
+  [T.CONTAINER_GREEN]: (set, rng) => container(set, rng, ['#3f8a4a', '#377f42', '#459452'], '#22552c'),
+  [T.LOCKER](set, rng) {
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const edge = x % 8 === 0 || y === 0 || y === 15;
+        const vent = y >= 2 && y <= 4 && x % 8 >= 2 && x % 8 <= 5 && y % 2 === 0;
+        set(x, y, edge ? '#3a4a5a' : vent ? '#22303c' : x % 8 === 6 && y === 8 ? '#c8ccd2' : pick(rng, ['#5a7a9a', '#557594', '#5f80a0']));
+      }
+    }
+  },
+  // A glass-doored fridge full of drinks.
+  [T.FREEZER](set, rng) {
+    const cans = ['#d94c4c', '#3c7dd9', '#e6c229', '#3f9a55', '#f0f0ea'];
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (x === 0 || x === 15 || y === 0 || y === 15 || x === 7 || x === 8) set(x, y, '#c8ccd2');
+        else if (y % 5 === 0) set(x, y, '#e8f4fb');
+        else set(x, y, (x + y) % 3 === 0 ? '#bfe2f2' : cans[((x >> 1) + ((y / 5) | 0) * 3) % cans.length]);
+      }
+    }
+  },
+  [T.SCREEN](set, rng) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, x === 0 || x === 15 || y === 0 || y === 15 ? '#1a1a1c' : (x - y + 16) % 9 < 2 ? '#3a5a7a' : pick(rng, ['#20304a', '#1c2a42', '#243652']));
+  },
+  [T.RUBBER](set, rng) {
+    fillAll(set, rng, ['#2a2b2e', '#26272a', '#2e2f33', '#232427']);
+    for (let i = 0; i < 10; i++) set((rng() * 16) | 0, (rng() * 16) | 0, pick(rng, ['#d94c4c', '#3c7dd9', '#e6c229']));
+  },
 };
+
+// A corrugated steel shipping container.
+function container(set, rng, shades, rib) {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set(x, y, y === 0 || y === 15 ? rib : x % 3 === 0 ? rib : pick(rng, shades));
+}
 
 function paintTile(t, seed) {
   const c = document.createElement('canvas');

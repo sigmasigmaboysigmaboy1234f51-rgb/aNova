@@ -10,7 +10,8 @@ import { GY } from './city.js';
 // People of Blockton. They stroll round the sidewalks, run away from mobs
 // and gunfire, and dive out of the way of cars. Point a gun at someone and
 // they put their hands up, then run off and phone the police. Some people
-// have a job for you: they stand still with a "!" over their heads.
+// have a job for you: they stand still with a "!" over their heads. Staff
+// (doctors, cashiers, teachers...) stand at their post with a name tag.
 
 const FIRST = ['Sam', 'Alex', 'Jo', 'Max', 'Riley', 'Kim', 'Lee', 'Pat', 'Charlie', 'Robin', 'Jamie', 'Taylor', 'Casey', 'Drew', 'Morgan', 'Quinn'];
 
@@ -77,6 +78,7 @@ export class Person {
     this.pos = new THREE.Vector3(opts.x || 0, GY + 1, opts.z || 0);
     this.vel = new THREE.Vector3();
     this.yaw = opts.yaw || 0;
+    if (opts.staff) this.post = this.yaw;
     this.speed = 0;
     this.loop = opts.loop || null;
     this.leg = 0;
@@ -91,12 +93,15 @@ export class Person {
     this.callT = -1;
     this.callCd = 0;
     this.giver = opts.giver || null;
+    this.staff = !!opts.staff;
     this.visible = true;
     if (this.giver) {
       if (!markTex) markTex = markTexture('!', '#ffd23f');
       this.mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: markTex, depthWrite: false }));
       this.mark.scale.set(0.7, 0.7, 1);
       this.game.scene.add(this.mark);
+    }
+    if (this.giver || this.staff) {
       this.tag = nameplate(opts.title || this.name);
       this.game.scene.add(this.tag);
     }
@@ -134,7 +139,7 @@ export class Person {
 
   // Something scary happened near here.
   scare(from, t = 5) {
-    if (this.giver || this.robber) return;
+    if (this.giver || this.staff || this.robber) return;
     this.fleeT = Math.max(this.fleeT, t);
     this.fleeFrom.copy(from);
   }
@@ -151,7 +156,7 @@ export class Person {
 
   // You're pointing a gun at them (on = true while you aim).
   aimedAt(on, dt, from) {
-    if (this.giver || this.robber) return;
+    if (this.giver || this.staff || this.robber) return;
     if (on) {
       this.threatT += dt;
       this.handsT = 0.6;
@@ -163,7 +168,7 @@ export class Person {
 
   // Get the phone out and dial the police.
   startCall() {
-    if (this.giver || this.callT >= 0) return;
+    if (this.giver || this.staff || this.callT >= 0) return;
     this.callT = 0;
     this.callCd = 30;
     this.fleeT = Math.max(this.fleeT, CALL_TIME + 3);
@@ -204,7 +209,7 @@ export class Person {
       moveX = this.pos.x - this.fleeFrom.x;
       moveZ = this.pos.z - this.fleeFrom.z;
       speed = this.robberRun || 4.2;
-    } else if (this.loop && !this.giver) {
+    } else if (this.loop && !this.giver && !this.staff) {
       this.chatT -= dt;
       if (this.chatT < -12 && Math.random() < dt * 0.1) this.chatT = 2 + Math.random() * 3;
       if (this.chatT <= 0) {
@@ -215,10 +220,11 @@ export class Person {
         if (Math.hypot(moveX, moveZ) < 0.4) this.leg = (this.leg + this.dir + n) % n;
         speed = this.pace;
       }
-    } else if (this.giver) {
-      // Quest givers face you when you come close.
+    } else if (this.giver || this.staff) {
+      // Quest givers and staff face you when you come close.
       const p = g.player;
-      if (p.pos.distanceTo(this.pos) < 8) this.yaw = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+      if (p.pos.distanceTo(this.pos) < (this.staff ? 5 : 8)) this.yaw = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+      else if (this.staff && this.post !== undefined) this.yaw = this.post;
     }
     const len = Math.hypot(moveX, moveZ);
     if (len > 0.01 && speed > 0) {
@@ -258,9 +264,12 @@ export class Person {
     if (this.mark) {
       const on = this.visible && this.adv.showMark(this);
       this.mark.visible = on;
-      this.tag.visible = this.visible;
       const bob = Math.sin(performance.now() / 300) * 0.08;
       this.mark.position.set(this.pos.x, this.pos.y + 2.55 + bob, this.pos.z);
+    }
+    if (this.tag) {
+      // Staff name tags only show up close.
+      this.tag.visible = this.visible && (!this.staff || this.pos.distanceToSquared(this.game.player.pos) < 144);
       this.tag.position.set(this.pos.x, this.pos.y + 2.1, this.pos.z);
     }
   }

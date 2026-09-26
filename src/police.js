@@ -22,8 +22,10 @@ const MAX_STARS = 5;
 const UNITS = [0, 1, 2, 3, 3, 4];
 const SIGHT = 34;
 
-const STREETS_X = ['1st Street', '2nd Street', '3rd Street', '4th Street', '5th Street', '6th Street'];
-const STREETS_Z = ['Maple Avenue', 'Oak Avenue', 'Pine Avenue', 'Cedar Avenue', 'Birch Avenue', 'Willow Avenue'];
+// Roads across the county, west to east and north to south. Blockton's own
+// streets are the six in the middle.
+const STREETS_X = ['Summit Road', 'Pinecrest Lane', 'Harvest Road', 'Barn Lane', 'Meadow Lane', 'Lakeview Drive', '1st Street', '2nd Street', '3rd Street', '4th Street', '5th Street', '6th Street', 'Mill Road', 'Factory Road', 'Foundry Lane', 'Crane Street', 'Harbour Road'];
+const STREETS_Z = ['Cliff Road', 'Cubemore Pass', 'Timber Trail', 'Lakeside Road', 'Elm Grove', 'Hilltop Drive', 'Maple Avenue', 'Oak Avenue', 'Pine Avenue', 'Cedar Avenue', 'Birch Avenue', 'Willow Avenue', 'Plaza Avenue', 'Speedway Drive', 'Sunset Boulevard', 'Beach Road', 'Ocean Drive'];
 
 // The street name nearest to (x, z), for the police radio.
 export function streetAt(x, z) {
@@ -33,12 +35,12 @@ export function streetAt(x, z) {
     const dz = Math.abs(z - r - 0.5);
     if (dz < bd) {
       bd = dz;
-      best = STREETS_X[i];
+      best = STREETS_X[i] || 'the county road';
     }
     const dx = Math.abs(x - r - 0.5);
     if (dx < bd) {
       bd = dx;
-      best = STREETS_Z[i];
+      best = STREETS_Z[i] || 'the county road';
     }
   });
   return best;
@@ -853,6 +855,7 @@ export class Police {
     const g = this.game;
     const p = g.player;
     this.copHitT -= dt;
+    this.blindT = Math.max(0, (this.blindT || 0) - dt);
     this.radioT = Math.max(0, this.radioT - dt);
     this.updatePhone(dt);
     // Who can see you?
@@ -924,6 +927,8 @@ export class Police {
 
   // Is any cop close enough, with nothing in the way?
   canSee() {
+    // Lost in the Hyper Car's smoke screen.
+    if (this.blindT > 0) return false;
     const p = this.game.player.pos;
     if (this.heli && !this.heli.dead && this.stars >= 4 && Math.hypot(this.heli.pos.x - p.x, this.heli.pos.z - p.z) < 45) return true;
     for (const u of this.units) {
@@ -954,7 +959,7 @@ export class Police {
     if (!car) {
       let spot = null;
       for (let k = 0; k < 20; k++) {
-        const r = adv.traffic.randomSpot();
+        const r = adv.traffic.randomSpot(p, 75);
         const d = Math.hypot(r.x - p.x, r.z - p.z);
         if (d < 32 || d > 75) continue;
         // Pointing your way, so they don't start with a U-turn.
@@ -1034,10 +1039,13 @@ export class Police {
     this.reset();
     g.profile.coins -= fine;
     g.profile.changed();
-    const s = adv.policeDoor;
-    g.player.reset(s);
-    g.player.yaw = 0;
-    g.hud.showBanner('BUSTED!', fine ? `Fine: ${fine} coins. The police let you go with a warning.` : 'The police let you go with a warning.', 4);
+    // Off to the cells at the nearest police station for a bit.
+    const why = fine ? `Fine: ${fine} coins, and 10 seconds in a cell.` : '10 seconds in a cell to think about what you did.';
+    if (!adv.places || !adv.places.lockUp(null, 10, why, 'BUSTED!')) {
+      g.player.reset(adv.policeDoor);
+      g.player.yaw = 0;
+      g.hud.showBanner('BUSTED!', fine ? `Fine: ${fine} coins. The police let you go with a warning.` : 'The police let you go with a warning.', 4);
+    }
     g.sound.clank(1);
     g.sound.death();
     g.progress.event('busted', {});
@@ -1142,7 +1150,7 @@ export class Police {
       const w = this.roadPoint(target);
       const spots = [];
       for (let k = 0; k < 12; k++) {
-        const r = adv.traffic.randomSpot();
+        const r = adv.traffic.randomSpot(w, 45);
         const d = Math.hypot(r.x - w.x, r.z - w.z);
         if (d > 18 && d < 45 && !adv.cars.some((c) => c !== car && Math.hypot(c.pos.x - r.x, c.pos.z - r.z) < 6)) spots.push([d, r]);
       }

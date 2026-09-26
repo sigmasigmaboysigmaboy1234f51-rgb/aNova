@@ -38,7 +38,8 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | B | Armory: buy guns and parts, build your loadout |
 | V or F5 | Camera: first person, then from behind you, then from the front (so you can see your face) |
 | Z X C H | Emotes: wave, dance, flex, dab. Everyone online sees them |
-| E | Adventure: get in or out of a car, talk to people |
+| E | Adventure: get in or out of a car, talk to people and staff |
+| M | Adventure: the big map of Blockton County |
 | H / F (in a car) | Horn / siren (police car, ambulance, fire truck) |
 | 8 | Adventure: web shooters and the spider suit (see below) |
 | R / N (web shooters out) | Web zip to where you aim / next suit |
@@ -56,7 +57,27 @@ There are 10 chapters, each in its own place: Mossy Meadows, the Old Ruins, Gloo
 
 ## Adventure
 
-Click **Adventure** on the title screen to explore **Blockton**, a big modern town on an island: 25 city blocks on a 6 by 6 grid of streets, with a downtown of glass skyscrapers, neighbourhoods of houses with porches, gardens and pools, shopping streets, apartments with balconies, the police and fire stations, a hospital with a helipad, a school, a mall, Hotel Cube, a stadium, a building site, a big park with a skate park, the Block Fix garage, and beaches with palm trees and a pier.
+Click **Adventure** on the title screen to explore **Blockton County**, a huge island 768 blocks across (nine times bigger than the old town) with roads all the way across it. In the middle is the city of **Blockton**: a downtown of glass skyscrapers, neighbourhoods of houses with porches, gardens and pools, shopping streets, apartments with balconies, the police and fire stations, a hospital with a helipad, a school, a mall, Hotel Cube, a stadium, a building site, a big park with a skate park and the Block Fix garage. Round it:
+
+- **Maple Heights** and more suburbs, with corner shops, cafes, parks, a second hospital and police station, the **Blockton Library**, the **Iron Temple Gym**, the **Wheels & Deals** car dealer, a shopping plaza and a speedway.
+- **Harvest Farms** in the north: barns, silos, wheat fields and hay bales, and **Pinecrest Village** with its own shops.
+- **Mount Cubemore** with snowy peaks, lakes, a campsite and the **Whispering Woods** in the west.
+- **Sunny Shores**, a beach town with a boardwalk and a pier in the east, and the **Iron Docks** in the south: factories, cranes and stacks of shipping containers.
+
+Only the part of the county round you is built at any time, so it runs as smoothly as the old town. The top of the screen always says where you are, and **M** opens the big map.
+
+- **Real working buildings.** Walk into a hospital, police station, school, shop, cafe or bank and the staff are there behind the counter. Press **E** to talk to them and pick from a menu with the number keys:
+  - **Hospitals:** the nurse heals you for free, the doctor sells super vitamins (a shield). If you get knocked out you wake up in one of their beds.
+  - **Police stations:** pay your fine, turn yourself in, or **go on patrol**: robbers are on the loose, run up to them and press **E** to arrest them. There are real jail cells at the back.
+  - **Blockton School:** take a class (5 questions, maths and general knowledge) for coins, or get school lunch. The **library** has a book club quiz and books full of tips.
+  - **Food:** pizza, burgers, coffee, tacos, sushi, donuts, ice cream and more. Food heals you, and some gives you a power-up.
+  - **Shops:** the Mini Mart (first aid kits, energy drinks), gun shops (the Armory and grenades), clothes shops and pet shops (the Style shop), and comic shops.
+  - **Bank of Blockton:** keep your coins safe. They earn 5% interest every night you sleep.
+  - **Iron Temple Gym:** work out by mashing **Space** for a big power-up, or buy a protein shake.
+  - **Hotel Cube** and **your house:** sleep till morning (press **E** by your bed at home).
+  - **Fire Station 5:** the Fire Drill job: take the fire truck and put out three house fires.
+  - **Wheels & Deals:** buy any car. The last one you bought is in your driveway every time you come back.
+- **The Hyper Car.** 5,000 coins at Wheels & Deals, and it has everything: a **twin roof turret** that locks on to what you aim at (**left click**), **homing rockets** (**right click**), **spiked wheels** and a **spiked ram** that shred any car you hit, **nitro** (**Shift**, with blue flames), **jump jets** to hop over traffic (**Q**), an **oil slick** that spins out the cars behind you (**X**), a **smoke screen** that makes the police lose you (**G**), a **shield** bubble (**C**), **underglow** in 7 colours (**U**), scissor doors, a huge wing and armour.
 
 - **Web shooters and the spider suit.** Press **8** and the spider suit spreads over you from the chest (it covers you even if you're tall or buff from the cheat menu). In the suit you run faster, jump higher, take less damage and land like a superhero.
   - **Swing:** hold **right click**. It finds a building up ahead near where you aim, and you swing round a point out over the street. Let go at the top to fly (going fast, you do a flip), and keep holding to catch the next building. **W** pumps the swing, **Space** zips you up the web. Swing 5 times in a row without touching the ground for coins.
@@ -74,17 +95,18 @@ Click **Adventure** on the title screen to explore **Blockton**, a big modern to
 - **Stunt jumps.** Drive fast up a striped ramp (in the skate park or at the stadium) to fly. A second or more in the air pays coins.
 - **Block Fix.** Drive into the garage and stop: for 50 coins they straighten out the dents, fix the glass and give it a new colour, and if the police can't see you they lose track of you.
 - **A living town.** Traffic drives on the right, uses its indicators, stops at red lights, honks when you're in the way and pulls over for sirens. People walk the sidewalks, jump out of the way of cars and run away from gunfire.
-- **The police.** Point a gun at someone and they put their hands up, then run off and phone the police: **5-0-5-0**. Wreck cars, attack officers or steal a police car and your **wanted stars** go up. Police cars chase you with their sirens on, officers jump out and run after you, at 3 stars they shoot back, and at 4 the police helicopter comes out with its searchlight. Get out of sight and hide until the stars stop flashing to lose them. If an officer catches you standing still you're **BUSTED**: a small fine and a trip to the police station.
-- **Jobs.** People with a yellow **!** over their head have work for you: deliver pizzas against the clock, drive a taxi, win a street race, clear mobs out of the park, chase down the Golden Overlord's gold getaway van, beat a boss at the stadium, defend the building site, and swing through Web Master Webster's rings on the rooftops. Jobs pay coins and XP.
-- **10 golden cubes** are hidden around town: on skyscrapers and roofs (swing up with your web shooters), on the crane, in the playground, in your back garden and at the end of the pier. Kid Kevin in the park pays a bonus for finding them all.
+- **The police.** Point a gun at someone and they put their hands up, then run off and phone the police: **5-0-5-0**. Wreck cars, attack officers or steal a police car and your **wanted stars** go up. Police cars chase you with their sirens on, officers jump out and run after you, at 3 stars they shoot back, and at 4 the police helicopter comes out with its searchlight. Get out of sight and hide until the stars stop flashing to lose them. If an officer catches you standing still you're **BUSTED**: a fine and 10 seconds in a cell at the nearest police station.
+- **Jobs.** People with a yellow **!** over their head have work for you: deliver pizzas against the clock, drive a taxi, win a street race, clear mobs out of the park, chase down the Golden Overlord's gold getaway van, beat a boss at the stadium, defend the building site, and swing through Web Master Webster's rings on the rooftops. The fire station and police station have jobs too. Jobs pay coins and XP.
+- **The big map (M).** The whole county with every hospital, police station, school, shop and restaurant marked. Hover over a place to see its name and click it to put a green beacon there.
+- **42 golden cubes** are hidden all over the county: on skyscrapers and roofs (swing up with your web shooters), on the crane, in the playground, in your back garden, at the end of the pier, on farms, up the mountain and at the docks. Kid Kevin in the park pays a bonus for finding them all.
 - **Watch out at night.** When it gets dark the street lamps come on, and so do the mobs.
-- Cars can be shot, crashed and blown up. If you get cubed you wake up at the hospital.
+- Cars can be shot, crashed and blown up. If you get cubed you wake up in a bed at the nearest hospital.
 
 ## Levels, challenges and achievements
 
 - Everything you do earns **XP**. Each level pays out coins.
 - **3 daily challenges** that change every day, like "Beat 15 Skitters" or "Reach wave 10 in Endless".
-- **38 achievements**, from First Blood to beating all 10 bosses, finding every mob and getting a 20 kill streak.
+- **42 achievements**, from First Blood to beating all 10 bosses, finding every mob, getting a 20 kill streak and buying the Hyper Car.
 - **Weapon mastery:** every gun ranks up as you beat mobs with it, from Iron to Master. Ranks pay coins, and Bronze, Diamond and Lava paints can only be earned this way. The Armory shows each gun's rank.
 - **Lucky Wheel:** one free spin every day, more for 200 coins. Win coins, XP, gun parts, Style items or the 2,000 coin jackpot.
 
@@ -346,8 +368,10 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/wheel.js` | The Lucky Wheel |
 | `src/settings.js` | The Settings screen |
 | `src/cheats.js`, `src/sha256.js` | The cheat menu, cheat guns and the password lock |
-| `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights and the minimap |
-| `src/cars.js`, `src/townsfolk.js` | Drivable cars and traffic, and the people of Blockton |
+| `src/adventure.js`, `src/city.js` | Adventure mode: the town of Blockton, jobs, golden cubes, traffic lights, the minimap, and streaming cars, people and signs in and out round you |
+| `src/county.js` | Blockton County round the town: suburbs, farms, the village, mountains, woods, the beach town, the docks, and the insides of working buildings |
+| `src/places.js`, `src/bigmap.js` | Staff and their menus (hospitals, police, school, shops, bank, gym, dealer), jail cells, hospital beds, and the big map |
+| `src/cars.js`, `src/hypercar.js`, `src/townsfolk.js` | Drivable cars and traffic, the Hyper Car's gadgets, and the people of Blockton |
 | `src/police.js` | Wanted stars, police cars, officers, the helicopter and phone calls to 5-0-5-0 |
 | `src/voices.js` | The Voice Studio: recording, voice effects and playing your lines in the game |
 | `src/webs.js`, `src/suit.js`, `src/crimes.js` | Web shooters (swinging, zipping, yanking, crawling, gliding, spider-sense), the spider suits and crime alerts |

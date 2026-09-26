@@ -1,18 +1,20 @@
 import { B, SEA } from './world.js';
 import { mulberry32 } from './rng.js';
+import { COUNTY, CORE, NLOT, ROADS, isTownLot, townAt, countyLots } from './county.js';
 
-// Blockton: the Adventure mode city. A 256 x 256 island town, 64 blocks
-// tall, with a 6 x 6 grid of roads (street lamps, traffic lights and
-// crossings) around 25 city blocks: a downtown of glass skyscrapers,
-// neighbourhoods of houses with porches and gardens, shopping streets,
-// apartments, the police and fire stations, a hospital, a school, a mall,
-// a hotel, a stadium, a building site, a big park, a car repair shop and
-// sandy beaches with a pier.
+// Blockton: the Adventure mode city, in the middle of Blockton County (see
+// county.js). The county is a 768 x 768 island, 64 blocks tall, with a
+// grid of roads (street lamps, traffic lights and crossings in town,
+// plain country roads outside). Blockton itself is 25 city blocks: a
+// downtown of glass skyscrapers, neighbourhoods of houses with porches and
+// gardens, shopping streets, apartments, the police and fire stations, a
+// hospital, a school, a mall, a hotel, a stadium, a building site, a big
+// park and a car repair shop.
 
-export const CITY_SIZE = 256;
+export const CITY_SIZE = 768;
 export const CITY_HEIGHT = 64;
 export const GY = 7; // The top of the ground. You stand at y = 8.
-export const ROADS = [14, 59, 104, 149, 194, 239];
+export { ROADS, CORE };
 const HALF = 3; // Asphalt runs from the centre line out 3 blocks each way.
 export const LANE = 2; // Cars drive 2 blocks right of the centre line.
 const EDGE = 9;
@@ -48,8 +50,12 @@ export function generateCity(world, seed = 7) {
   world.theme = null;
   world.data.fill(0);
   const set = (x, y, z, id) => {
-    if (x >= 0 && z >= 0 && x < N && z < N && y >= 0 && y < TOP) world.data[world.idx(x, y, z)] = id;
+    if (x >= 0 && z >= 0 && x < N && z < N && y >= 0 && y < TOP) {
+      world.data[(y * N + z) * N + x] = id;
+      if (id === B.LAMP) lampBlocks.push(x, y, z);
+    }
   };
+  const lampBlocks = [];
   const get = (x, y, z) => world.get(x, y, z);
   const fill = (x0, y0, z0, x1, y1, z1, id) => {
     for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) set(x, y, z, id);
@@ -65,7 +71,7 @@ export function generateCity(world, seed = 7) {
       set(x1, y, z, id);
     }
   };
-  const info = { lots: {}, parking: [], doors: [], givers: {}, cubes: [], lamps: [], signs: [], spawn: null, hospital: null, taxi: null, police: null, repair: null };
+  const info = { lots: {}, parking: [], doors: [], givers: {}, cubes: [], lamps: [], signs: [], places: [], boardwalks: [], spawn: null, hospital: null, taxi: null, police: null, repair: null };
 
   // --- Ground: an island with stepped beaches down to the sea ---
   for (let z = 0; z < N; z++) {
@@ -94,18 +100,20 @@ export function generateCity(world, seed = 7) {
       if (rz === undefined && rx === undefined) continue;
       const dz = rz === undefined ? 99 : Math.abs(z - rz);
       const dx = rx === undefined ? 99 : Math.abs(x - rx);
-      let id = B.SIDEWALK;
+      // Out in the country: no sidewalks or crossings, just a grass verge.
+      const town = townAt(x, z);
+      let id = town ? B.SIDEWALK : (x * 7 + z * 13) % 5 ? B.GRASS : B.GRAVEL;
       const onX = dz <= HALF;
       const onZ = dx <= HALF;
       if (onX && onZ) id = B.ASPHALT;
       else if (onX) {
         id = B.ASPHALT;
         if (dz === 0 && dx > HALF + 2 && x % 4 < 2) id = B.LINE_X;
-        if (dx >= HALF + 1 && dx <= HALF + 2) id = B.CROSSWALK;
+        if (town && dx >= HALF + 1 && dx <= HALF + 2) id = B.CROSSWALK;
       } else if (onZ) {
         id = B.ASPHALT;
         if (dx === 0 && dz > HALF + 2 && z % 4 < 2) id = B.LINE_Z;
-        if (dz >= HALF + 1 && dz <= HALF + 2) id = B.CROSSWALK;
+        if (town && dz >= HALF + 1 && dz <= HALF + 2) id = B.CROSSWALK;
       }
       set(x, GY, z, id);
     }
@@ -125,8 +133,10 @@ export function generateCity(world, seed = 7) {
       if (nearRoad(t) !== undefined) continue;
       for (const side of [-1, 1]) {
         const off = r + side * (HALF + 2);
-        lamp(t, off, side, 'x');
-        lamp(off, t, side, 'z');
+        // Fewer lamps on country roads.
+        const k = Math.floor(t / 11);
+        if (townAt(t, off) || (k % 3 === 0 && side > 0)) lamp(t, off, side, 'x');
+        if (townAt(off, t) || (k % 3 === 0 && side > 0)) lamp(off, t, side, 'z');
       }
     }
   }
@@ -382,7 +392,9 @@ export function generateCity(world, seed = 7) {
     // Your house, the neighbours, and your car in the driveway.
     home(x0, z0, x1, z1) {
       const h = house(x0 + 2, z0 + 4, 11, 9, 'n', HOUSES[0], 'home');
+      kit.furnish.home(h, x0 + 2, z0 + 4, x0 + 12, z0 + 12, 'n');
       info.spawn = { x: h.door[0], z: h.door[1] - 1 };
+      info.homeParking = [x0 + 16, z0 + 6];
       pave(x0 + 14, z0 - 1, x0 + 18, z0 + 10);
       park(x0 + 16, z0 + 6, S_, 'player');
       house(x0 + 20, z0 + 4, 11, 9, 'n', HOUSES[3], 'maple', 2);
@@ -423,9 +435,12 @@ export function generateCity(world, seed = 7) {
     // Tony's Pizza and friends, and the gas station.
     shops(x0, z0, x1, z1) {
       const pz = shop(x0 + 1, z0 + 1, x0 + 10, z0 + 9, 'n', "TONY'S PIZZA", ['#d8392b', '#fff6e0'], B.BRICK);
+      kit.furnish.store(pz, x0 + 1, z0 + 1, x0 + 10, z0 + 9, 'n', 'food', "Tony's Pizza", { menu: 'pizza', title: 'Pizza Chef' });
       info.givers.pizza = { x: pz.door[0], z: pz.door[1] - 1 };
-      shop(x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'BURGER BLOCK', ['#f2c230', '#5a2a10'], B.STUCCO_PEACH);
-      shop(x0 + 23, z0 + 1, x1 - 1, z0 + 9, 'n', 'COMIC CUBES', ['#3d6fd8', '#ffffff'], B.STUCCO_MINT);
+      const bb = shop(x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'BURGER BLOCK', ['#f2c230', '#5a2a10'], B.STUCCO_PEACH);
+      kit.furnish.store(bb, x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'food', 'Burger Block', { menu: 'burger', title: 'Cook' });
+      const cc = shop(x0 + 23, z0 + 1, x1 - 1, z0 + 9, 'n', 'COMIC CUBES', ['#3d6fd8', '#ffffff'], B.STUCCO_MINT);
+      kit.furnish.store(cc, x0 + 23, z0 + 1, x1 - 1, z0 + 9, 'n', 'books', 'Comic Cubes');
       // Gas station: a canopy on posts over the pumps, and a shop.
       const gx = x0 + 3;
       const gz = z0 + 16;
@@ -439,21 +454,26 @@ export function generateCity(world, seed = 7) {
       }
       const [sx, sz] = face(gx + 6, gz - 1, 'n');
       sign([['BLOCK GAS', 44]], '#d8392b', '#ffffff', 7, 1.2, sx, GY + 6.1, sz, 'n');
-      shop(x1 - 9, z0 + 14, x1 - 1, z0 + 22, 'w', 'MINI MART', ['#3f9a55', '#ffffff'], B.CONCRETE, 1);
+      const mm = shop(x1 - 9, z0 + 14, x1 - 1, z0 + 22, 'w', 'MINI MART', ['#3f9a55', '#ffffff'], B.CONCRETE, 1);
+      kit.furnish.store(mm, x1 - 9, z0 + 14, x1 - 1, z0 + 22, 'w', 'mart', 'Mini Mart');
       info.givers.race = { x: gx + 6, z: gz + 2 };
       park(gx + 2, gz + 6, E_, 'sports');
       info.cubes.push([gx + 6, GY + 7, gz + 4]);
     },
     // More shops round a car park, and the bank.
     shops2(x0, z0, x1, z1) {
-      shop(x0 + 1, z0 + 1, x0 + 10, z0 + 9, 'n', 'TOY TOWN', ['#ff5a8a', '#ffffff'], B.STUCCO);
-      shop(x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'CAFE CUBE', ['#6a4428', '#fff6e0'], B.BRICK_DARK);
+      const tt = shop(x0 + 1, z0 + 1, x0 + 10, z0 + 9, 'n', 'TOY TOWN', ['#ff5a8a', '#ffffff'], B.STUCCO);
+      kit.furnish.store(tt, x0 + 1, z0 + 1, x0 + 10, z0 + 9, 'n', 'clothes', 'Toy Town', { floor: B.CARPET, title: 'Toy Seller' });
+      const cf = shop(x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'CAFE CUBE', ['#6a4428', '#fff6e0'], B.BRICK_DARK);
+      kit.furnish.store(cf, x0 + 12, z0 + 1, x0 + 21, z0 + 9, 'n', 'food', 'Cafe Cube', { menu: 'coffee', title: 'Barista' });
       shop(x0 + 23, z0 + 1, x1 - 1, z0 + 9, 'n', 'ARCADE', ['#b46cff', '#ffe14a'], B.STUCCO_MINT);
       const bank = building(x0 + 1, z1 - 12, x0 + 16, z1 - 1, 3, { wall: B.STONE_BRICK, win: B.WIN_FRAME, lobby: B.PILLAR, corner: B.PILLAR, band: B.STONE_BRICK, door: 's', every: 2 });
+      kit.furnish.bank(bank, x0 + 1, z1 - 12, x0 + 16, z1 - 1, 's', 'Bank of Blockton');
       const [bx, bz] = face(x0 + 8, z1 - 1, 's');
       sign([['BANK OF BLOCKTON', 36]], '#1e3160', '#f2c230', 10, 1.2, bx + 0.5, GY + 4.6, bz, 's');
       roofTop(x0 + 1, z1 - 12, x0 + 16, z1 - 1, bank.roofY, { vents: true });
-      shop(x0 + 19, z1 - 10, x1 - 1, z1 - 1, 's', 'PETS', ['#f2c230', '#1a1a1c'], B.SIDING);
+      const pets = shop(x0 + 19, z1 - 10, x1 - 1, z1 - 1, 's', 'PETS', ['#f2c230', '#1a1a1c'], B.SIDING);
+      kit.furnish.store(pets, x0 + 19, z1 - 10, x1 - 1, z1 - 1, 's', 'pets', 'Pets');
       pave(x0 + 1, z0 + 11, x1 - 1, z1 - 14, B.ASPHALT);
       for (let x = x0 + 3; x < x1 - 2; x += 4) for (let z = z0 + 13; z <= z1 - 16; z += 6) set(x, GY, z, B.LINE_Z);
       park(x0 + 5, z0 + 15, N_, 'parked');
@@ -593,6 +613,7 @@ export function generateCity(world, seed = 7) {
       const [sx, sz] = face(mx, z0 + 16, 's');
       sign([['HOSPITAL', 44]], '#ffffff', '#d8392b', 6, 1.1, sx + 0.5, GY + 5.2, sz, 's');
       roofTop(x0 + 3, z0 + 2, x1 - 3, z0 + 16, b.roofY, { helipad: true });
+      kit.furnish.hospital(b, x0 + 3, z0 + 2, x1 - 3, z0 + 16, 's', 'Blockton General Hospital');
       info.hospital = { x: b.door[0], z: b.door[1] + 1 };
       pave(x0 + 2, z0 + 18, x1 - 2, z1 - 1, B.ASPHALT);
       park(x0 + 6, z0 + 22, N_, 'ambulance');
@@ -603,6 +624,7 @@ export function generateCity(world, seed = 7) {
     police(x0, z0, x1, z1) {
       const b = building(x0 + 2, z0 + 1, x1 - 2, z0 + 12, 3, { wall: B.STONE_BRICK, win: B.GLASS_BLUE, band: B.CONCRETE, corner: B.CONCRETE, lobby: B.GLASS_BLUE, door: 's', every: 2 });
       stairs(x1 - 3, z0 + 3, [GY, GY + 4, GY + 8, GY + 13]);
+      kit.furnish.police(b, x0 + 2, z0 + 1, x1 - 2, z0 + 12, 's', 'Blockton Police Station');
       info.police = { x: b.door[0], z: b.door[1] + 1, signX: Math.floor((x0 + x1) / 2) + 1, signZ: z0 + 12 };
       const [sx, sz] = face(Math.floor((x0 + x1) / 2), z0 + 12, 's');
       sign([['BLOCKTON POLICE', 34], ['Emergency? Dial 5-0-5-0', 24]], '#1e3160', '#ffffff', 7, 1.6, sx + 0.5, GY + 5.6, sz, 's');
@@ -625,6 +647,7 @@ export function generateCity(world, seed = 7) {
         fill(x, GY + 5, z0 + 16, x + 3, GY + 5, z0 + 16, B.GARAGE);
       }
       building(x1 - 6, z0 + 4, x1 - 3, z0 + 7, 5, { wall: B.BRICK, win: B.WIN_FRAME, corner: B.STONE_BRICK, door: null, every: 2 });
+      kit.furnish.fire({ door: [x0 + 10, z0 + 18] }, x0 + 2, z0 + 2, x1 - 8, z0 + 16);
       const [sx, sz] = face(x0 + 10, z0 + 16, 's');
       sign([['FIRE STATION 5', 40]], '#d8392b', '#ffffff', 9, 1.2, sx, GY + 6.9, sz, 's');
       roofTop(x0 + 2, z0 + 2, x1 - 8, z0 + 16, b.roofY);
@@ -637,6 +660,7 @@ export function generateCity(world, seed = 7) {
       const [sx, sz] = face(Math.floor((x0 + x1) / 2), z0 + 12, 's');
       sign([['BLOCKTON SCHOOL', 40]], '#3f9a55', '#ffffff', 9, 1.2, sx + 0.5, GY + 4.6, sz, 's');
       roofTop(x0 + 2, z0 + 2, x1 - 2, z0 + 12, b.roofY, { water: true });
+      kit.furnish.school(b, x0 + 2, z0 + 2, x1 - 2, z0 + 12, 's', 'Blockton School');
       // Court.
       pave(x0 + 2, z0 + 16, x0 + 16, z1 - 2, B.ASPHALT);
       ring(x0 + 3, z0 + 17, x0 + 15, z1 - 3, GY, B.LINE_Z);
@@ -655,6 +679,10 @@ export function generateCity(world, seed = 7) {
       sign([['BLOCK MALL', 48]], '#ff5a8a', '#ffffff', 8, 1.5, sx, GY + 7.4, sz, 's');
       // Skylights.
       for (let x = x0 + 6; x < x1 - 4; x += 6) fill(x, b.top, z0 + 6, x + 2, b.top, z0 + 13, B.GLASS);
+      // Inside: a fashion shop and a food court.
+      fill(x0 + 3, GY, z0 + 3, x1 - 3, GY, z0 + 16, B.MARBLE);
+      kit.furnish.store(b, x0 + 2, z0 + 2, x0 + 14, z0 + 17, 's', 'clothes', 'Mall Fashion', { floor: B.CARPET, title: 'Stylist' });
+      kit.furnish.store(b, x1 - 14, z0 + 2, x1 - 2, z0 + 17, 's', 'food', 'Food Court', { menu: 'pizza', title: 'Server' });
       pave(x0 + 1, z0 + 19, x1 - 1, z1 - 1, B.ASPHALT);
       for (let x = x0 + 3; x < x1 - 2; x += 4) for (let z = z0 + 21; z <= z1 - 2; z++) if ((z - z0) % 7 !== 0) set(x, GY, z, B.LINE_Z);
       park(x0 + 5, z0 + 24, N_, 'parked');
@@ -671,6 +699,7 @@ export function generateCity(world, seed = 7) {
       fill(x0 + 8, GY + 1, z1 - 7, x0 + 8, GY + 3, z1 - 7, B.PILLAR);
       fill(x0 + 14, GY + 1, z1 - 7, x0 + 14, GY + 3, z1 - 7, B.PILLAR);
       roofTop(x0 + 3, z0 + 3, x0 + 19, z1 - 10, b.roofY, { helipad: false, water: true });
+      kit.furnish.hotel(b, x0 + 3, z0 + 3, x0 + 19, z1 - 10, 's', 'Hotel Cube');
       // Pool.
       fill(x1 - 11, GY, z0 + 3, x1 - 2, GY, z0 + 18, B.TILES);
       fill(x1 - 9, SEA, z0 + 5, x1 - 4, GY, z0 + 16, B.AIR);
@@ -753,32 +782,45 @@ export function generateCity(world, seed = 7) {
     },
   };
 
+  const kit = { set, get, fill, ring, building, house, shop, tower, tree, palm, hedge, flowers, bench, ramp, park, pave, sign, face, roofTop, pitched, stairs, info, HOUSES, GY, lots };
+  const county = countyLots(kit);
+  kit.furnish = county.furnish;
+  const lotRect = (i, j) => [ROADS[i] + HALF + 3, ROADS[j] + HALF + 3, ROADS[i + 1] - HALF - 3, ROADS[j + 1] - HALF - 3];
+  // Blockton first (so the golden cubes keep their numbers in old saves).
   for (let i = 0; i < 5; i++) {
     for (let j = 0; j < 5; j++) {
-      const x0 = ROADS[i] + HALF + 3;
-      const x1 = ROADS[i + 1] - HALF - 3;
-      const z0 = ROADS[j] + HALF + 3;
-      const z1 = ROADS[j + 1] - HALF - 3;
+      const [x0, z0, x1, z1] = lotRect(i + CORE, j + CORE);
       lots[LOTS[i][j]](x0, z0, x1, z1, i, j);
     }
   }
+  const pierCube = info.cubes.length;
+  info.cubes.push(null);
+  // Then the rest of the county.
+  for (let j = 0; j < NLOT; j++) {
+    for (let i = 0; i < NLOT; i++) {
+      const d = COUNTY[j][i];
+      if (d === 'C') continue;
+      const [x0, z0, x1, z1] = lotRect(i, j);
+      (county.builders[d] || county.builders.x)(x0, z0, x1, z1, i, j);
+    }
+  }
 
-  // Trees round the edge of town, palm trees on the beach, and a pier.
-  for (let k = 0; k < 70; k++) {
+  // Trees round the edge of the island, palm trees on the beach, and a pier.
+  for (let k = 0; k < 200; k++) {
     const t = Math.floor(rng() * (N - 2 * EDGE - 4)) + EDGE + 2;
     const side = Math.floor(rng() * 4);
     const [x, z] = side === 0 ? [EDGE + 2, t] : side === 1 ? [N - EDGE - 3, t] : side === 2 ? [t, EDGE + 2] : [t, N - EDGE - 3];
     if (get(x, GY, z) === B.GRASS && !get(x, GY + 1, z)) tree(x, z, 4);
   }
-  for (let k = 0; k < 40; k++) {
+  for (let k = 0; k < 140; k++) {
     const t = Math.floor(rng() * (N - 30)) + 15;
     const side = Math.floor(rng() * 4);
     const e = 5;
     const [x, z] = side === 0 ? [e, t] : side === 1 ? [N - 1 - e, t] : side === 2 ? [t, e] : [t, N - 1 - e];
     if (get(x, 5, z) === B.SAND && !get(x, 6, z)) palm(x, z, 6);
   }
-  // The pier sticks out into the sea on the east side.
-  const pz = 120;
+  // The pier sticks out into the sea on the east side, off the boardwalk.
+  const pz = info.boardwalks.length ? info.boardwalks[0] : 400;
   fill(N - EDGE, 6, pz, N - 1, 6, pz + 3, B.WOOD_DARK);
   for (let x = N - EDGE; x < N; x += 3) {
     fill(x, 1, pz, x, 5, pz, B.LOG);
@@ -786,7 +828,13 @@ export function generateCity(world, seed = 7) {
     set(x, 7, pz, B.WOOD_DARK);
     set(x, 7, pz + 3, B.WOOD_DARK);
   }
-  info.cubes.push([N - 2, 7, pz + 1]);
+  info.cubes[pierCube] = [N - 2, 7, pz + 1];
+  // Street lamps and floodlights that are still there, for the night glow.
+  info.lampBlocks = [];
+  for (let k = 0; k < lampBlocks.length; k += 3) {
+    const [x, y, z] = [lampBlocks[k], lampBlocks[k + 1], lampBlocks[k + 2]];
+    if (world.data[(y * N + z) * N + x] === B.LAMP) info.lampBlocks.push(x + 0.5, y + 0.3, z + 0.5);
+  }
   world.markAllDirty();
   return info;
 }
@@ -795,7 +843,7 @@ export function generateCity(world, seed = 7) {
 export function roadNodes() {
   const nodes = [];
   const n = ROADS.length;
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) nodes.push({ i, j, x: ROADS[i] + 0.5, z: ROADS[j] + 0.5 });
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) nodes.push({ i, j, x: ROADS[i] + 0.5, z: ROADS[j] + 0.5, town: townAt(ROADS[i], ROADS[j]) });
   const at = (i, j) => (i < 0 || j < 0 || i >= n || j >= n ? null : nodes[j * n + i]);
   for (const nd of nodes) nd.next = [at(nd.i + 1, nd.j), at(nd.i - 1, nd.j), at(nd.i, nd.j + 1), at(nd.i, nd.j - 1)].filter(Boolean);
   return nodes;
@@ -806,6 +854,7 @@ export function sidewalkLoops() {
   const loops = [];
   for (let i = 0; i + 1 < ROADS.length; i++) {
     for (let j = 0; j + 1 < ROADS.length; j++) {
+      if (!isTownLot(i, j)) continue;
       // The inner row of the sidewalk: lamp posts stand on the outer row.
       const a = ROADS[i] + HALF + 1.5;
       const b = ROADS[i + 1] - HALF - 0.5;

@@ -310,8 +310,11 @@ export class Mobs {
     for (let pass = 0; pass < 2; pass++) {
       const minD = pass === 0 ? 17 : 9;
       for (let i = 0; i < 90; i++) {
-        const x = 2 + Math.floor(Math.random() * (SX - 4));
-        const z = 2 + Math.floor(Math.random() * (SZ - 4));
+        // On a big map, look round someone rather than anywhere.
+        const round = SX > 200 && players.length ? players[Math.floor(Math.random() * players.length)].pos : null;
+        const x = round ? Math.floor(round.x + (Math.random() - 0.5) * 80) : 2 + Math.floor(Math.random() * (SX - 4));
+        const z = round ? Math.floor(round.z + (Math.random() - 0.5) * 80) : 2 + Math.floor(Math.random() * (SZ - 4));
+        if (x < 2 || z < 2 || x > SX - 3 || z > SZ - 3) continue;
         const s = f.standAt(x, z);
         if (s <= SEA) continue;
         let near = Infinity;
@@ -594,7 +597,8 @@ export class Mobs {
   // Host / single player: run every mob's brain.
   update(dt) {
     this.flowTimer -= dt;
-    if (this.flowTimer <= 0) {
+    // No mobs, no paths needed (driving round Blockton in the day).
+    if (this.flowTimer <= 0 && this.list.length) {
       this.flowTimer = 0.35;
       this.refreshFlow();
     }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { rayBox } from './mob.js';
 import { LANE, GY } from './city.js';
 import { SEA, B } from './world.js';
+import { HyperKit } from './hypercar.js';
 
 // Cars for Adventure mode. You can drive any car that's parked (press E),
 // and traffic drives itself round the road grid. Cars have working brake
@@ -22,6 +23,9 @@ export const CAR_TYPES = {
   ambulance: { name: 'Ambulance', shape: 'van', snd: 'big', siren: true, len: 5, wid: 2.1, hgt: 2.4, speed: 25, accel: 10, turn: 0.95, hp: 220, colors: ['#f4f1ea'] },
   firetruck: { name: 'Fire Truck', shape: 'bus', snd: 'big', siren: true, len: 7.2, wid: 2.4, hgt: 2.7, speed: 20, accel: 7, turn: 0.75, hp: 450, colors: ['#d8392b'] },
   icecream: { name: 'Ice Cream Van', shape: 'van', snd: 'big', len: 4.9, wid: 2.1, hgt: 2.3, speed: 16, accel: 6, turn: 0.9, hp: 180, colors: ['#ff9dc0'] },
+  // The Hyper Car from Wheels & Deals: turrets, rockets, spiked wheels,
+  // nitro, jump jets, a shield and more (see hypercar.js).
+  super: { name: 'Hyper Car', shape: 'hyper', snd: 'sports', len: 4.7, wid: 2.15, hgt: 1.2, wheelR: 0.42, speed: 40, accel: 19, turn: 1.25, hp: 480, mass: 2.2, spikes: true, colors: ['#1d1d20', '#d8392b', '#7a2ad8', '#1f8a4c', '#39b8ff', '#f2c230'] },
 };
 
 const mats = new Map();
@@ -130,6 +134,12 @@ const geos = new Map();
 function geo(w, h, d) {
   const key = `${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}`;
   if (!geos.has(key)) geos.set(key, new THREE.BoxGeometry(w, h, d));
+  return geos.get(key);
+}
+// A cone pointing up +y (for spikes).
+function cone(r, h, seg = 6) {
+  const key = `k${r.toFixed(3)}|${h.toFixed(3)}|${seg}`;
+  if (!geos.has(key)) geos.set(key, new THREE.ConeGeometry(r, h, seg));
   return geos.get(key);
 }
 // A cylinder lying along x (for wheels).
@@ -254,6 +264,77 @@ const DARK = '#1d1d20';
 const TAIL = ['#6a1410', '#ff2a1a'];
 const AMBER = ['#5a3a10', '#ffb020'];
 const REVERSE = ['#4a4a46', '#ffffff'];
+
+// The Hyper Car's moving and glowing bits: a roof turret with twin
+// barrels, exhaust flames for the nitro, jump jets, underglow and a shield.
+function hyperGadgets(root, body, d, deck, perCar) {
+  const L = d.len;
+  const W = d.wid;
+  const H = d.hgt;
+  const base = 0.3 + (d.lift || 0);
+  const part = (parent, g, m, x, y, z) => {
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const turret = new THREE.Group();
+  turret.position.set(0, H + 0.06, -L * 0.12);
+  body.add(turret);
+  part(turret, geo(0.56, 0.1, 0.56), mat(DARK), 0, 0.05, 0);
+  part(turret, geo(0.38, 0.26, 0.44), mat('#3a3b3e'), 0, 0.22, 0);
+  part(turret, geo(0.18, 0.2, 0.26), mat('#4d5a2c'), -0.3, 0.2, -0.05);
+  const gun = new THREE.Group();
+  gun.position.set(0, 0.26, 0.05);
+  turret.add(gun);
+  const flashMat = perCar(new THREE.MeshBasicMaterial({ color: '#ffe38a', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const flashes = [];
+  for (const sx of [-1, 1]) {
+    const b = part(gun, cyl(0.045, 0.85, 8), mat(DARK), sx * 0.12, 0, 0.45);
+    b.rotation.y = Math.PI / 2;
+    const tip = part(gun, cyl(0.066, 0.12, 8), mat(TRIM), sx * 0.12, 0, 0.86);
+    tip.rotation.y = Math.PI / 2;
+    const f = part(gun, geo(0.22, 0.22, 0.34), flashMat, sx * 0.12, 0, 1.06);
+    f.visible = false;
+    flashes.push(f);
+  }
+  // Four exhausts, with nitro flames.
+  const flameMat = perCar(new THREE.MeshBasicMaterial({ color: '#6ff0ff', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const flames = new THREE.Group();
+  flames.visible = false;
+  body.add(flames);
+  for (const x of [-0.55, -0.3, 0.3, 0.55]) {
+    const pipe = part(body, cyl(0.075, 0.26, 10), mat(CHROME), x, base + 0.3, -L / 2 - 0.04);
+    pipe.rotation.y = Math.PI / 2;
+    const f = part(flames, cone(0.1, 0.9, 8), flameMat, x, base + 0.3, -L / 2 - 0.55);
+    f.rotation.x = -Math.PI / 2;
+  }
+  // Jump jets under the car.
+  const jetMat = perCar(new THREE.MeshBasicMaterial({ color: '#ffa040', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const jets = new THREE.Group();
+  jets.visible = false;
+  root.add(jets);
+  for (const x of [-1, 1]) {
+    for (const z of [-1, 1]) {
+      const n = part(body, cyl(0.14, 0.12, 10), mat(DARK), x * (W / 2 - 0.5), base - 0.02, z * L * 0.28);
+      n.rotation.z = Math.PI / 2;
+      const f = part(jets, cone(0.16, 1, 8), jetMat, x * (W / 2 - 0.5), base - 0.55, z * L * 0.28);
+      f.rotation.x = Math.PI;
+    }
+  }
+  // Underglow on the road.
+  const underMat = perCar(new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#b46cff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+  if (!geos.has('under')) geos.set('under', new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
+  const under = part(root, geos.get('under'), underMat, 0, 0.07, 0);
+  under.scale.set(W + 1.6, 1, L + 1.4);
+  // The shield bubble.
+  const shieldMat = perCar(new THREE.MeshBasicMaterial({ color: '#6ff0ff', transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  if (!geos.has('bubble')) geos.set('bubble', new THREE.SphereGeometry(1, 20, 14));
+  const shield = part(root, geos.get('bubble'), shieldMat, 0, H * 0.55, 0);
+  shield.scale.set(W * 0.9, H * 1.3, L * 0.68);
+  shield.visible = false;
+  return { turret, gun, flashes, flames, flameMat, jets, under, underMat, shield, shieldMat, pods: [W / 2 + 0.16, deck + 0.2, -L * 0.02 + 0.45] };
+}
 
 // Build a car model facing +z (+x is the car's left, the driver's side).
 export function buildCar(type, color) {
@@ -391,6 +472,68 @@ export function buildCar(type, color) {
       add(W * 0.5, 0.5, 0.02, 0, deck + 0.6, -L / 2 - 0.02, textDecal('$', '#1a1a1c', '#f2c230', 64, 64, 0.8));
     }
     smokeZ = L * 0.38;
+  } else if (shape === 'hyper') {
+    // --- The Hyper Car: a low wedge with a glass bubble, a big wing, a
+    // spiked ram, a roof turret, rocket pods, jump jets and underglow. ---
+    deck = base + 0.4;
+    const noseZ = L / 2 - 1.25;
+    addSeg(W, deck - base, noseZ + L / 2, 0, (base + deck) / 2, (noseZ - L / 2) / 2, paint);
+    body.add(new THREE.Mesh(profile('hyper|nose', [[noseZ, base], [L / 2, base], [L / 2, base + 0.22], [noseZ, deck + 0.05]], W), paint));
+    // Black side skirts and a carbon splitter.
+    add(W + 0.04, 0.1, L - 0.5, 0, base + 0.05, -0.1, mat(DARK));
+    add(W - 0.1, 0.05, 0.4, 0, base + 0.02, L / 2 - 0.1, mat(DARK));
+    // The glass bubble, and a roof strip.
+    const aZ = L * 0.1;
+    const rfZ = -L * 0.04;
+    const rbZ = -L * 0.2;
+    const cZ = -L * 0.3;
+    const gw = W - 0.5;
+    body.add(new THREE.Mesh(profile('hyper|cab', [[cZ, deck], [aZ, deck], [rfZ, H], [rbZ, H]], gw), glass));
+    add(gw - 0.3, 0.05, rfZ - rbZ + 0.1, 0, H + 0.02, (rfZ + rbZ) / 2, paint);
+    both((s) => {
+      const x = s * (gw / 2 + 0.005);
+      slab(0.06, 0.06, deck, aZ, H - 0.02, rfZ, paint, x);
+      slab(0.06, 0.06, deck, cZ, H - 0.02, rbZ, paint, x);
+      // Big air intakes behind the doors, and a racing stripe.
+      add(0.2, 0.3, 0.8, s * (W / 2 - 0.02), deck - 0.05, -L * 0.2, paint);
+      add(0.03, 0.22, 0.6, s * (W / 2 + 0.085), deck - 0.05, -L * 0.2, mat(DARK));
+      add(0.02, 0.05, L * 0.8, s * (W / 2 + 0.003), base + 0.3, 0, mat('#f4f1ea'));
+      // Mirrors.
+      add(0.18, 0.1, 0.12, s * (gw / 2 + 0.12), deck + 0.12, aZ - 0.05, paint);
+    });
+    // Engine cover with vents behind the bubble.
+    slab(W - 0.4, 0.08, deck + 0.28, cZ, deck + 0.05, -L / 2 + 0.25, paint);
+    for (let k = 0; k < 4; k++) add(W - 0.7, 0.02, 0.06, 0, deck + 0.22 - k * 0.05, cZ - 0.25 - k * 0.3, mat(DARK));
+    // The wing on two struts, with end plates.
+    add(W + 0.1, 0.06, 0.45, 0, H + 0.22, -L / 2 + 0.3, mat(DARK));
+    both((s) => {
+      add(0.06, H + 0.2 - deck, 0.12, s * 0.55, (deck + H + 0.2) / 2, -L / 2 + 0.35, mat(DARK));
+      add(0.04, 0.34, 0.55, s * (W / 2 + 0.06), H + 0.22, -L / 2 + 0.3, paint);
+    });
+    // Diffuser fins at the back.
+    add(W - 0.2, 0.18, 0.25, 0, base + 0.06, -L / 2 + 0.08, mat(DARK));
+    for (let k = -2; k <= 2; k++) add(0.03, 0.2, 0.3, k * 0.35, base + 0.08, -L / 2 + 0.05, mat(TRIM));
+    // The spiked ram on the front.
+    add(W - 0.2, 0.14, 0.14, 0, base + 0.2, L / 2 + 0.16, mat(DARK));
+    for (let k = -2; k <= 2; k++) {
+      const sp = new THREE.Mesh(cone(0.08, 0.38), mat(CHROME));
+      sp.rotation.x = Math.PI / 2;
+      sp.position.set(k * 0.4, base + 0.2, L / 2 + 0.4);
+      body.add(sp);
+    }
+    // Rocket pods on the sides.
+    both((s) => {
+      add(0.26, 0.26, 0.8, s * (W / 2 + 0.16), deck + 0.2, -L * 0.02, mat(DARK));
+      for (const [a, b] of [[-0.06, -0.06], [0.06, -0.06], [-0.06, 0.06], [0.06, 0.06]]) add(0.07, 0.07, 0.04, s * (W / 2 + 0.16) + a, deck + 0.2 + b, -L * 0.02 + 0.41, mat('#d8392b'));
+    });
+    // Scissor doors: they swing up, not out.
+    const doorLen = (aZ - cZ) * 0.9;
+    door = new THREE.Group();
+    door.position.set(W / 2 + 0.012, (base + deck) / 2 + 0.03, aZ + 0.02);
+    door.userData.scissor = true;
+    body.add(door);
+    add(0.03, deck - base - 0.1, doorLen, 0, 0, -doorLen / 2, paint, door);
+    smokeZ = -L * 0.3;
   } else {
     // --- Cars with a cabin: sedans, taxis, police cars, sports cars, SUVs,
     // pickups and the monster truck. ---
@@ -523,7 +666,7 @@ export function buildCar(type, color) {
     add(W * 0.4, 0.17, 0.05, 0, lightY - 0.02, front + 0.004, mat(DARK));
     add(W * 0.4, 0.03, 0.06, 0, lightY + 0.02, front + 0.006, mat(CHROME));
   }
-  const bumperMat = shape === 'sports' ? paint : mat(TRIM);
+  const bumperMat = shape === 'sports' || shape === 'hyper' ? paint : mat(TRIM);
   add(W + 0.06, 0.18, 0.2, 0, base + 0.1, front, bumperMat);
   add(W + 0.06, 0.18, 0.2, 0, base + 0.1, -front, bumperMat);
   const plate = plateMat();
@@ -564,10 +707,28 @@ export function buildCar(type, color) {
           wg.add(tr);
         }
       }
+      if (d.spikes) {
+        // Spikes all round the tyre, and a big blade out of the hub.
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const sp = new THREE.Mesh(cone(0.07, 0.24), mat(CHROME));
+          sp.rotation.x = a;
+          sp.position.set(0, Math.cos(a) * (R + 0.06), Math.sin(a) * (R + 0.06));
+          wg.add(sp);
+        }
+        const hubSpike = new THREE.Mesh(cone(0.11, 0.55, 8), mat(CHROME));
+        hubSpike.rotation.z = -sx * (Math.PI / 2);
+        hubSpike.position.x = sx * (tw / 2 + 0.28);
+        wg.add(hubSpike);
+      }
       wheels.push({ g: wg, front: sz > 0 });
       if (!d.monster) add(0.02, 0.2, R * 2 + 0.22, sx * (W / 2 + 0.006), base + 0.02, sz * wz, mat(DARK));
     }
   }
+
+  // --- The Hyper Car's gadgets (not merged: they move and glow) ---
+  let hyper = null;
+  if (shape === 'hyper') hyper = hyperGadgets(root, body, d, deck, perCar);
 
   // --- Merge: the whole body becomes one mesh (fast to draw, and it can be
   // dented), the glowing lamps another, each wheel and the door one each ---
@@ -608,6 +769,7 @@ export function buildCar(type, color) {
     glow,
     pool,
     smoke: new THREE.Vector3(0, deck + 0.1, smokeZ),
+    hyper,
     rearZ: -wz,
     halfTrack: W / 2 - 0.2,
     mats: { glass, brake, rev, indL, indR },
@@ -669,7 +831,7 @@ const TYRE_SMOKE = [new THREE.Color('#d8d8d2'), new THREE.Color('#c4c4be')];
 
 let nextId = 1;
 // How heavy each vehicle is: heavy ones shove light ones out of the way.
-const MASS = { sedan: 1, taxi: 1, police: 1.2, sports: 0.9, suv: 1.4, pickup: 1.5, monster: 3.5, van: 1.7, bus: 4, icecream: 1.7, ambulance: 1.8, firetruck: 4 };
+const MASS = { sedan: 1, taxi: 1, police: 1.2, sports: 0.9, suv: 1.4, pickup: 1.5, monster: 3.5, van: 1.7, bus: 4, icecream: 1.7, ambulance: 1.8, firetruck: 4, super: 2.2 };
 const tA = new THREE.Vector3();
 const tB = new THREE.Vector3();
 const tQ = new THREE.Quaternion();
@@ -724,6 +886,10 @@ export class Car {
     this.pull = Math.random() < 0.5 ? -1 : 1;
     this.mass = this.def.mass || MASS[type] || 1;
     this.sirenOn = type === 'police' && !!opts.ai && Math.random() < 0.3;
+    this.boost = false;
+    this.shieldT = 0;
+    this.oilT = 0;
+    this.hyper = m.hyper ? new HyperKit(this) : null;
     this.sync(0);
   }
 
@@ -738,6 +904,7 @@ export class Car {
   dispose() {
     this.game.scene.remove(this.model.root);
     this.model.dispose();
+    if (this.hyper) this.hyper.dispose();
   }
 
   // Swing the driver's door open for a moment (getting in or out).
@@ -789,11 +956,14 @@ export class Car {
     // wheels can't do anything.
     this.stallT -= dt;
     if (this.stallT > 0 || this.air || this.webbed > 0) throttle = 0;
+    // Nitro: flat out, faster than the car can normally go.
+    const boost = this.boost && !this.air && !(this.webbed > 0);
+    if (boost) throttle = 1;
     // A wrecked-looking car is slower.
-    const top = d.speed * (0.55 + 0.45 * Math.max(0, this.hp) / d.hp);
+    const top = d.speed * (0.55 + 0.45 * Math.max(0, this.hp) / d.hp) * (boost ? 1.5 : 1);
     if (throttle > 0) {
       if (this.speed < -0.3) this.speed = Math.min(0, this.speed + 18 * dt);
-      else this.speed += d.accel * throttle * dt * (1 - Math.max(0, this.speed) / top);
+      else this.speed += d.accel * (boost ? 2.4 : 1) * throttle * dt * (1 - Math.max(0, this.speed) / top);
     } else if (throttle < 0) {
       if (this.speed > 0.3) this.speed = Math.max(0, this.speed - 18 * dt);
       else this.speed = Math.max(-d.speed * 0.35, this.speed - d.accel * 0.6 * dt);
@@ -963,8 +1133,8 @@ export class Car {
     if (me) {
       const p = g.player;
       p.shake = Math.max(p.shake, 0.15 + k * 0.5);
-      // A really big crash hurts you too.
-      if (impact > 15 && !g.cheats.has('god')) {
+      // A really big crash hurts you too (not behind a shield).
+      if (impact > 15 && !g.cheats.has('god') && !(this.shieldT > 0)) {
         const n = Math.floor((impact - 13) / 4);
         p.hp -= n;
         p.sinceHurt = 0;
@@ -1115,6 +1285,8 @@ export class Car {
   // end: 1 when the front took the hit, -1 for the back.
   damage(amount, from, by = null, end = 0) {
     if (this.dead) return;
+    // The Hyper Car's shield soaks up everything.
+    if (this.shieldT > 0) return;
     if (by) this.lastHitBy = by;
     this.hp -= amount;
     this.hurtT = 0.15;
@@ -1170,6 +1342,7 @@ export class Car {
 
   update(dt) {
     this.hurtT -= dt;
+    this.oilT -= dt;
     // Drove into the sea: the engine floods.
     if (this.pos.y + 0.6 < SEA) {
       this.speed *= 1 - Math.min(1, 3 * dt);
@@ -1200,6 +1373,7 @@ export class Car {
     if (this.driver !== 'ai') this.signal = 0;
     this.effects(dt);
     this.sync(dt);
+    if (this.hyper) this.hyper.update(dt);
   }
 
   // Smoke when it's hurt, fire when it's nearly gone, and the ice cream
@@ -1285,7 +1459,8 @@ export class Car {
       this.doorOpen = Math.max(0, this.doorOpen - dt);
       const want = this.doorOpen > 0 ? -1.05 : 0;
       this.doorT += (want - this.doorT) * Math.min(1, dt * 12);
-      m.door.rotation.y = this.doorT;
+      if (m.door.userData.scissor) m.door.rotation.x = -this.doorT * 1.1;
+      else m.door.rotation.y = this.doorT;
     }
     // Flash when shot.
     m.body.position.x = this.hurtT > 0 ? (Math.random() - 0.5) * 0.03 : 0;

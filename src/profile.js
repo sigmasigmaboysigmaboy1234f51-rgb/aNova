@@ -42,7 +42,18 @@ export class Profile {
     this.wheel = (data && data.wheel) || null;
     // Adventure mode: jobs done, golden cubes found, people met.
     const adv = (data && data.adv) || {};
-    this.adv = { done: { ...(adv.done || {}) }, cubes: Array.isArray(adv.cubes) ? adv.cubes.filter(Number.isInteger) : [], met: { ...(adv.met || {}) }, crimes: Math.max(0, Math.floor(Number(adv.crimes) || 0)) };
+    this.adv = {
+      done: { ...(adv.done || {}) },
+      cubes: Array.isArray(adv.cubes) ? adv.cubes.filter(Number.isInteger) : [],
+      met: { ...(adv.met || {}) },
+      crimes: Math.max(0, Math.floor(Number(adv.crimes) || 0)),
+      // Coins in the Bank of Blockton, cars you bought, classes you passed.
+      bank: Math.max(0, Math.floor(Number(adv.bank) || 0)),
+      cars: Array.isArray(adv.cars) ? adv.cars.filter((c) => typeof c === 'string').slice(0, 20) : [],
+      classes: Math.max(0, Math.floor(Number(adv.classes) || 0)),
+      // The car in your driveway.
+      homeCar: typeof adv.homeCar === 'string' ? adv.homeCar : null,
+    };
     this.listeners = new Set();
     this.saveTimer = 0;
   }

@@ -135,16 +135,34 @@ export class Crimes {
     const d = Math.hypot(r.pos.x - p.x, r.pos.z - p.z);
     r.fleeFrom.copy(p);
     r.fleeT = Math.max(r.fleeT, 1);
-    r.robberRun = d < 45 ? 5.6 : 3.5;
+    r.robberRun = d < 45 ? (this.active.patrol ? 5 : 5.6) : 3.5;
   }
 
-  start(kind = Math.random() < 0.55 ? 'robbery' : 'getaway') {
+  // On police patrol: a robber close enough to grab (press E).
+  nearRobber() {
+    const c = this.active;
+    if (!c || !c.patrol) return null;
+    const p = this.game.player;
+    if (p.driving || p.dead) return null;
+    for (const r of c.robbers) if (!r.caught && Math.hypot(r.pos.x - p.pos.x, r.pos.z - p.pos.z) < 2.2 && Math.abs(r.pos.y - p.pos.y) < 2) return r;
+    return null;
+  }
+
+  arrest(r) {
+    this.game.sound.clank(0.6);
+    this.game.hud.popup('Arrested!', 'power');
+    this.caught(r);
+  }
+
+  // patrol: a police job from the police station (no spider suit needed:
+  // run up to the robbers and press E to arrest them).
+  start(kind = Math.random() < 0.55 ? 'robbery' : 'getaway', patrol = false) {
     const a = this.adv;
     const g = this.game;
-    const c = { kind, t: kind === 'robbery' ? 90 : 110, robbers: [], car: null, stopped: false, hits: 0 };
+    const c = { kind, t: kind === 'robbery' ? 90 : 110, robbers: [], car: null, stopped: false, hits: 0, patrol };
     this.active = c;
     if (kind === 'robbery') {
-      const [x, z] = a.randomSidewalk(45);
+      const [x, z] = a.randomSidewalk(45, 110);
       const n = 2 + (Math.random() < 0.5 ? 1 : 0);
       for (let i = 0; i < n; i++) c.robbers.push(this.addRobber(x + (Math.random() - 0.5) * 3, z + (Math.random() - 0.5) * 3));
       a.setBeacon(x, z, 0xff4a3a);
@@ -216,7 +234,15 @@ export class Crimes {
     this.active = null;
     this.wait = 40 + Math.random() * 35;
     a.clearBeacon();
-    if (result === 'win') {
+    if (result === 'win' && c.patrol) {
+      const coins = 100 + c.robbers.length * 40;
+      g.gainCoins(coins);
+      g.progress.addXp(150);
+      g.progress.event('patrol', {});
+      g.hud.showBanner('Robbers arrested!', `Great police work · +${coins} coins`, 3.5);
+      g.sound.cleared();
+      g.profile.scheduleSave();
+    } else if (result === 'win') {
       const coins = 120 + c.robbers.length * 30 + (c.car ? 60 : 0);
       a.prog.crimes = (a.prog.crimes || 0) + 1;
       g.gainCoins(coins);
@@ -227,7 +253,7 @@ export class Crimes {
       g.sound.cleared();
       g.profile.scheduleSave();
     } else if (result === 'fail' && !quiet) {
-      g.hud.showBanner('They got away...', 'Stay suited up, there will be more', 3);
+      g.hud.showBanner('They got away...', c.patrol ? 'Ask at the police station for another patrol' : 'Stay suited up, there will be more', 3);
     }
     // Everyone involved leaves after a while (the caught ones for the police).
     for (const r of c.robbers) a.removePersonLater(r, quiet ? 0 : 6);
@@ -240,6 +266,7 @@ export class Crimes {
     if (!c) return null;
     const loose = c.robbers.filter((r) => !r.caught).length;
     if (c.kind === 'getaway' && !c.stopped) return ['Crime alert', `Web the getaway car: ${c.hits} of 4 · ${Math.ceil(c.t)}s`];
+    if (c.patrol) return ['Police patrol', `Arrest the robbers (E): ${c.robbers.length - loose} of ${c.robbers.length} · ${Math.ceil(c.t)}s`];
     return ['Crime alert', `Catch the robbers: ${c.robbers.length - loose} of ${c.robbers.length} · ${Math.ceil(c.t)}s`];
   }
 }

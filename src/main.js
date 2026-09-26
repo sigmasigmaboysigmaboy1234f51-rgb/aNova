@@ -262,6 +262,7 @@ class Game {
     const bed = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshBasicMaterial({ map: st, color: 0x8a8a80 }));
     bed.rotation.x = -Math.PI / 2;
     bed.position.set(96, SEA - 3.05, 96);
+    this.seaBed = bed;
     this.scene.add(bed);
 
     this.sunMesh = new THREE.Mesh(new THREE.PlaneGeometry(18, 18), new THREE.MeshBasicMaterial({ color: 0xfff6cf, fog: false }));
@@ -315,7 +316,7 @@ class Game {
     $('#btn-skin-2').addEventListener('click', () => this.openEditor('menu'));
     $('#btn-armory').addEventListener('click', () => this.openArmory('menu'));
     $('#btn-bestiary').addEventListener('click', () => this.setState('bestiary'));
-    $('#btn-style').addEventListener('click', () => this.setState('style'));
+    $('#btn-style').addEventListener('click', () => this.openStyle('menu'));
     $('#btn-wheel').addEventListener('click', () => this.setState('wheel'));
     $('#btn-cheats').addEventListener('click', () => this.cheats.open('menu'));
     $('#btn-pause-cheats').addEventListener('click', () => this.cheats.open('paused'));
@@ -764,6 +765,8 @@ class Game {
     if (!this.adventure) return;
     this.adventure.dispose();
     this.adventure = null;
+    this.water.position.set(96, this.water.position.y, 96);
+    this.seaBed.position.set(96, this.seaBed.position.y, 96);
   }
 
   lockMouse() {
@@ -835,7 +838,14 @@ class Game {
   toMenu() {
     this.input.exitLock();
     if (this.mp) this.leaveMp();
-    this.endAdventure();
+    if (this.adventure) {
+      this.endAdventure();
+      // The county is far too big to fly round on the title screen: back to
+      // a little world.
+      this.world.generate(randomSeed());
+      this.world.flush();
+      this.worldUsed = false;
+    }
     if (this.story) this.story.dispose();
     this.story = null;
     this.clearBots();
@@ -880,7 +890,23 @@ class Game {
   }
 
   closeEditor() {
-    this.setState(this.editorReturn || 'menu');
+    const back = this.editorReturn || 'menu';
+    this.setState(back);
+    if (back === 'playing') this.lockMouse();
+  }
+
+  // The Style shop, from the title screen or a shop in Blockton.
+  openStyle(from = 'menu') {
+    this.styleReturn = from;
+    this.input.exitLock();
+    this.setState('style');
+  }
+
+  closeStyle() {
+    const back = this.styleReturn || 'menu';
+    this.styleReturn = null;
+    this.setState(back);
+    if (back === 'playing') this.lockMouse();
   }
 
   // --- Multiplayer ------------------------------------------------------
@@ -1283,8 +1309,10 @@ class Game {
   respawn() {
     const third = this.player.thirdPerson;
     if (this.duel) this.duel.placePlayer();
-    else if (this.adventure) this.player.reset(this.adventure.hospital);
-    else this.player.reset(this.world.spawnPoint());
+    else if (this.adventure) {
+      this.player.reset(this.adventure.hospital);
+      if (this.adventure.wokeAt) this.hud.showBanner('Back on your feet', `You woke up in ${this.adventure.wokeAt}`, 3);
+    } else this.player.reset(this.world.spawnPoint());
     const s = this.player.pos;
     this.player.thirdPerson = third;
     this.hud.banner.hidden = true;
@@ -1344,7 +1372,14 @@ class Game {
     if (s === 'style') this.wardrobe.frame(dt);
     if (s === 'wheel') this.wheel.frame(dt);
     if (!['editor', 'armory', 'bestiary', 'story', 'challenges', 'modes', 'style', 'wheel'].includes(s)) {
-      this.world.flush(4);
+      // Big worlds only build (and draw) the part round you.
+      if (this.world.streamR) {
+        const at = this.player.pos;
+        this.world.stream(at.x, at.z, 5);
+        // The sea follows you (in whole blocks, so the waves line up).
+        this.water.position.set(Math.round(at.x), this.water.position.y, Math.round(at.z));
+        this.seaBed.position.set(Math.round(at.x), this.seaBed.position.y, Math.round(at.z));
+      } else this.world.flush(4);
       this.fx.update(dt, this.world);
       this.tracers.update(dt);
       this.updateSky(dt);

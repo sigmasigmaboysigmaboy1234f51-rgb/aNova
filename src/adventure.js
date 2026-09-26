@@ -2,23 +2,46 @@ import * as THREE from 'three';
 import { $ } from './util.js';
 import { SX, SZ, SY, BLOCKS, B } from './world.js';
 import { THEMES } from './themes.js';
-import { generateCity, roadNodes, sidewalkLoops, GY, LANE, CITY_SIZE } from './city.js';
+import { generateCity, roadNodes, sidewalkLoops, GY, LANE, CITY_SIZE, CORE } from './city.js';
+import { AREAS } from './county.js';
 import { Car, CAR_TYPES, Skids } from './cars.js';
 import { Person } from './townsfolk.js';
 import { Police, POLICE_NUMBER } from './police.js';
 import { Webs } from './webs.js';
 import { MOB_TYPES } from './mobtypes.js';
 import { BOSSES, Boss } from './boss.js';
+import { Places } from './places.js';
+import { BigMap } from './bigmap.js';
 
-// Adventure mode: explore Blockton, a modern town. Drive any parked car
-// (E), take jobs from people with a "!" over their heads, find the golden
-// cubes, and watch out for mobs at night.
+// Adventure mode: explore Blockton County, with the modern town of Blockton
+// in the middle. Drive any parked car (E), take jobs from people with a "!"
+// over their heads, talk to staff in the shops, hospitals, police stations
+// and schools, find the golden cubes, and watch out for mobs at night.
+//
+// The county is big, so only the part round you is built: the world's
+// chunks (see World.stream), parked cars, traffic, people out walking, signs
+// and traffic lights all come and go as you move about.
 
-export const CITY_THEME = { ...THEMES.meadow, name: 'Blockton', fog: [90, 230] };
+export const CITY_THEME = { ...THEMES.meadow, name: 'Blockton', fog: [80, 190] };
 
 const V = () => new THREE.Vector3();
 const tmp = new THREE.Vector3();
 const GOLD = [new THREE.Color('#fff6c8'), new THREE.Color('#ffd84a'), new THREE.Color('#f2c230')];
+const FLAMES = [new THREE.Color('#ffd84a'), new THREE.Color('#ff7a2f'), new THREE.Color('#d8392b')];
+const SMOKE = [new THREE.Color('#5a5a58'), new THREE.Color('#7a7a76'), new THREE.Color('#3a3a38')];
+const SPRAY = [new THREE.Color('#cfefff'), new THREE.Color('#8fd0ff'), new THREE.Color('#ffffff')];
+const SPARKS = [new THREE.Color('#fff6c8'), new THREE.Color('#ffd84a'), new THREE.Color('#ffffff')];
+// How near things have to be to exist (see Adventure.stream).
+const PARK_IN = 100;
+const PARK_OUT = 150;
+const TRAFFIC_OUT = 230;
+const WALKERS = 24;
+
+// Doors of houses between min and max blocks from (x, z), shuffled.
+function doorsAround(a, x, z, min, max) {
+  const out = a.info.doors.filter((d) => d.id !== 'home' && Math.hypot(d.x - x, d.z - z) > min && Math.hypot(d.x - x, d.z - z) < max);
+  return out.sort(() => Math.random() - 0.5);
+}
 
 // Everyone with a job for you.
 const GIVERS = {
@@ -42,7 +65,9 @@ const MISSIONS = {
     xp: 250,
     lines: ['Mamma mia! Three orders and my driver is off sick.', 'Take these pizzas to the houses with the yellow lights. Hot pizza only: you have 110 seconds!', 'Grab any car you like. Go go go!'],
     start(a, m) {
-      const doors = [...a.info.doors].filter((d) => d.id !== 'home').sort(() => Math.random() - 0.5);
+      const pp = a.game.player.pos;
+      let doors = doorsAround(a, pp.x, pp.z, 25, 150);
+      if (doors.length < 3) doors = doorsAround(a, pp.x, pp.z, 0, 400);
       m.stops = doors.slice(0, 3);
       m.i = 0;
       m.t = 110;
@@ -72,8 +97,15 @@ const MISSIONS = {
       m.t = 200;
       m.stage = 'car';
       m.passenger = null;
-      const taxi = a.cars.find((c) => c.type === 'taxi' && !c.dead && c.driver !== 'ai');
-      if (taxi) a.setBeacon(taxi.pos.x, taxi.pos.z, 0xffd23f);
+      const pp = a.game.player.pos;
+      let taxi = a.cars.find((c) => c.type === 'taxi' && !c.dead && c.driver !== 'ai' && !c.driver && c.pos.distanceTo(pp) < 60);
+      if (!taxi) {
+        // None parked near: one pulls up on the road.
+        const r = a.police.roadPoint({ x: pp.x, z: pp.z });
+        taxi = a.addCar('taxi', r.x, r.z, r.road === 'z' ? 0 : Math.PI / 2, false);
+        taxi.jobCar = true;
+      }
+      a.setBeacon(taxi.pos.x, taxi.pos.z, 0xffd23f);
     },
     update(a, m, dt) {
       m.t -= dt;
@@ -82,7 +114,7 @@ const MISSIONS = {
       if (m.stage === 'car' && inTaxi) m.stage = 'pickup';
       if (m.stage === 'pickup') {
         if (!m.passenger) {
-          const p = a.randomSidewalk(40);
+          const p = a.randomSidewalk(40, 120);
           m.passenger = a.addPerson({ x: p[0], z: p[1] });
           m.passenger.loop = null;
           m.passenger.chatT = 99;
@@ -91,7 +123,7 @@ const MISSIONS = {
         if (inTaxi && Math.abs(car.speed) < 3 && a.near(m.passenger.pos.x, m.passenger.pos.z, 5.5)) {
           m.passenger.visible = false;
           a.game.sound.clank(0.4);
-          const d = a.randomSidewalk(45);
+          const d = a.randomSidewalk(70, 180);
           m.dest = d;
           m.stage = 'drop';
           a.setBeacon(d[0], d[1], 0xffd23f);
@@ -130,7 +162,8 @@ const MISSIONS = {
     start(a, m) {
       const N = a.traffic.nodes;
       const n = Math.round(Math.sqrt(N.length));
-      const at = (i, j) => N[j * n + i];
+      // Blockton's streets start at road CORE.
+      const at = (i, j) => N[(j + CORE) * n + i + CORE];
       // A lap round the middle of town.
       m.route = [at(1, 1), at(2, 1), at(3, 1), at(4, 1), at(4, 2), at(4, 3), at(4, 4), at(3, 4), at(2, 4), at(1, 4), at(1, 3), at(1, 2), at(1, 1)];
       m.i = 0;
@@ -198,7 +231,10 @@ const MISSIONS = {
     xp: 400,
     lines: ["The Golden Overlord's goons just robbed the Blockton Bank!", "They're getting away in a gold van. Grab a police car, chase them down and stop that van. Shoot it, ram it, whatever it takes!", 'Then round up the goons.'],
     start(a, m) {
-      const far = a.traffic.nodes.slice().sort((p, q) => a.game.player.pos.distanceToSquared(tmp.set(q.x, 0, q.z)) - a.game.player.pos.distanceToSquared(tmp.set(p.x, 0, p.z)))[0];
+      // A junction a good way off, but not the other side of the county.
+      const pp = a.game.player.pos;
+      const off = a.traffic.nodes.filter((n) => Math.hypot(n.x - pp.x, n.z - pp.z) > 90 && Math.hypot(n.x - pp.x, n.z - pp.z) < 170);
+      const far = off.length ? off[Math.floor(Math.random() * off.length)] : a.traffic.nodes[0];
       const van = a.addCar('van', far.x + LANE, far.z, 0, true);
       van.aiTarget = 13;
       van.mission = true;
@@ -326,6 +362,53 @@ const MISSIONS = {
     },
     objective: (a, m) => (m.wave ? `Wave ${m.wave} of 3 · ${m.left} left` : 'Get ready...'),
   },
+  fire: {
+    title: 'Fire Drill',
+    coins: 300,
+    xp: 350,
+    lines: [],
+    start(a, m) {
+      const pp = a.game.player.pos;
+      let doors = doorsAround(a, pp.x, pp.z, 30, 160);
+      if (doors.length < 3) doors = doorsAround(a, pp.x, pp.z, 0, 400);
+      m.fires = doors.slice(0, 3).map((d) => ({ x: d.x, z: d.z }));
+      m.i = 0;
+      m.t = 150;
+      m.hose = 0;
+      // A fire truck on the road outside, all yours.
+      const r = a.police.roadPoint({ x: pp.x, z: pp.z });
+      const truck = a.addCar('firetruck', r.x, r.z, r.road === 'z' ? 0 : Math.PI / 2, false);
+      truck.jobCar = true;
+      m.truck = truck;
+      a.setBeacon(m.fires[0].x, m.fires[0].z, 0xff7a2f);
+      a.game.hud.showBanner('Fire Drill', 'Take the fire truck to the fires. Get close to put them out!', 3);
+    },
+    update(a, m, dt) {
+      m.t -= dt;
+      const f = m.fires[m.i];
+      if (!f) return 'win';
+      const g = a.game;
+      // Flames and smoke pouring out of the door.
+      if (Math.random() < dt * 30) g.fx.burst(f.x, GY + 1.5 + Math.random(), f.z, FLAMES, 2, { speed: 1.2, size: 0.25, up: 3, life: 0.9, spread: 0.8, grav: -4 });
+      if (Math.random() < dt * 10) g.fx.burst(f.x, GY + 3.5, f.z, SMOKE, 1, { speed: 0.6, size: 0.5, up: 2.5, life: 2, spread: 0.6, grav: -2 });
+      if (a.near(f.x, f.z, 7)) {
+        m.hose += dt;
+        const p = g.player.pos;
+        if (Math.random() < dt * 25) g.fx.burst((p.x + f.x) / 2, GY + 2.2, (p.z + f.z) / 2, SPRAY, 3, { speed: 2.5, size: 0.12, up: 1.5, life: 0.6, spread: 0.6 });
+        if (m.hose >= 2.5) {
+          m.i++;
+          m.hose = 0;
+          g.sound.pickup();
+          g.hud.popup(`Fire out! ${m.i}/3`, 'power');
+          if (m.i >= m.fires.length) return 'win';
+          a.setBeacon(m.fires[m.i].x, m.fires[m.i].z, 0xff7a2f);
+        }
+      } else m.hose = Math.max(0, m.hose - dt);
+      return m.t <= 0 ? 'fail' : null;
+    },
+    // The fire truck stays till you leave it far behind (see upkeep).
+    objective: (a, m) => (m.hose > 0 ? `Putting out fire ${m.i + 1} of 3...` : `Put out fire ${m.i + 1} of 3 · ${Math.ceil(m.t)}s`),
+  },
 };
 
 // --- The mode itself ---------------------------------------------------------------
@@ -355,7 +438,13 @@ export class Adventure {
   start() {
     const g = this.game;
     this.info = generateCity(g.world, 7);
-    g.world.flush();
+    // Only the part of the county round you is built and drawn. Build the
+    // bit round your house now; the rest streams in as you go.
+    g.world.streamR = 12;
+    const s0 = this.info.spawn;
+    g.world.stream(s0.x, s0.z, Infinity, 6);
+    // Everything streams in round you, so start you at home.
+    g.player.pos.copy(this.spawn);
     // Clouds above the skyscrapers.
     g.clouds.position.y = SY + 18;
     this.traffic = new Traffic(this);
@@ -363,23 +452,15 @@ export class Adventure {
     this.nightK = 0;
     this.police = new Police(this);
     this.webs = new Webs(this);
-    this.buildSigns();
-    // Parked cars.
-    for (const s of this.info.parking) {
-      const type = s.type === 'player' ? 'sedan' : s.type === 'parked' ? ['sedan', 'pickup', 'suv'][Math.floor(Math.random() * 3)] : s.type;
-      const c = this.addCar(type, s.x, s.z, s.yaw, false, s.type === 'player' ? '#f2c230' : undefined);
-      if (s.type === 'player') c.mine = true;
-    }
-    // Traffic.
-    const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'sedan', 'police', 'sports', 'suv', 'bus', 'icecream', 'sedan', 'taxi', 'sedan', 'suv', 'pickup', 'sports', 'sedan', 'bus', 'taxi', 'police', 'sedan'];
-    for (const t of types) {
-      const r = this.traffic.randomSpot();
-      const c = this.addCar(t, r.x, r.z, r.yaw, true);
-      c.ai = r.route;
-    }
-    // People out for a walk.
-    const loops = sidewalkLoops();
-    for (let i = 0; i < 34; i++) this.addPerson({ loop: loops[(i * 7) % loops.length] });
+    this.places = new Places(this);
+    this.bigMap = new BigMap(this);
+    this.signs = (this.info.signs || []).map((sg) => ({ sg, mesh: null }));
+    // Parked cars, and sidewalks for people to walk round.
+    this.spots = this.info.parking.map((sp) => ({ ...sp, car: null }));
+    this.loops = sidewalkLoops().map((loop) => ({ loop, x: loop.reduce((t, q) => t + q[0], 0) / loop.length, z: loop.reduce((t, q) => t + q[1], 0) / loop.length }));
+    this.stream(true);
+    // Traffic round you.
+    for (let k = 0; k < 40 && this.trafficCount() < 16; k++) this.addTraffic(s0, 20, 170);
     // People with jobs.
     for (const [id, gv] of Object.entries(GIVERS)) {
       const spot = this.info.givers[id];
@@ -400,11 +481,107 @@ export class Adventure {
     this.showUI(true);
   }
 
+  // --- Streaming: things come and go as you move round the county ---
+
+  stream(now = false) {
+    const pp = this.game.player.pos;
+    this.streamCars(pp, now);
+    this.streamPeople(pp, now);
+    this.streamSigns(pp, now);
+    this.traffic.cull(pp);
+  }
+
+  // Parked cars appear when you get near their spot, and go when you're far
+  // away (unless it's yours, or someone is in it).
+  streamCars(pp, all) {
+    let made = 0;
+    for (const sp of this.spots) {
+      if (sp.car) continue;
+      // Not right in front of you, unless you've only just got here.
+      const d = Math.hypot(sp.x - pp.x, sp.z - pp.z);
+      if (d > PARK_IN || (!all && d < 45)) continue;
+      sp.car = this.parkCar(sp);
+      if (!all && ++made >= 3) break;
+    }
+    for (const c of [...this.cars]) {
+      if (c.mine || c.mission || c.driver || c.unit) continue;
+      const d = Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z);
+      if (d > PARK_OUT) this.removeCar(c);
+    }
+  }
+
+  parkCar(sp) {
+    if (sp.type === 'player') {
+      // Your car: the one you picked at Wheels & Deals, or the gold sedan.
+      const id = this.prog.homeCar && CAR_TYPES[this.prog.homeCar] ? this.prog.homeCar : 'sedan';
+      const c = this.addCar(id, sp.x, sp.z, sp.yaw, false, id === 'sedan' ? '#f2c230' : undefined);
+      c.mine = true;
+      c.home = true;
+      return c;
+    }
+    const type = sp.type === 'parked' ? ['sedan', 'pickup', 'suv'][Math.floor(Math.random() * 3)] : sp.type;
+    const c = this.addCar(CAR_TYPES[type] ? type : 'sedan', sp.x, sp.z, sp.yaw, false);
+    c.spot = sp;
+    // The Hyper Car in the showroom is for looking at (until you buy one).
+    if (sp.type === 'super') c.showroom = true;
+    return c;
+  }
+
+  trafficCount() {
+    let n = 0;
+    for (const c of this.cars) if (c.driver === 'ai' && !c.dead && !c.mission) n++;
+    return n;
+  }
+
+  // A car driving round somewhere between min and max blocks from `at`.
+  addTraffic(at, min, max) {
+    const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'police', 'sports', 'bus', 'icecream', 'sedan', 'suv', 'taxi'];
+    const r = this.traffic.randomSpot(at, max);
+    const d = Math.hypot(r.x - at.x, r.z - at.z);
+    if (d < min || d > max) return null;
+    if (this.cars.some((c) => Math.hypot(c.pos.x - r.x, c.pos.z - r.z) < 8)) return null;
+    // Buses and ice cream vans stay in town.
+    let type = types[Math.floor(Math.random() * types.length)];
+    if (!r.route.a.town && (type === 'bus' || type === 'icecream')) type = 'pickup';
+    const c = this.addCar(type, r.x, r.z, r.yaw, true);
+    c.ai = r.route;
+    return c;
+  }
+
+  // People out for a walk on the sidewalks near you.
+  streamPeople(pp, all) {
+    for (const p of [...this.people]) {
+      if (p.walker && Math.hypot(p.pos.x - pp.x, p.pos.z - pp.z) > 140) this.removePerson(p);
+    }
+    let n = 0;
+    for (const p of this.people) if (p.walker) n++;
+    const near = this.loops.filter((l) => Math.hypot(l.x - pp.x, l.z - pp.z) < 110);
+    if (!near.length) return;
+    for (let k = 0; n < WALKERS && k < (all ? WALKERS : 1); k++, n++) {
+      const l = near[Math.floor(Math.random() * near.length)];
+      const p = this.addPerson({ loop: l.loop });
+      p.walker = true;
+    }
+  }
+
+  // Shop signs are only painted when you're close enough to read them.
+  streamSigns(pp, all) {
+    let made = 0;
+    for (const s of this.signs) {
+      const d = Math.hypot(s.sg.x - pp.x, s.sg.z - pp.z);
+      if (!s.mesh && d < 130 && (all || made < 4)) {
+        s.mesh = this.makeSign(s.sg);
+        made++;
+      } else if (s.mesh && d > 170) {
+        this.freeSign(s.mesh);
+        s.mesh = null;
+      }
+    }
+  }
+
   // Street lamps and floodlights glow at night.
   buildGlow() {
-    const w = this.game.world;
-    const pts = [];
-    for (let y = GY + 1; y < SY; y++) for (let z = 0; z < SZ; z++) for (let x = 0; x < SX; x++) if (w.get(x, y, z) === B.LAMP) pts.push(x + 0.5, y + 0.3, z + 0.5);
+    const pts = this.info.lampBlocks;
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const ctx = c.getContext('2d');
@@ -427,6 +604,8 @@ export class Adventure {
     const g = this.game;
     if (this.active) this.endMission(null);
     if (g.player.driving) this.exitCar(true);
+    if (this.places) this.places.dispose();
+    if (this.bigMap) this.bigMap.dispose();
     for (const c of this.cars) c.dispose();
     for (const p of this.people) p.dispose();
     for (const c of this.cubes) g.scene.remove(c.m);
@@ -448,12 +627,7 @@ export class Adventure {
     const p = g.player;
     if (p.held === 7) p.select(0);
     p.webFly = false;
-    for (const m of this.signs || []) {
-      g.scene.remove(m);
-      m.geometry.dispose();
-      m.material.map.dispose();
-      m.material.dispose();
-    }
+    for (const sg of this.signs || []) if (sg.mesh) this.freeSign(sg.mesh);
     this.signs = [];
     this.cars = [];
     this.people = [];
@@ -480,6 +654,7 @@ export class Adventure {
     $('#drive-hud').hidden = true;
     $('#prompt').hidden = true;
     document.body.classList.toggle('driving', false);
+    document.body.classList.toggle('hyper', false);
   }
 
   get spawn() {
@@ -492,44 +667,53 @@ export class Adventure {
     return new THREE.Vector3(s.x, this.groundAt(s.x, s.z, GY + 2), s.z);
   }
 
-  // Signs on the buildings, painted on canvases.
-  buildSigns() {
-    const g = this.game;
-    this.signs = [];
-    for (const sg of this.info.signs || []) {
-      const c = document.createElement('canvas');
-      c.width = Math.round(64 * sg.w);
-      c.height = Math.round(64 * sg.h);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = sg.bg;
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.strokeStyle = sg.fg;
-      ctx.lineWidth = 5;
-      ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
-      ctx.fillStyle = sg.fg;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      sg.lines.forEach(([text, size], i) => {
-        // Shrink the words until they fit.
-        let px = size;
-        do {
-          ctx.font = `700 ${px}px 'Pixelify Sans', ui-monospace, monospace`;
-          px -= 2;
-        } while (ctx.measureText(text).width > c.width - 18 && px > 8);
-        ctx.fillText(text, c.width / 2, (c.height * (i + 0.5)) / sg.lines.length + 2);
-      });
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 4;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(sg.w, sg.h), new THREE.MeshBasicMaterial({ map: tex }));
-      m.position.set(sg.x, sg.y, sg.z);
-      m.rotation.y = sg.ry;
-      g.scene.add(m);
-      this.signs.push(m);
-    }
+  // A sign on a building, painted on a canvas.
+  makeSign(sg) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(64 * sg.w);
+    c.height = Math.round(64 * sg.h);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = sg.bg;
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = sg.fg;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
+    ctx.fillStyle = sg.fg;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    sg.lines.forEach(([text, size], i) => {
+      // Shrink the words until they fit.
+      let px = size;
+      do {
+        ctx.font = `700 ${px}px 'Pixelify Sans', ui-monospace, monospace`;
+        px -= 2;
+      } while (ctx.measureText(text).width > c.width - 18 && px > 8);
+      ctx.fillText(text, c.width / 2, (c.height * (i + 0.5)) / sg.lines.length + 2);
+    });
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(sg.w, sg.h), new THREE.MeshBasicMaterial({ map: tex }));
+    m.position.set(sg.x, sg.y, sg.z);
+    m.rotation.y = sg.ry;
+    this.game.scene.add(m);
+    return m;
   }
 
+  freeSign(m) {
+    this.game.scene.remove(m);
+    m.geometry.dispose();
+    m.material.map.dispose();
+    m.material.dispose();
+  }
+
+  // Where you wake up after getting knocked out: a bed in the hospital
+  // nearest to where it happened.
   get hospital() {
+    const pp = this.game.player.pos;
+    const bed = this.places && this.places.wakeUp(pp.x, pp.z);
+    this.wokeAt = bed ? bed.name : null;
+    if (bed) return new THREE.Vector3(bed.x, this.groundAt(bed.x, bed.z, GY + 3), bed.z);
     const s = this.info.hospital;
     return new THREE.Vector3(s.x, this.groundAt(s.x, s.z, GY + 2), s.z);
   }
@@ -552,6 +736,27 @@ export class Adventure {
   removeCar(c) {
     c.dispose();
     this.cars = this.cars.filter((x) => x !== c);
+    // Its parking spot gets a new car next time you come by.
+    if (c.spot && c.spot.car === c) c.spot.car = null;
+  }
+
+  // A car you own, brought round to the road outside the dealer (or
+  // wherever you are). It's parked in your driveway from now on.
+  deliverCar(id) {
+    const pp = this.game.player.pos;
+    for (const c of [...this.cars]) if (c.delivered && c.driver !== 'player') this.removeCar(c);
+    // On the nearest road, pulled over on your side.
+    const r = this.police.roadPoint({ x: pp.x, z: pp.z });
+    let { x, z } = r;
+    if (r.road === 'z') x = r.c + (Math.sign(pp.x - r.c) || 1) * 2.5;
+    else z = r.c + (Math.sign(pp.z - r.c) || 1) * 2.5;
+    const c = this.addCar(id, x, z, r.road === 'z' ? 0 : Math.PI / 2, false);
+    c.mine = true;
+    c.delivered = true;
+    this.prog.homeCar = id;
+    this.setBeacon(c.pos.x, c.pos.z, 0xf2c230);
+    this.waypoint = { x: c.pos.x, z: c.pos.z, name: `Your ${c.def.name}` };
+    return c;
   }
 
   removeCarLater(c, t) {
@@ -573,21 +778,32 @@ export class Adventure {
     this.removals.push({ t, fn: () => this.removePerson(p) });
   }
 
-  // A point on some sidewalk at least `minDist` from you.
-  randomSidewalk(minDist = 30) {
-    const loops = sidewalkLoops();
+  // A point on some sidewalk between minDist and maxDist from you (or as
+  // near to that as there is, out in the country).
+  randomSidewalk(minDist = 30, maxDist = 160) {
     const pp = this.game.player.pos;
+    const dist = (l) => Math.hypot(l.x - pp.x, l.z - pp.z);
+    let loops = this.loops.filter((l) => dist(l) < maxDist + 20);
+    if (loops.length < 3) loops = [...this.loops].sort((a, b) => dist(a) - dist(b)).slice(0, 6);
+    let best = null;
+    let bestErr = Infinity;
     for (let k = 0; k < 40; k++) {
-      const loop = loops[Math.floor(Math.random() * loops.length)];
+      const loop = loops[Math.floor(Math.random() * loops.length)].loop;
       const i = Math.floor(Math.random() * 4);
       const [ax, az] = loop[i];
       const [bx, bz] = loop[(i + 1) % 4];
       const t = 0.2 + Math.random() * 0.6;
       const x = ax + (bx - ax) * t;
       const z = az + (bz - az) * t;
-      if (Math.hypot(x - pp.x, z - pp.z) >= minDist) return [x, z];
+      const d = Math.hypot(x - pp.x, z - pp.z);
+      if (d >= minDist && d <= maxDist) return [x, z];
+      const err = d < minDist ? minDist - d : d - maxDist;
+      if (err < bestErr) {
+        bestErr = err;
+        best = [x, z];
+      }
     }
-    return loops[0][0];
+    return best;
   }
 
   // Are you (or your car) close to (x, z)?
@@ -613,7 +829,18 @@ export class Adventure {
 
   // --- Beacons: a tall beam of light over where you need to go ---
 
+  // Somewhere you picked on the big map (M): a green beacon till you get there.
+  setWaypoint(x, z, name) {
+    if (this.active || (this.webs && this.webs.crimes.active)) {
+      this.game.hud.popup('Finish your job first!');
+      return;
+    }
+    this.setBeacon(x, z, 0x6fff8a);
+    this.waypoint = { x, z, name };
+  }
+
   setBeacon(x, z, color, follow = false) {
+    this.waypoint = null;
     if (!this.beacon) {
       const m = new THREE.Mesh(
         new THREE.BoxGeometry(0.7, 40, 0.7),
@@ -654,7 +881,7 @@ export class Adventure {
       const left = this.info.cubes.length - this.prog.cubes.length;
       g.talk(
         [
-          [who, 'Psst! I hid golden cubes all over Blockton. On roofs, in alleys, even on the beach!'],
+          [who, 'Psst! I hid golden cubes all over Blockton County. On roofs, in alleys, on farms, up the mountain, even down at the docks!'],
           [who, left ? `There are ${left} left to find. Each one is worth 50 coins, and if you find them all I'll give you 500 more!` : 'You found every single one. You are the best explorer in Blockton!'],
           [who, 'Some are way up on the skyscrapers. Use your web shooters (press 8) to get up there!'],
         ],
@@ -673,6 +900,7 @@ export class Adventure {
   startMission(id) {
     const M = MISSIONS[id];
     const m = { id, M, tag: id };
+    this.clearBeacon();
     this.active = m;
     M.start(this, m);
     this.game.hud.showBanner(M.title, 'Job started', 2.5);
@@ -718,7 +946,7 @@ export class Adventure {
     let best = null;
     let bd = r;
     for (const c of this.cars) {
-      if (c.dead || c.mission || (c.driver === 'ai' && Math.abs(c.speed) > 4) || Math.abs(c.pos.y - p.y) > 2.5) continue;
+      if (c.dead || c.mission || c.showroom || (c.driver === 'ai' && Math.abs(c.speed) > 4) || Math.abs(c.pos.y - p.y) > 2.5) continue;
       // A police car the officers got out of is up for grabs...
       if (c.driver === 'cop' && !(c.unit && c.unit.mode === 'deployed')) continue;
       const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z) - c.def.wid / 2;
@@ -728,6 +956,23 @@ export class Adventure {
       }
     }
     return best;
+  }
+
+  // The Hyper Car in the showroom, if you're next to it.
+  nearShowroom() {
+    const p = this.game.player.pos;
+    for (const c of this.cars) if (c.showroom && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < c.def.len / 2 + 1.5) return c;
+    return null;
+  }
+
+  // Next to your bed at home?
+  nearHomeBed() {
+    const p = this.game.player.pos;
+    for (const pl of this.places.list) {
+      if (pl.type !== 'home' || !pl.beds) continue;
+      for (const b of pl.beds) if (Math.hypot(b.x - p.x, b.z - p.z) < 1.9 && p.y < GY + 4) return b;
+    }
+    return null;
   }
 
   nearestGiver(r = 3) {
@@ -770,8 +1015,13 @@ export class Adventure {
     c.openDoor();
     g.sound.engine(true, 0, c.def.snd || 'car');
     document.body.classList.add('driving');
+    document.body.classList.toggle('hyper', !!c.hyper);
     $('#drive-hud').hidden = false;
     $('#dh-name').textContent = c.def.name;
+    if (c.hyper && !this.prog.met.hyper) {
+      this.prog.met.hyper = true;
+      g.hud.showBanner('Hyper Car!', 'Click: turret · Right click: rockets · Shift: nitro · Q: jump jets', 5);
+    }
   }
 
   exitCar(silent = false) {
@@ -784,8 +1034,9 @@ export class Adventure {
     this.siren = false;
     g.sound.engine(false);
     g.sound.siren(false);
-    document.body.classList.remove('driving');
+    document.body.classList.remove('driving', 'hyper');
     $('#drive-hud').hidden = true;
+    c.boost = false;
     // Step out of the driver's door, or on top if it's blocked.
     const s = Math.sin(c.yaw);
     const co = Math.cos(c.yaw);
@@ -929,6 +1180,7 @@ export class Adventure {
           const k = inp.keys;
           const th = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
           const st = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
+          if (car.hyper) car.hyper.control(dt, inp);
           car.drive(dt, th, st, k.has('Space'));
           if (inp.pressed.has('KeyH')) g.sound.horn(1);
           if (inp.pressed.has('KeyF') && car.def.siren) {
@@ -943,20 +1195,55 @@ export class Adventure {
         }
       } else {
         const giver = this.nearestGiver();
+        const robber = this.webs.crimes.nearRobber();
+        const staff = this.places.nearest();
         const near = this.nearestCar();
-        if (giver && !this.active && this.showMark(giver)) {
+        const bed = this.nearHomeBed();
+        const show = !near && this.nearShowroom();
+        if (robber) {
+          prompt = 'Press E to arrest the robber';
+          if (inp.pressed.has('KeyE')) this.webs.crimes.arrest(robber);
+        } else if (giver && !this.active && this.showMark(giver)) {
           prompt = `Press E to talk to ${giver.name}`;
           if (inp.pressed.has('KeyE')) this.talkTo(giver);
+        } else if (staff) {
+          prompt = `Press E to talk to ${staff.name} (${staff.role})`;
+          if (inp.pressed.has('KeyE')) this.places.talk(staff);
         } else if (near) {
           prompt = `Press E to drive the ${near.def.name}`;
           if (inp.pressed.has('KeyE')) this.enterCar(near);
+        } else if (bed) {
+          prompt = 'Press E to sleep till morning';
+          if (inp.pressed.has('KeyE')) this.places.sleep();
+        } else if (show) {
+          prompt = `The ${show.def.name}! Buy one from the dealer at the counter`;
         }
       }
+      if (inp.pressed.has('KeyM')) this.bigMap.show();
     }
+    const jail = this.places.jailPrompt();
+    if (jail) prompt = jail;
     const pr = $('#prompt');
     if (pr.textContent !== prompt) pr.textContent = prompt;
     pr.hidden = !prompt;
 
+    // Bring things in (and take them away) round you. A big jump (the
+    // hospital, jail) brings everything at once.
+    const pp = p.pos;
+    const jumped = this.lastPos && Math.hypot(pp.x - this.lastPos.x, pp.z - this.lastPos.z) > 40;
+    this.lastPos = this.lastPos || new THREE.Vector3();
+    this.lastPos.copy(pp);
+    this.streamT = (this.streamT || 0) - dt;
+    if (this.streamT <= 0 || jumped) {
+      this.streamT = 0.5;
+      this.stream(jumped);
+    }
+    this.places.update(dt, jumped);
+    if (this.waypoint && this.near(this.waypoint.x, this.waypoint.z, 8)) {
+      g.hud.popup(`You're here: ${this.waypoint.name}`, 'power');
+      this.clearBeacon();
+      this.waypoint = null;
+    }
     this.traffic.update(dt);
     for (const c of this.cars) c.update(dt);
     this.collide(dt);
@@ -1128,25 +1415,18 @@ export class Adventure {
     g.hud.showBanner('Good as new!', sub, 3);
   }
 
-  // Clear away old wrecks and keep the roads busy.
+  // Clear away old wrecks and far-off traffic, and keep the roads round you
+  // busy.
   upkeep(dt) {
     this.upkeepT = (this.upkeepT || 0) - dt;
     if (this.upkeepT > 0) return;
-    this.upkeepT = 4;
+    this.upkeepT = 2;
     const pp = this.game.player.pos;
     const far = (c) => Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z) > 35;
-    for (const c of this.cars.filter((c) => c.dead && c.deadT > 40 && far(c))) this.removeCar(c);
-    const traffic = this.cars.filter((c) => c.driver === 'ai' && !c.dead && !c.mission).length;
-    if (traffic < 20) {
-      const types = ['sedan', 'sedan', 'suv', 'taxi', 'pickup', 'police', 'sports', 'bus', 'icecream'];
-      for (let k = 0; k < 6; k++) {
-        const r = this.traffic.randomSpot();
-        if (Math.hypot(r.x - pp.x, r.z - pp.z) < 30) continue;
-        if (this.cars.some((c) => Math.hypot(c.pos.x - r.x, c.pos.z - r.z) < 7)) continue;
-        const c = this.addCar(types[Math.floor(Math.random() * types.length)], r.x, r.z, r.yaw, true);
-        c.ai = r.route;
-        break;
-      }
+    for (const c of this.cars.filter((c) => c.dead && c.deadT > 40 && far(c) && this.game.player.driving !== c)) this.removeCar(c);
+    for (const c of this.cars.filter((c) => c.driver === 'ai' && !c.mission && !c.getaway && Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z) > TRAFFIC_OUT)) this.removeCar(c);
+    if (this.trafficCount() < 16) {
+      for (let k = 0; k < 6; k++) if (this.addTraffic(pp, 60, 170)) break;
     }
   }
 
@@ -1157,7 +1437,23 @@ export class Adventure {
     if (crime) return crime;
     const left = this.info.cubes.length - this.prog.cubes.length;
     const night = this.game.sky.isNight();
-    return ['Blockton', night ? 'Night time: mobs are out. Stay safe!' : `Talk to people with a ! for jobs · Golden cubes ${this.prog.cubes.length}/${this.info.cubes.length}${left ? '' : ' ★'}`];
+    const pp = this.game.player.pos;
+    const where = this.waypoint ? `Going to ${this.waypoint.name}` : this.areaName(pp.x, pp.z);
+    return [where, night ? 'Night time: mobs are out. Stay safe!' : `Jobs from people with a ! · M for the map · Golden cubes ${this.prog.cubes.length}/${this.info.cubes.length}${left ? '' : ' ★'}`];
+  }
+
+  // The name of the part of the county you're in.
+  areaName(x, z) {
+    let best = 'Blockton County';
+    let bd = 150;
+    for (const a of AREAS) {
+      const d = Math.hypot(a.x - x, a.z - z) * (a.name === 'Blockton' ? 0.75 : 1);
+      if (d < bd) {
+        bd = d;
+        best = a.name;
+      }
+    }
+    return best;
   }
 
   // Cars bump into each other, mobs get run over, people jump clear.
@@ -1195,6 +1491,9 @@ export class Adventure {
         const b = cars[j];
         const hit = carOverlap(a, b);
         if (!hit) continue;
+        // Spiked wheels and the spiked ram shred whatever they touch.
+        const spiky = a.def.spikes && !b.def.spikes ? a : b.def.spikes && !a.def.spikes ? b : null;
+        if (spiky && !spiky.dead) this.shred(spiky, spiky === a ? b : a, dt);
         // The monster truck drives right over other cars and crushes them.
         const big = a.def.crush && !b.def.crush ? a : b.def.crush && !a.def.crush ? b : null;
         if (big && Math.abs(big.speed) > 3) {
@@ -1249,7 +1548,7 @@ export class Adventure {
         const along = dx * f.x + dz * f.z;
         const side = Math.abs(dx * f.z - dz * f.x);
         if (Math.abs(along) < a.def.len / 2 + m.hw && side < a.def.wid / 2 + m.hw && Math.abs(m.pos.y - a.pos.y) < 2) {
-          const dmg = Math.abs(a.speed) * (m.def.boss ? 1.5 : 4);
+          const dmg = Math.abs(a.speed) * (m.def.boss ? 1.5 : 4) * (a.def.spikes ? 2.5 : 1);
           m.damage(dmg, { x: f.x * Math.sign(a.speed), y: 0, z: f.z * Math.sign(a.speed) }, false, m.pos.clone().setY(m.pos.y + 1), a.driver === 'player' ? g.myId : -1, {});
           a.speed *= m.def.boss ? 0.2 : 0.8;
           a.damage(m.def.boss ? 8 : 2, null);
@@ -1290,6 +1589,18 @@ export class Adventure {
         }
       }
     }
+  }
+
+  // The Hyper Car's spikes chewing into another car.
+  shred(spiky, other, dt) {
+    const g = this.game;
+    const by = spiky.driver === 'player' ? 'player' : null;
+    const closing = Math.hypot(spiky.vel.x - other.vel.x, spiky.vel.z - other.vel.z);
+    other.damage((40 + closing * 12) * dt, null, by);
+    other.pull = (other.pull || 1) * 1.001;
+    const at = V().lerpVectors(spiky.pos, other.pos, 0.5).setY((spiky.pos.y + other.pos.y) / 2 + 0.5);
+    if (Math.random() < dt * 30) g.fx.burst(at.x, at.y, at.z, SPARKS, 4, { speed: 4, size: 0.06, up: 2, life: 0.35, spread: 0.3 });
+    if (spiky.pos.distanceTo(g.player.pos) < 30) g.sound.shred(Math.min(1, 0.4 + closing * 0.05));
   }
 
   updateCubes(dt) {
@@ -1360,13 +1671,19 @@ export class Adventure {
     c.height = SZ;
     const ctx = c.getContext('2d');
     const img = ctx.createImageData(SX, SZ);
-    const w = g.world;
+    const data = g.world.data;
+    const layer = SX * SZ;
     const colors = g.atlas.colors;
     for (let z = 0; z < SZ; z++) {
       for (let x = 0; x < SX; x++) {
+        // Straight down the column to the first block.
         let y = SY - 1;
-        while (y > 0 && !w.solid(x, y, z)) y--;
-        const id = w.get(x, y, z);
+        let i = y * layer + z * SX + x;
+        while (y > 0 && data[i] === B.AIR) {
+          y--;
+          i -= layer;
+        }
+        const id = data[i];
         const k = (z * SX + x) * 4;
         let col = id ? colors[BLOCKS[id].top][0] : null;
         let r = 40;
@@ -1527,8 +1844,11 @@ class Traffic {
     this.dark = dark;
     const y = GY + 6.6;
     for (const n of this.nodes) {
-      if (n.next.length < 3) continue;
+      // Traffic lights in town; out in the country you just drive on.
+      if (n.next.length < 3 || !n.town) continue;
       const g = new THREE.Group();
+      g.visible = false;
+      n.lights = g;
       g.position.set(n.x, 0, n.z);
       const h = new THREE.Mesh(head, dark);
       h.position.y = y;
@@ -1579,9 +1899,14 @@ class Traffic {
     }
   }
 
+  // Only the traffic lights near you are drawn.
+  cull(pp) {
+    for (const n of this.nodes) if (n.lights) n.lights.visible = Math.hypot(n.x - pp.x, n.z - pp.z) < 190;
+  }
+
   // The light a car heading (dx, dz) into junction `node` sees.
   lightFor(node, dx, dz) {
-    if (node.next.length < 3) return 'green';
+    if (!node.lights) return 'green';
     return dz !== 0 ? this.ns : this.ew;
   }
 
@@ -1615,8 +1940,16 @@ class Traffic {
     return best || { a: this.nodes[0], b: this.nodes[0].next[0] };
   }
 
-  randomSpot() {
-    const a = this.nodes[Math.floor(Math.random() * this.nodes.length)];
+  // A spot in the lane of a random road, near `at` if given (within about
+  // r blocks).
+  randomSpot(at = null, r = 150) {
+    let list = this.nodes;
+    if (at) {
+      const R = r + 50;
+      list = this.nodes.filter((n) => Math.abs(n.x - at.x) < R && Math.abs(n.z - at.z) < R);
+      if (!list.length) list = this.nodes;
+    }
+    const a = list[Math.floor(Math.random() * list.length)];
     const b = a.next[Math.floor(Math.random() * a.next.length)];
     const dx = Math.sign(b.x - a.x);
     const dz = Math.sign(b.z - a.z);
@@ -1628,7 +1961,7 @@ class Traffic {
   respawn(car) {
     const p = this.adv.game.player.pos;
     for (let k = 0; k < 10; k++) {
-      const r = this.randomSpot();
+      const r = this.randomSpot(p, 150);
       if (Math.hypot(r.x - p.x, r.z - p.z) < 25) continue;
       car.pos.set(r.x, this.adv.groundAt(r.x, r.z, GY + 2), r.z);
       car.yaw = r.yaw;

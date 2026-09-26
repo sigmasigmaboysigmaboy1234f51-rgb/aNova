@@ -15,7 +15,9 @@ You need a keyboard and mouse to play.
 ## What's in Blockfire
 
 - **Story mode:** 10 chapters to win back the Heartstone shards from the Golden Overlord and his buff bosses, with Grandma Brick and Pip.
-- **Adventure:** explore the town of Blockton. Drive any car, do jobs, find the 10 golden cubes, and watch out for the police.
+- **Adventure:** explore **Blockton County**, 9 times bigger than before: the city, suburbs, farms, a village, mountains, woods, a beach town and the docks. Drive any car, do jobs, find the 42 golden cubes, and watch out for the police. Press **M** for the map.
+- **Real working buildings:** hospitals that heal you (and where you wake up), police stations with jail cells and police patrols, a school with classes, a library, restaurants, shops, a bank that pays interest, a gym, a hotel and a car dealer.
+- **The Hyper Car:** roof turret, homing rockets, spiked wheels, nitro, jump jets, oil slicks, a smoke screen, a shield and underglow.
 - **Web shooters and the spider suit:** press **8**. Swing through town, zip, crawl up walls, glide, stop crimes, and pick from 5 suits.
 - **Giga Chad cheat:** turn into a huge, smooth, human, 100% natty Giga Chad with real muscles, and press **C** for the black-and-white double-biceps moment.
 - **F5 camera:** first person, then behind you, then from the front so you can see your face.

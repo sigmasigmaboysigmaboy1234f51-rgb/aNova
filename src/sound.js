@@ -1336,6 +1336,40 @@ export class Sound {
     });
   }
 
+  // The Hyper Car's nitro: a rushing roar and a rising whine.
+  nitro(vol = 1) {
+    if (!this.ready('nitro', 250)) return;
+    const out = this.voice(0.25);
+    this.noiseL({ out, dur: 0.9, vol: 0.3 * vol, attack: 0.05, color: 'pink', filters: [['bandpass', 400, 2600, 1.1]] });
+    this.oscL({ out, type: 'sawtooth', f0: 180, f1: 620, dur: 0.7, vol: 0.05 * vol, attack: 0.02 });
+    this.thump({ f0: 90, f1: 45, dur: 0.25, vol: 0.4 * vol, send: 0.2 });
+  }
+
+  // Jump jets firing: a deep whump and a hiss.
+  jets(vol = 1) {
+    if (!this.ready('jets', 200)) return;
+    const out = this.voice(0.2);
+    this.thump({ f0: 120, f1: 40, dur: 0.3, vol: 0.8 * vol, send: 0.25 });
+    this.noiseL({ out, dur: 0.5, vol: 0.28 * vol, color: 'brown', filters: [['lowpass', 1400, 300, 0.8]] });
+    this.noiseL({ out, t: 0.02, dur: 0.35, vol: 0.12 * vol, filters: [['bandpass', 3000, 1200, 1.5]] });
+  }
+
+  // A shield humming on.
+  shieldUp(vol = 1) {
+    if (!this.ready('shield', 300)) return;
+    const out = this.voice(0.35);
+    [440, 660, 990].forEach((f, i) => this.oscL({ out, t: i * 0.06, type: 'triangle', f0: f, f1: f * 1.5, dur: 0.35, vol: 0.05 * vol, attack: 0.01 }));
+    this.noiseL({ out, dur: 0.4, vol: 0.08 * vol, attack: 0.1, filters: [['bandpass', 1800, 5000, 2]] });
+  }
+
+  // Spiked wheels chewing into another car.
+  shred(vol = 1) {
+    if (!this.ready('shred', 70) || vol <= 0.03) return;
+    const out = this.voice(0.12);
+    this.metal({ out, f: 1800 + Math.random() * 1400, dur: 0.07, vol: 0.12 * vol });
+    this.noiseL({ out, dur: 0.1, vol: 0.18 * vol, filters: [['bandpass', 2600, 1200, 2]] });
+  }
+
   // A web ball sticking to something.
   splat() {
     if (!this.ready('splat', 60)) return;

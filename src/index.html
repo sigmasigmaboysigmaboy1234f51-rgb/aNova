@@ -38,6 +38,15 @@
     <div class="dh-bar" aria-hidden="true"><div id="dh-hp" class="dh-hp"></div></div>
     <div class="dh-keys"><kbd>E</kbd> get out <kbd>H</kbd> horn <kbd>Space</kbd> brake</div>
   </div>
+  <div class="hyper-hud" aria-hidden="true">
+    <div class="hy-row"><span>Nitro <kbd>Shift</kbd></span><i><b id="hy-nitro" class="hy-nitro"></b></i></div>
+    <div class="hy-row"><span>Jets <kbd>Q</kbd></span><i><b id="hy-jets"></b></i></div>
+    <div class="hy-row"><span>Shield <kbd>C</kbd></span><i><b id="hy-shield" class="hy-shield"></b></i></div>
+    <div class="hy-row"><span>Smoke <kbd>G</kbd></span><i><b id="hy-smoke"></b></i></div>
+    <div class="hy-row"><span>Oil <kbd>X</kbd></span><i><b id="hy-oil"></b></i></div>
+    <div class="hy-keys"><kbd>Click</kbd> turret <kbd>Right click</kbd> rockets <kbd>U</kbd> underglow</div>
+  </div>
+  <div id="hy-aim" class="hy-aim" aria-hidden="true"></div>
   <div class="hud-top">
     <div>
       <div id="hud-wave" class="hud-wave">Get ready</div>
@@ -104,6 +113,31 @@
       <p id="dlg-text" class="dlg-text" aria-live="polite"></p>
       <div class="dlg-hint">Click or press Space to continue <button id="dlg-skip" class="link" type="button">Skip</button></div>
     </div>
+  </div>
+</div>
+
+<div id="svc" class="svc" hidden>
+  <div class="svc-box panel" role="dialog" aria-labelledby="svc-name">
+    <canvas id="svc-pic" class="dlg-pic svc-pic" width="16" height="16" aria-hidden="true"></canvas>
+    <div class="svc-body">
+      <div id="svc-place" class="svc-place"></div>
+      <div id="svc-name" class="dlg-name svc-name"></div>
+      <p id="svc-text" class="svc-text" aria-live="polite"></p>
+      <div id="svc-opts" class="svc-opts"></div>
+      <div class="dlg-hint">Press a number or click · Esc to leave</div>
+    </div>
+  </div>
+</div>
+
+<div id="bigmap" class="bigmap" hidden>
+  <div class="bigmap-box panel" role="dialog" aria-label="Map of Blockton County">
+    <div class="bigmap-head">
+      <h2 class="bigmap-title">Blockton County</h2>
+      <div id="bigmap-legend" class="bigmap-legend"></div>
+      <button id="bigmap-close" class="btn" type="button">Close (M)</button>
+    </div>
+    <canvas id="bigmap-canvas" class="bigmap-canvas" width="768" height="768"></canvas>
+    <p id="bigmap-hover" class="bigmap-hover">Click a place to put a beacon on it.</p>
   </div>
 </div>
 
