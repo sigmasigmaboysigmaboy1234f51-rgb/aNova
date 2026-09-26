@@ -469,8 +469,17 @@ class Game {
     this.viewCam.updateProjectionMatrix();
   }
 
+  // The Giga Chad cheat just went on (see player.syncChad): show him off.
+  chadMoment() {
+    this.player.startEmote('flex');
+    if (!this.player.chadPose) this.sound.gigaChad();
+    this.hud.popup('Giga Chad mode. Press C to flex');
+  }
+
   setState(s) {
     if (s !== 'talk' && this.dialogue && this.dialogue.open) this.dialogue.cancel();
+    // The Giga Chad moment only ever shows in the game.
+    if (s !== 'playing' && this.player) this.player.endChadMoment();
     this.state = s;
     document.body.dataset.state = s;
     $('#menu').hidden = s !== 'menu';

@@ -26,6 +26,7 @@ export const VOICE_LINES = [
   { id: 'down', group: 'Fighting', name: 'Knocked out', when: 'you get knocked out', say: 'Nooo!' },
   { id: 'reload', group: 'Fighting', name: 'Reloading', when: 'you reload (sometimes)', say: 'Reloading!' },
   { id: 'win', group: 'Fighting', name: 'Victory', when: 'you beat a boss or a chapter', say: 'Too easy!' },
+  { id: 'chad', group: 'Giga Chad', name: 'Giga Chad', fx: 'deep', when: 'you flex as the Giga Chad', say: 'Average Blockfire enjoyer.' },
   { id: 'you', group: 'Story', name: 'You', when: 'you talk in the story', say: "Let's do this." },
   { id: 'gran', group: 'Story', name: 'Grandma Brick', when: 'Grandma Brick talks', say: 'Now listen here, dearie!' },
   { id: 'pip', group: 'Story', name: 'Pip', fx: 'robot', when: 'Pip talks', say: 'Beep boop! Hi!' },

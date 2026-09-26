@@ -35,6 +35,7 @@ const TOGGLES = [
   ['nades', 'Infinite grenades', 'Throw as many as you like'],
   ['blocks', 'Infinite blocks', 'Build forever'],
   ['buff', 'Super buff', 'Huge muscles. Your hits do double damage and knock mobs flying'],
+  ['chad', 'Giga Chad', 'A real human body with real muscles: chiselled jaw, eight-pack, the lot. 100% natty. Press C to flex'],
 ];
 
 // How big you are. Giants step up blocks and stomp mobs when they land.

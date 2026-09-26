@@ -1,7 +1,7 @@
 {
   "name": "blockfire",
   "productName": "Blockfire",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "A blocky voxel shooter with multiplayer and a Minecraft-format skin editor.",
   "author": "sigmasigmaboysigmaboy1234f51-rgb",

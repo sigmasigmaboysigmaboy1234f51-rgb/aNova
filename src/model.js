@@ -88,6 +88,8 @@ export function buildHumanoid(texture, { slim = false, limb = 0 } = {}) {
       for (const m of [...baseMeshes, ...outerMeshes]) m.geometry.dispose();
       base.dispose();
       outer.dispose();
+      // The Giga Chad body (chad.js) shares its geometry; only its paint is ours.
+      if (this.chad) this.chad.mat.dispose();
     },
   };
 }
@@ -99,6 +101,7 @@ export function setBulk(model, k) {
   const P = model.parts;
   if (!P || !P.body || model.bulk === k) return;
   model.bulk = k;
+  if (model.chad) return model.chad.bulk(k);
   P.body.scale.set(1 + 0.55 * k, 1 + 0.08 * k, 1 + 0.65 * k);
   P.head.scale.setScalar(1 - 0.08 * k);
   P.head.position.y = (12 + 0.5 * k) * PX;
@@ -148,6 +151,8 @@ export function holdGun(model, gunId, build) {
   gun.scale.setScalar(0.85);
   gun.rotation.set(-Math.PI / 2, 0, Math.PI);
   gun.position.set(0, -11.7 * PX, 1.7 * PX);
+  gun.userData.inHand = true;
   model.parts.armR.add(gun);
+  if (model.chad) model.chad.hold(gun);
   return gun;
 }

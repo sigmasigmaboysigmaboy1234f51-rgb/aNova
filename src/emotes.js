@@ -48,6 +48,20 @@ export function poseEmote(model, id, t, w) {
       break;
     }
     case 'flex': {
+      if (model.chad) {
+        // The Giga Chad's double biceps: upper arms out level, elbows bent,
+        // fists by his head, chin up.
+        const pump = s(t * 6);
+        set('armR', -0.2, 0, -1.78 - pump * 0.04);
+        set('armL', -0.2, 0, 1.78 + pump * 0.04);
+        model.chad.bend.R = [0, 0, (-1.62 - pump * 0.1) * w];
+        model.chad.bend.L = [0, 0, (1.62 + pump * 0.1) * w];
+        set('hips', -0.05, 0, 0);
+        set('head', -0.14, 0.12, 0);
+        set('legR', 0, 0, -0.12);
+        set('legL', 0, 0, 0.12);
+        break;
+      }
       // Both arms up and out like a bodybuilder, pumping.
       const pump = s(t * 6) * 0.12;
       set('armR', -0.35, 0, -2.35 + pump);

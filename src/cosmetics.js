@@ -288,6 +288,11 @@ export function attachCosmetics(model, style) {
   if (style.hat && HATS[style.hat] && P.head) {
     const g = new THREE.Group();
     HATS[style.hat].build(maker(g), g);
+    // The Giga Chad's head is a person's size, far smaller than a block.
+    if (model.chad) {
+      g.scale.setScalar(0.47);
+      g.position.set(0, -0.35 * PX, 0.05 * PX);
+    }
     P.head.add(g);
     out.parts.push(g);
     out.spin = g.userData.spin || null;
@@ -297,6 +302,10 @@ export function attachCosmetics(model, style) {
     const cape = buildCape(CAPES[style.cape]);
     // Hangs from the shoulders at the back of the body.
     cape.position.set(0, 6 * PX, -2.4 * PX);
+    if (model.chad) {
+      cape.position.set(0, 10.4 * PX, -2.5 * PX);
+      cape.scale.x = 1.15;
+    }
     P.body.add(cape);
     out.parts.push(cape);
     out.cape = cape;

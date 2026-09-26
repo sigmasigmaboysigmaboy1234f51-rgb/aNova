@@ -368,6 +368,7 @@ export class Multiplayer {
         em: p.emote || '',
         sz: p.size !== 1 ? r2(p.size) : undefined,
         bf: p.bulk > 0 ? r2(p.bulk) : undefined,
+        gc: p.model && p.model.chad ? 1 : undefined,
       });
     }
 

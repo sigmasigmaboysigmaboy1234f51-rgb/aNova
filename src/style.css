@@ -892,6 +892,24 @@ body.sense #sense { opacity: 1; animation: sense-pulse 0.25s ease-in-out infinit
 }
 @keyframes sense-pulse { from { filter: brightness(0.8); } to { filter: brightness(1.4); } }
 #suit-flash { background: radial-gradient(circle at 50% 50%, transparent 30%, var(--a, #c8202e) 75%, var(--b, #1f3f9e) 100%); }
+
+/* The Giga Chad moment: black and white, a dark vignette, film grain and
+   the title. Its opacity follows the flex (see player.js). */
+#game { transition: filter 0.35s; }
+body.chad-moment #game { filter: grayscale(1) contrast(1.75) brightness(0.85); }
+#hud { transition: opacity 0.3s; }
+body.chad-moment #hud { opacity: 0; }
+#chad-moment {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  display: grid; place-content: end center; justify-items: center; padding-bottom: 9vh;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 45%, transparent 35%, rgba(0, 0, 0, 0.78) 100%);
+}
+#chad-moment b { font-family: 'Jersey 10', 'Pixelify Sans', sans-serif; font-weight: 400; font-size: clamp(48px, 12vw, 150px); line-height: 0.9; letter-spacing: 0.08em; color: #fff; text-shadow: 0 4px 0 #000, 0 0 40px rgba(0, 0, 0, 0.9); }
+#chad-moment i { font-family: 'Pixelify Sans', sans-serif; font-style: normal; font-size: clamp(14px, 2.4vw, 26px); letter-spacing: 0.4em; text-transform: uppercase; color: #ddd; text-shadow: 0 2px 0 #000; }
+body.chad-moment #chad-moment b { animation: chad-in 0.9s ease-out both; }
+@keyframes chad-in { from { transform: scale(1.35); opacity: 0; letter-spacing: 0.3em; } 40% { opacity: 1; } to { transform: scale(1); letter-spacing: 0.08em; } }
 body.web-charge #crosshair b, body.web-charge.web-ok #crosshair b { width: 22px; height: 22px; left: -11px; top: -11px; background: none; border: 3px solid #8fe8ff; border-radius: 50%; box-shadow: 0 0 10px #8fe8ff; }
 body.web-ok #crosshair b { width: 14px; height: 14px; left: -7px; top: -7px; background: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
 

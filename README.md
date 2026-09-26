@@ -122,7 +122,7 @@ Other players see your whole look online.
 
 ## Voice Studio: your own voice in the game
 
-Click **Voices** on the title screen and record your own voice for 23 moments in the game: the spider suit going on, swinging, Web Blasts, spider-sense, the police radio, robbers getting caught, the police shouting "Freeze!", people calling 5-0-5-0, new waves, bosses, headshots, kill streaks, getting hurt or knocked out, reloading, winning, and the voices of You, Grandma Brick, Pip and the bosses in the story.
+Click **Voices** on the title screen and record your own voice for 24 moments in the game: the Giga Chad flexing, the spider suit going on, swinging, Web Blasts, spider-sense, the police radio, robbers getting caught, the police shouting "Freeze!", people calling 5-0-5-0, new waves, bosses, headshots, kill streaks, getting hurt or knocked out, reloading, winning, and the voices of You, Grandma Brick, Pip and the bosses in the story.
 
 - **Record:** click **● Record**, say the line, click **■ Stop** (it stops by itself after 5 seconds). Silence at the start and end is cut off. Each line holds 3 takes and the game picks one at random.
 - **Voice changer:** pick your voice changer as the **Microphone** at the top, and the game records the changed voice.
@@ -143,12 +143,23 @@ The cheat menu is **locked with a secret password** that only the game's owner k
   - **Freeze Gun** freezes mobs, bosses and bots for 10 seconds.
   - **Nuke Gun** makes a giant explosion wherever you point.
   - **Launch Gun** blasts you toward wherever you point.
-- **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks, and **Super buff** (huge muscles; your hits do double damage and knock mobs flying).
+- **You:** god mode, infinite ammo, super fire rate, one-hit knockouts, fly, super speed, moon jump, infinite grenades, infinite blocks, **Super buff** (huge muscles; your hits do double damage and knock mobs flying) and **Giga Chad** (see below).
 - **Size:** Tiny, Normal, Tall, Giant or Titan. Tiny players squeeze through one-block gaps. Tall and bigger players walk straight up blocks, and Giants and Titans stomp the ground when they land, flattening mobs nearby. Other players see how big (and how buff) you are.
 - **World:** freeze every mob, pause the waves, knock out every mob, skip a wave, summon any boss, spawn any mob, day or night, any weather, add bots to a Bot Duel, full health, every power-up at once.
 - **Goodies:** +10,000 coins, unlock every gun and part, unlock every Style item, level up, a free Lucky Wheel spin.
 
 Runs with cheats on don't count for your best score.
+
+### Giga Chad
+
+Tick **Giga Chad** and you turn into a real, smooth, human-shaped person instead of blocks: a chiselled square jaw with stubble, a heavy brow, swept-back hair, broad shoulders and a tight waist, and proper muscles you can see. That means traps, delts, pecs, an eight-pack, obliques, the V lines, lats, biceps and triceps, forearms, quads with the teardrop above the knee, and big calves. He's 100% natty. He wears gym shorts with a side stripe, white socks and sneakers, and he takes his colours from your skin: your skin tone, hair colour, trouser colour for the shorts, shoe colour and eye colour.
+
+- The first time, he takes a moment to build in the background while you keep playing.
+- When he appears he flexes. Press **C** any time for his **double biceps**. The camera comes round low in front of him, everything goes black and white, and the words **GIGA CHAD, 100% NATTY** come up with a deep boom.
+- You see his arms in first person too, holding your gun, reloading and placing blocks.
+- He works with everything else: **Super buff** makes him even bigger, every **size** works, hats and capes fit him, and in Adventure the **spider suit** covers him like a real superhero suit (with his muscles showing through).
+- Other players see you as the Giga Chad online.
+- Record your own voice for his flex in the Voice Studio (the **Giga Chad** line).
 
 **Online, only the host can use cheats, and only if they unlocked them with the password**, and everyone in the game is told when the host turns them on. The host's Kill Gun knocks out other players (they come back like normal). The Kick Gun kicks the player you hit out of your game. The Ban Gun kicks them and stops them rejoining that game, even if they change their name.
 
@@ -310,6 +321,7 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/weapons.js` | Every gun and part, and how parts change a gun's stats |
 | `src/gun.js` | Builds the voxel gun models from their parts, with bevelled edges, ports, screws and vents |
 | `src/vox.js` | Builds detailed box models (pets, spiders, bats) into a few meshes |
+| `src/chad.js` | The Giga Chad: a smooth human body sculpted from muscle shapes (a signed distance field turned into a mesh), painted from your skin's colours |
 | `src/combat.js` | Bullets, pellets, projectiles, explosions, lightning, fire and frost |
 | `src/profile.js` | Your saved coins, guns, parts and loadout |
 | `src/armory.js`, `src/thumbs.js` | The Armory screen and gun pictures |

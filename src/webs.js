@@ -4,6 +4,7 @@ import { setBoxUV } from './model.js';
 import { BLOCKS, SY } from './world.js';
 import { Suit, SUITS } from './suit.js';
 import { Crimes } from './crimes.js';
+import { chadViewArm, chadMaterial } from './chad.js';
 
 // Web shooters (Adventure mode). Press 8 to put them on, and the spider
 // suit spreads over you.
@@ -229,6 +230,29 @@ export class Webs {
     g.scale.setScalar(0.85);
     this.game.viewScene.add(g);
     this.hands = g;
+  }
+
+  // A Giga Chad gets his own arms in the suit (see chad.js).
+  chadHands() {
+    const m = this.game.player.model;
+    const look = m.chad ? m.chad.look : null;
+    if (look === this.handsLook) return;
+    this.handsLook = look;
+    if (this.chadHandMeshes) for (const c of this.chadHandMeshes) c.parent.remove(c);
+    this.chadHandMeshes = [];
+    if (!this.chadHandMat) {
+      this.chadHandMat = chadMaterial(this.suit.tex);
+      this.handMats.push(this.chadHandMat);
+    }
+    for (const [h, side] of [[this.handR, 'R'], [this.handL, 'L']]) {
+      const arm = h.children[0];
+      for (const b of arm.children) b.visible = !look;
+      if (!look) continue;
+      const c = chadViewArm(look, side, this.chadHandMat);
+      c.position.y = -0.17;
+      arm.add(c);
+      this.chadHandMeshes.push(c);
+    }
   }
 
   get on() {
@@ -1088,6 +1112,7 @@ export class Webs {
     this.thrustL = Math.max(0, this.thrustL - dt * 4);
     const show = this.on && !p.thirdPerson;
     this.hands.visible = show;
+    if (show) this.chadHands();
     if (show) {
       const t = performance.now() / 1000;
       const bob = Math.sin(t * 2) * 0.006 + Math.sin(p.walkPhase) * 0.012 * p.walkAmt;

@@ -1257,6 +1257,23 @@ export class Sound {
     this.thump({ t: 0.5, f0: 220, f1: 70, dur: 0.12, vol: 0.2 * vol, send: 0.1 });
   }
 
+  // The Giga Chad moment: a deep boom and a dark, swelling chord.
+  gigaChad(vol = 1) {
+    if (!this.ready('gigaChad', 1500)) return;
+    const out = this.voice(0.5);
+    this.thump({ f0: 95, f1: 32, dur: 1.1, vol: 0.5 * vol, send: 0.4 });
+    this.noiseL({ out, dur: 0.9, vol: 0.08 * vol, attack: 0.002, filters: [['lowpass', 900, 120, 1]] });
+    [
+      [110, 0],
+      [130.8, 6],
+      [164.8, -5],
+      [220, 4],
+      [55, 0],
+    ].forEach(([f, d], i) => this.oscL({ out, t: 0.12 + i * 0.05, type: i === 4 ? 'sine' : 'triangle', f0: f, dur: 2.4, vol: (i === 4 ? 0.09 : 0.028) * vol, attack: 0.7, vibrato: [4.5 + i * 0.3, f * 0.004], detune: d }));
+    // A quiet crackle, like an old photo.
+    this.noiseL({ out, t: 0.3, dur: 2.2, vol: 0.012 * vol, attack: 0.2, filters: [['highpass', 5000]] });
+  }
+
   // Spider-sense: a high, wobbly ring.
   tingle(vol = 1) {
     if (!this.ready('tingle', 400)) return;

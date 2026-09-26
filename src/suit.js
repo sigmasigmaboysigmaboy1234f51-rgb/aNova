@@ -292,7 +292,11 @@ export class Suit {
     const skin = this.game.skin;
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, this.mix.width, this.mix.height);
-    ctx.drawImage(skin.canvas, 0, 0, this.mix.width, this.mix.height);
+    // Under the suit: your skin, or the Giga Chad.
+    const chad = this.game.player.model.chad;
+    ctx.imageSmoothingEnabled = !!chad;
+    ctx.drawImage(chad ? chad.look.canvas : skin.canvas, 0, 0, this.mix.width, this.mix.height);
+    ctx.imageSmoothingEnabled = false;
     const R = k * 22;
     for (const part of PARTS) {
       const [w, h, d] = partSize(part, skin.slim);
@@ -330,7 +334,8 @@ export class Suit {
     const was = this.k;
     this.k = Math.max(0, Math.min(1, this.k + (on ? dt : -dt) / 0.7));
     const m = p.model;
-    const map = this.k <= 0 ? g.skin.texture : this.k >= 1 ? this.tex : this.mixTex;
+    const bare = m.chad ? m.chad.look.texture : g.skin.texture;
+    const map = this.k <= 0 ? bare : this.k >= 1 ? this.tex : this.mixTex;
     if (this.k > 0 && this.k < 1) this.composite(this.k);
     for (const mat of m.materials) if (mat.map !== map) mat.map = map;
     // Hats and capes don't go with the suit.
@@ -349,6 +354,8 @@ export class Suit {
       body.add(this.legs);
     } else if (!want && this.legs) this.dropLegs();
     if (!this.legs) return;
+    // On the Giga Chad they come out of his upper back.
+    this.legs.position.set(0, p.model.chad ? 4.9 * PX : 0, p.model.chad ? -0.1 * PX : 0);
     this.legT += dt;
     // Out wide when flying or climbing, tucked in and twitching otherwise.
     const busy = !p.onGround || p.crawl ? 1 : 0;
@@ -373,7 +380,8 @@ export class Suit {
   reset() {
     const p = this.game.player;
     this.k = 0;
-    for (const mat of p.model.materials) mat.map = this.game.skin.texture;
+    const m = p.model;
+    for (const mat of m.materials) mat.map = m.chad ? m.chad.look.texture : this.game.skin.texture;
     if (p.cos) for (const part of p.cos.parts) part.visible = true;
     this.dropLegs();
   }

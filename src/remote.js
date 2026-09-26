@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildHumanoid, holdGun, setBulk, PX } from './model.js';
+import { chadLook, applyChad, removeChad, chadStance } from './chad.js';
 import { GUNS, parseBuildCode } from './weapons.js';
 import { B } from './world.js';
 import { rayBox } from './mob.js';
@@ -87,10 +88,27 @@ class RemotePlayer {
     this.cube.scale.setScalar(0.22 / 0.3);
     this.cube.position.set(0, -11 * PX, 1.5 * PX);
     this.cube.visible = false;
+    this.cube.userData.inHand = true;
     this.model.parts.armR.add(this.cube);
     this.rig = new Rig(this.model);
     this.model.root.visible = this.hasState;
     scene.add(this.model.root);
+    this.cos = attachCosmetics(this.model, this.style);
+  }
+
+  // The Giga Chad cheat, drawn with their skin's colours.
+  syncChad() {
+    const m = this.model;
+    let look = null;
+    if (this.gigaChad) {
+      if (!this.chadLook || !this.chadLook.look) this.chadLook = chadLook(this.canvas, this.slim);
+      look = this.chadLook.look || null;
+      if (!look) return;
+    }
+    if (m.chad && m.chad.look === look) return;
+    if (m.chad) removeChad(m);
+    if (look) applyChad(m, look);
+    removeCosmetics(this.cos);
     this.cos = attachCosmetics(this.model, this.style);
   }
 
@@ -126,15 +144,17 @@ class RemotePlayer {
       const key = `${gunId}|${code || ''}`;
       if (key !== this.gunKey) {
         this.gunKey = key;
-        this.model.parts.armR.remove(this.gun);
+        if (this.gun.parent) this.gun.parent.remove(this.gun);
         this.gun.userData.dispose();
         this.gun = this.makeGun();
       }
       this.gun.visible = true;
       this.cube.visible = false;
+      this.heldGun = true;
     } else {
       this.gun.visible = false;
       this.cube.visible = true;
+      this.heldGun = false;
       if (block && block !== this.blockId) {
         this.blockId = block;
         this.cube.geometry = this.game.combat.blockGeo(block);
@@ -150,6 +170,7 @@ class RemotePlayer {
         ctx.clearRect(0, 0, 64, 64);
         ctx.drawImage(img, 0, 0);
         this.texture.needsUpdate = true;
+        this.chadLook = null;
       }
     } catch {
       /* keep the default skin */
@@ -174,6 +195,7 @@ class RemotePlayer {
     // Cheats: the host can be giant or buff.
     this.size = Math.min(4, Math.max(0.5, Number(s.sz) || 1));
     this.bulk = Math.min(1, Math.max(0, Number(s.bf) || 0));
+    this.gigaChad = !!s.gc;
     if (this.buf.length > 30) this.buf.shift();
     this.score = s.sc | 0;
     this.kills = s.k | 0;
@@ -305,6 +327,7 @@ class RemotePlayer {
     m.root.visible = !(dead && this.deadT > 2.5);
     m.root.position.copy(this.pos);
     m.root.scale.setScalar(size);
+    this.syncChad();
     setBulk(m, this.bulk || 0);
     m.root.rotation.y = this.yaw + Math.PI;
     const hurt = f & F.hurt ? 1 : 0;
@@ -335,6 +358,11 @@ class RemotePlayer {
       this.emoteT += dt;
       poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
     }
+    if (m.chad) chadStance(m, this.rig);
+    // A Giga Chad flexing puts his gun away for a moment.
+    const posing = m.chad && this.emote === 'flex';
+    this.gun.visible = this.heldGun !== false && !posing;
+    this.cube.visible = this.heldGun === false && !posing;
     animateCosmetics(this.cos, performance.now() / 1000, Math.hypot(this.vel.x, this.vel.z), dt);
     this.visible = m.root.visible;
     if (this.pet) this.pet.update(dt);

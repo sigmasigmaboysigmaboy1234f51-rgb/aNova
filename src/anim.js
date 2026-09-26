@@ -32,7 +32,7 @@ export class Rig {
     const P = this.m.parts;
     const v = this.v;
     P.hips.rotation.set(v['hips.x'] || 0, v['hips.y'] || 0, v['hips.z'] || 0);
-    P.hips.position.set(0, (12 + (v['hips.py'] || 0)) * PX, (v['hips.pz'] || 0) * PX);
+    P.hips.position.set(0, ((this.m.hipY || 12) + (v['hips.py'] || 0)) * PX, (v['hips.pz'] || 0) * PX);
     for (const n of ['head', 'armR', 'armL', 'legR', 'legL']) {
       P[n].rotation.set(v[n + '.x'] || 0, v[n + '.y'] || 0, v[n + '.z'] || 0);
     }

@@ -12,6 +12,7 @@ import { EMOTES, EMOTE_KEYS, emoteWeight, poseEmote } from './emotes.js';
 import { reloadStyle, gunPoints, buildLeftArm, buildShell, reloadPose, inspectPose } from './viewanim.js';
 import { clamp } from './util.js';
 import { rayBox } from './mob.js';
+import { chadLook, applyChad, removeChad, chadViewArm, chadMaterial, chadStance } from './chad.js';
 
 export const PLACEABLE = [B.COBBLE, B.PLANKS, B.BRICK, B.MOSSY];
 export const MAX_HP = 20;
@@ -139,11 +140,13 @@ function buildGunView(skin, weapon) {
   };
   setHand(points.support.x, points.support.y, points.support.z);
   let bulk = 0;
+  const chad = chadArms(arm, armL);
   return {
     group,
     gun,
     armL,
     shell,
+    setChad: chad.set,
     // Super Buff: thicker arms in first person too.
     setBulk(k) {
       if (k === bulk) return;
@@ -162,6 +165,34 @@ function buildGunView(skin, weapon) {
       outer.dispose();
       gun.userData.dispose();
       if (shell) shell.userData.dispose();
+      chad.set(null);
+    },
+  };
+}
+
+// Swaps first-person arms for the Giga Chad's (look from chad.js) and back.
+function chadArms(arm, armL) {
+  let on = null;
+  let meshes = [];
+  let mat = null;
+  const blocks = [...arm.children, ...(armL ? armL.children : [])];
+  return {
+    set(look) {
+      if (look === on) return;
+      for (const m of meshes) m.parent.remove(m);
+      meshes = [];
+      if (mat) mat.dispose();
+      mat = null;
+      on = look;
+      for (const b of blocks) b.visible = !look;
+      if (!look) return;
+      mat = chadMaterial(look.texture);
+      meshes.push(chadViewArm(look, 'R', mat));
+      arm.add(meshes[0]);
+      if (armL) {
+        meshes.push(chadViewArm(look, 'L', mat, true));
+        armL.add(meshes[1]);
+      }
     },
   };
 }
@@ -179,15 +210,18 @@ function buildBlockView(skin, atlas, blockId) {
   cube.rotation.set(0.2, 0.7, 0);
   group.add(arm, cube);
   group.position.set(0.3, -0.28, -0.5);
+  const chad = chadArms(arm, null);
   return {
     group,
     blockId,
+    setChad: chad.set,
     dispose() {
       for (const g of geos) g.dispose();
       base.dispose();
       outer.dispose();
       cube.geometry.dispose();
       cube.material.dispose();
+      chad.set(null);
     },
   };
 }
@@ -310,7 +344,9 @@ export class Player {
     this.guns3p = this.weapons.map((w) => (w ? holdGun(this.model, w.id, w.build) : null));
     this.block3p = blockCube(atlas, this.blockType(), 0.22);
     this.block3p.position.set(0, -11 * PX, 1.5 * PX);
+    this.block3p.userData.inHand = true;
     this.model.parts.armR.add(this.block3p);
+    this.chadLook = null;
     this.block3pId = this.blockType();
     this.model.root.visible = wasVisible;
     this.rig = new Rig(this.model);
@@ -338,12 +374,15 @@ export class Player {
       this.game.viewScene.remove(this.blockView.group);
       this.blockView.dispose();
       this.blockView = buildBlockView(this.game.skin, this.game.atlas, id);
+      this.blockView.setChad(this.model.chad ? this.model.chad.look : null);
       this.game.viewScene.add(this.blockView.group);
     }
     if (this.block3pId !== id) {
       const old = this.block3p;
       this.block3p = blockCube(this.game.atlas, id, 0.22);
       this.block3p.position.copy(old.position);
+      this.block3p.userData.inHand = true;
+      this.block3p.userData.handPos = old.userData.handPos;
       old.parent.add(this.block3p);
       old.parent.remove(old);
       old.geometry.dispose();
@@ -353,6 +392,7 @@ export class Player {
   }
 
   reset(spawn) {
+    this.endChadMoment();
     this.pos.copy(spawn);
     this.vel.set(0, 0, 0);
     // Cheat sizes grow back from normal so a giant never spawns in a wall.
@@ -1149,7 +1189,22 @@ export class Player {
       this.thirdPerson = true;
       this.emoteView = true;
     }
+    // A Giga Chad's flex is a moment: the camera comes round to look up at
+    // him and everything goes black and white.
+    this.chadPose = id === 'flex' && !!this.model.chad;
+    if (this.chadPose) {
+      this.game.sound.gigaChad();
+      this.game.voices.say('chad', { force: true, cd: 3 });
+    }
     this.game.progress.event('emote', { id });
+  }
+
+  endChadMoment() {
+    this.chadPose = false;
+    this.chadCam = 0;
+    this.chadShown = false;
+    document.body.classList.remove('chad-moment');
+    if (this.chadEl) this.chadEl.style.opacity = '0';
   }
 
   stopEmote() {
@@ -1167,8 +1222,17 @@ export class Player {
       const moved = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((c) => k.has(c));
       if (moved || inp.left || inp.right || this.dead || this.emoteT >= EMOTES[this.emote].time) this.stopEmote();
     }
-    const want = this.emote && this.emoteView ? 1 : 0;
+    if (!this.emote) this.chadPose = false;
+    const want = this.emote && (this.emoteView || this.chadPose) ? 1 : 0;
     this.emoteCam = damp(this.emoteCam || 0, want, 6, dt);
+    this.chadCam = damp(this.chadCam || 0, this.chadPose ? 1 : 0, 5, dt);
+    const on = this.chadPose && this.emoteT > 0.15;
+    if (on !== !!this.chadShown) {
+      this.chadShown = on;
+      document.body.classList.toggle('chad-moment', on);
+    }
+    const el = this.chadEl || (this.chadEl = document.getElementById('chad-moment'));
+    if (el) el.style.opacity = String(Math.min(1, this.chadCam * 1.2) * (on ? 1 : this.chadCam));
   }
 
   // --- Power-ups ---------------------------------------------------------
@@ -1247,15 +1311,18 @@ export class Player {
       eye.y += Math.abs(Math.sin(this.walkPhase)) * 0.06 * bob - 0.03 * bob;
     }
     const s = this.shake;
-    // During an emote the camera circles to your front.
+    // During an emote the camera circles to your front. For the Giga Chad
+    // it comes in close and low, on his chest.
     const ew = this.emoteCam || 0;
+    const cw = this.chadCam || 0;
+    eye.y -= 0.32 * cw * this.size;
     const cy = this.yaw + Math.PI * ew;
-    const cp = (this.pitch + this.kick) * (1 - ew) - 0.18 * ew;
+    const cp = (this.pitch + this.kick) * (1 - ew) - 0.18 * ew + 0.3 * cw;
     cam.rotation.set(cp + (Math.random() - 0.5) * s * 0.3, cy + (Math.random() - 0.5) * s * 0.3, roll, 'YXZ');
     if (this.thirdPerson && !this.dead) {
       const d = ew > 0.001 ? vB.set(-Math.sin(cy) * Math.cos(cp), Math.sin(cp), -Math.cos(cy) * Math.cos(cp)) : this.aimDir(vB);
       const far = Math.max(1, this.size * 0.85);
-      const want = vC.copy(eye).addScaledVector(d, (-4.2 + ew * 0.8) * far);
+      const want = vC.copy(eye).addScaledVector(d, (-4.2 + ew * 0.8 + cw * 1.55) * far);
       want.x += Math.cos(cy) * 0.55 * (1 - ew) * far;
       want.z -= Math.sin(cy) * 0.55 * (1 - ew) * far;
       want.y += 0.3 * far;
@@ -1302,6 +1369,52 @@ export class Player {
     };
   }
 
+  // The Giga Chad cheat: his body goes on once it has been made (it takes
+  // a moment the first time, in the background).
+  syncChad() {
+    const m = this.model;
+    const skin = this.game.skin;
+    const want = this.game.cheats.has('chad');
+    // Turning it on shows off the transformation once he's ready.
+    if (want && !this.chadWanted) this.chadFx = true;
+    this.chadWanted = want;
+    let look = null;
+    if (want) {
+      if (!this.chadLook || !this.chadLook.look) this.chadLook = chadLook(skin.canvas, skin.slim);
+      look = this.chadLook.look || null;
+      if (!look) return;
+      // Get the graphics card ready first, so he appears without a stutter.
+      if (!look.warm) {
+        if (!look.warming) {
+          look.warming = true;
+          const r = this.game.renderer;
+          const mesh = new THREE.Mesh(look.geo.head, chadMaterial(look.texture));
+          r.initTexture(look.texture);
+          const done = () => {
+            look.warm = true;
+            mesh.material.dispose();
+          };
+          r.compileAsync(mesh, this.game.camera, this.game.scene).then(done, done);
+        }
+        return;
+      }
+    }
+    if (m.chad && m.chad.look !== look) {
+      removeChad(m);
+      this.dress();
+    }
+    if (look && !m.chad) {
+      applyChad(m, look);
+      this.dress();
+    }
+    if (look && this.chadFx) {
+      this.chadFx = false;
+      if (this.game.chadMoment) this.game.chadMoment('on');
+    }
+    for (const v of this.views) if (v) v.setChad(look);
+    this.blockView.setChad(look);
+  }
+
   // Hats and capes from the Style shop.
   dress() {
     removeCosmetics(this.cos);
@@ -1309,15 +1422,18 @@ export class Player {
   }
 
   updateModels(dt) {
+    this.syncChad();
     const m = this.model;
     m.root.visible = this.thirdPerson && !this.driving;
     const flash = this.hurtT > 0 ? this.hurtT / 0.3 : this.dead ? 0.5 : 0;
     for (const mat of m.materials) mat.emissive.setRGB(0.6 * flash, 0.05 * flash, 0.03 * flash);
     const weapon = this.weapon;
+    // A Giga Chad flexing puts his gun away for a moment.
+    const posing = m.chad && this.emote === 'flex';
     this.guns3p.forEach((gun, i) => {
-      if (gun) gun.visible = i === this.held;
+      if (gun) gun.visible = i === this.held && !posing;
     });
-    this.block3p.visible = this.held >= 3 && this.held < 7;
+    this.block3p.visible = this.held >= 3 && this.held < 7 && !posing;
     m.root.scale.setScalar(this.size);
     setBulk(m, this.bulk);
     for (const v of this.views) if (v) v.setBulk(this.bulk);
@@ -1328,6 +1444,7 @@ export class Player {
       if (this.swing > 0) m.parts.armR.rotation.x -= Math.sin(this.swing * Math.PI) * 0.8;
       if (this.emote) poseEmote(m, this.emote, this.emoteT, emoteWeight(this.emote, this.emoteT));
       if (this.game.adventure) this.game.adventure.webs.pose(m, dt);
+      if (m.chad) chadStance(m, this.rig);
       animateCosmetics(this.cos, this.game.time, Math.hypot(this.vel.x, this.vel.z), dt);
     }
     this.landed = 0;
