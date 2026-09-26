@@ -1,9 +1,16 @@
-// Draws the app icon (a grass block with an ember spark) as a 256x256 PNG.
+// Draws the app icon (a grass block with an ember spark) as PNGs.
+//
+//   node tools/make-icon.mjs      writes build/icon.png (256), the web
+//                                 app icons (build/icon-180/192/512.png)
+//                                 and the Mac icon (build/icon-1024.png)
+//
+// iconPng(size, { pad, bg }) is also used by tools/android-setup.mjs for the
+// Android launcher icons and splash screens.
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 
 const N = 32;
-const S = 8;
 const px = new Array(N * N).fill(null);
 const set = (x, y, c) => {
   if (x >= 0 && y >= 0 && x < N && y < N) px[y * N + x] = c;
@@ -36,15 +43,6 @@ for (const [x, y, c] of [
   [28, 3, '#ff7a2f'], [24, 3, '#ff7a2f'], [27, 4, '#ffd23f'], [25, 4, '#ffd23f'], [26, 5, '#ff7a2f'],
 ]) set(x, y, hex(c));
 
-const W = N * S;
-const raw = Buffer.alloc((W * 4 + 1) * W);
-for (let y = 0; y < W; y++) {
-  raw[y * (W * 4 + 1)] = 0;
-  for (let x = 0; x < W; x++) {
-    const c = px[Math.floor(y / S) * N + Math.floor(x / S)] || [0, 0, 0, 0];
-    c.forEach((v, i) => (raw[y * (W * 4 + 1) + 1 + x * 4 + i] = Math.round(v)));
-  }
-}
 const table = Array.from({ length: 256 }, (_, n) => {
   let c = n;
   for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -63,13 +61,43 @@ const chunk = (type, data) => {
   c.writeUInt32BE(crc(td));
   return Buffer.concat([len, td, c]);
 };
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(W, 0);
-ihdr.writeUInt32BE(W, 4);
-ihdr[8] = 8;
-ihdr[9] = 6;
-writeFileSync(
-  'build/icon.png',
-  Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]),
-);
-console.log('build/icon.png written');
+
+// A w x h PNG with the icon in the middle. pad: the empty border as a
+// fraction of the smaller side. bg: a background colour ('#rrggbb'), or
+// transparent.
+export function iconPng(w, h = w, { pad = 0, bg = null } = {}) {
+  const side = Math.min(w, h);
+  const art = Math.max(1, Math.round(side * (1 - 2 * pad)));
+  const ox = Math.floor((w - art) / 2);
+  const oy = Math.floor((h - art) / 2);
+  const back = bg ? hex(bg) : [0, 0, 0, 0];
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 4 + 1)] = 0;
+    for (let x = 0; x < w; x++) {
+      const u = x - ox;
+      const v = y - oy;
+      let c = back;
+      if (u >= 0 && v >= 0 && u < art && v < art) c = px[Math.floor((v * N) / art) * N + Math.floor((u * N) / art)] || back;
+      c.forEach((val, i) => (raw[y * (w * 4 + 1) + 1 + x * 4 + i] = Math.round(val)));
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  writeFileSync('build/icon.png', iconPng(256));
+  // Home screen icons for the web version: a solid background, since phones
+  // put their own shape round it.
+  writeFileSync('build/icon-180.png', iconPng(180, 180, { pad: 0.1, bg: '#1d2430' }));
+  writeFileSync('build/icon-192.png', iconPng(192, 192, { pad: 0.1, bg: '#1d2430' }));
+  writeFileSync('build/icon-512.png', iconPng(512, 512, { pad: 0.1, bg: '#1d2430' }));
+  // The Mac app icon (macOS wants a big one).
+  writeFileSync('build/icon-1024.png', iconPng(1024, 1024, { pad: 0.1, bg: '#1d2430' }));
+  console.log('build/icon.png and the web app icons written');
+}

@@ -1,7 +1,16 @@
-# Builds the Windows app (installer + portable .exe) on every push.
-# Download it from the run's "Artifacts" section on the Actions tab.
-# A new version in package.json (or a v* tag) also makes a GitHub Release.
-name: Build Windows app
+# Builds Blockfire for every platform on every push:
+#
+#   Windows   installer + portable .exe
+#   Mac       .dmg and .zip (one app for Intel and Apple Silicon Macs)
+#   Linux     .AppImage (any Linux) and .deb (Ubuntu, Debian, Mint...)
+#   Android   .apk (install it straight onto a phone or tablet)
+#   Web       Blockfire.html (and the GitHub Pages site, for iPhone, iPad
+#             and Chromebooks)
+#
+# Download them from the run's "Artifacts" section on the Actions tab. A new
+# version in package.json (or a v* tag) also makes a GitHub Release with
+# all of them on it.
+name: Build apps
 
 on:
   push:
@@ -29,12 +38,86 @@ jobs:
           name: Blockfire-Windows
           path: dist/*.exe
           if-no-files-found: error
-      # Download page (GitHub Release) with the installer, the portable .exe
-      # and the one-file web version. Made when a v* tag is pushed, or when
-      # the version in package.json doesn't have a release yet.
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --mac --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blockfire-Mac
+          path: |
+            dist/*.dmg
+            dist/*-mac.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --linux --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blockfire-Linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      # Builds the game, makes the Android project and puts the icon,
+      # splash screen, landscape mode and version in it.
+      - run: npm run android
+      - run: chmod +x android/gradlew
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Name it
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Blockfire-$(node -p "require('./package.json').version")-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blockfire-Android
+          path: dist/*.apk
+          if-no-files-found: error
+
+  # Download page (GitHub Release) with everything above and the one-file web
+  # version. Made when a v* tag is pushed, or when the version in
+  # package.json doesn't have a release yet.
+  release:
+    needs: [windows, mac, linux, android]
+    if: ${{ !cancelled() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Check for a new version
         id: rel
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,8 +130,12 @@ jobs:
             fi
           fi
       - if: steps.rel.outputs.tag
-        shell: bash
-        run: cp index.html dist/Blockfire.html
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - if: steps.rel.outputs.tag
+        run: cp index.html dist/Blockfire.html && ls -la dist
       - if: steps.rel.outputs.tag
         uses: softprops/action-gh-release@v2
         with:
@@ -57,6 +144,4 @@ jobs:
           name: Blockfire ${{ steps.rel.outputs.tag }}
           body_path: .github/release-notes.md
           make_latest: true
-          files: |
-            dist/*.exe
-            dist/Blockfire.html
+          files: dist/*

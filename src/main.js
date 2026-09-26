@@ -41,6 +41,7 @@ import { parseAddress } from './net.js';
 import { cleanCode } from './p2p.js';
 import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
+import { setupWebApp } from './webapp.js';
 
 const COMBO_TIME = 3;
 const STREAKS = [
@@ -1518,6 +1519,7 @@ class Game {
 }
 
 function boot() {
+  setupWebApp();
   try {
     new Game();
   } catch (err) {

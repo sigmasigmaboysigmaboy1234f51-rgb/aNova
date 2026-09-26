@@ -1,0 +1,9 @@
+{
+  "appId": "io.github.blockfire.game",
+  "appName": "Blockfire",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0f0e0b",
+    "allowMixedContent": false
+  }
+}

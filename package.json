@@ -13,12 +13,18 @@
     "start": "npx serve . -l 8080",
     "server": "node server/server.cjs",
     "app": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win --publish never"
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --universal --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "android": "npm run build && node -e \"require('fs').mkdirSync('www',{recursive:true});require('fs').copyFileSync('index.html','www/index.html')\" && (npx cap add android || true) && npx cap sync android && node tools/android-setup.mjs"
   },
   "dependencies": {
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/cli": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "esbuild": "0.28.2",
@@ -61,10 +67,41 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "Game",
-      "icon": "build/icon.png"
+      "icon": "build/icon-512.png",
+      "executableName": "blockfire",
+      "maintainer": "sigmasigmaboysigmaboy1234f51-rgb <sigmasigmaboysigmaboy1234f51-rgb@users.noreply.github.com>",
+      "synopsis": "A blocky voxel shooter",
+      "artifactName": "Blockfire-${version}-linux-${arch}.${ext}",
+      "syncDesktopName": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.games",
+      "icon": "build/icon-1024.png",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "Blockfire-${version}-mac.${ext}"
+    },
+    "dmg": {
+      "title": "Blockfire ${version}"
     }
-  }
+  },
+  "desktopName": "blockfire.desktop"
 }
