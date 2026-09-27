@@ -135,7 +135,7 @@ jobs:
           path: dist
           merge-multiple: true
       - if: steps.rel.outputs.tag
-        run: cp index.html dist/Blockfire.html && ls -la dist
+        run: cp index.html dist/Blockfire.html && node tools/unity-package.mjs && ls -la dist
       - if: steps.rel.outputs.tag
         uses: softprops/action-gh-release@v2
         with:

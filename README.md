@@ -18,12 +18,24 @@ Blockfire runs on **Windows, Mac, Linux, Android, iPhone, iPad and Chromebooks**
 | Android phone or tablet | `Blockfire-<version>-android.apk` | Open it on the phone and allow **Install unknown apps** when asked. |
 | iPhone, iPad, Chromebook, or any computer | The web version | Open **[sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova](https://sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova/)** in Safari or Chrome. To keep it like an app: **Share → Add to Home Screen** on iPhone and iPad, or **Install** in Chrome's menu. It works offline after the first visit. |
 | Anything with a browser | `Blockfire.html` | The whole game in one file. Double-click it. |
+| VR headset (Meta Quest, or PC VR) | `BlockfireVR.unitypackage` | **Blockfire VR**, made in Unity. See [Blockfire VR](#blockfire-vr) below. |
 
 Windows may warn that the app is from an unknown publisher, and Mac that it's from an unidentified developer, because the apps aren't code-signed. On Windows click **More info → Run anyway**.
 
 Apple only lets apps onto an iPhone or iPad through the App Store, so there the web version is the way to play: added to the Home Screen it opens full screen like any other app. Games consoles don't allow homemade games, but a controller works everywhere else, including the Steam Deck and the Edge browser on Xbox.
 
 The newest test builds (before they get a release) are on the **Actions** tab: click the latest **Build apps** run and download the one you want under *Artifacts* (you need to be logged in to GitHub).
+
+## Blockfire VR
+
+Blockfire in virtual reality, made with **Unity**. Hold the guns in your hands, build walls with the other hand, and survive the Mossheads wave after wave until the Moss King comes. It works on a **Meta Quest** (on its own, or with Quest Link) and on PC VR headsets. With no headset, you can try it with a keyboard and mouse.
+
+1. Install **Unity Hub** and **Unity 6**. Add **Android Build Support** if you want it on the Quest by itself.
+2. In Unity Hub, make a new project from the **VR** template.
+3. Double-click `BlockfireVR.unitypackage` from the download page, then click **Import** and **Make it**.
+4. Press **Play** with Quest Link, or click **Blockfire → Build and run on Quest**.
+
+The full guide, with the controls and fixes for anything that goes wrong, is in [unity/README.md](unity/README.md). The Unity project is in [unity/BlockfireVR](unity/BlockfireVR).
 
 ## Controls
 
@@ -374,7 +386,7 @@ npm run dist:linux # build the Linux .AppImage and .deb
 npm run android    # make the Android project (then build it with Android Studio or ./gradlew)
 ```
 
-GitHub builds the Windows, Mac, Linux and Android apps automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, change the version in `package.json` (for example `npm version 2.4.0 --no-git-tag-version`) and push. When a version has no release yet, the build makes a GitHub Release for it with all of them and `Blockfire.html`, using the text in `.github/release-notes.md`. Pushing a tag like `v2.4.0` does the same.
+GitHub builds the Windows, Mac, Linux and Android apps automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, change the version in `package.json` (for example `npm version 2.5.0 --no-git-tag-version`) and push. When a version has no release yet, the build makes a GitHub Release for it with all of them, `Blockfire.html` and `BlockfireVR.unitypackage`, using the text in `.github/release-notes.md`. Pushing a tag like `v2.5.0` does the same.
 
 The Android app is signed with a new test key on every build, so to update it, uninstall the old one first. Saved progress lives inside the app, so uninstalling starts you fresh (your coins and unlocks on other devices aren't affected).
 

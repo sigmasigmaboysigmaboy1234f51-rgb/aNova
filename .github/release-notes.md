@@ -10,10 +10,15 @@ Pick the one for your device from the **Assets** list below:
 | **Android** phone or tablet | **Blockfire-…-android.apk** | Open it on your phone and allow **Install unknown apps**. |
 | **iPhone, iPad, Chromebook** | The web version | Open **https://sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova/** and choose **Share → Add to Home Screen** (or **Install** in Chrome). |
 | Anything else with a browser | **Blockfire.html** | The whole game in one file. Double-click it. |
+| **VR headset** (Meta Quest, or PC VR) | **BlockfireVR.unitypackage** | **Blockfire VR**, made in Unity. Make a project from Unity Hub's **VR** template, double-click this file, then use the **Blockfire** menu. [Step-by-step guide](https://github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/blob/HEAD/unity/README.md). |
 
 Windows may say *"Windows protected your PC"* because the app isn't from a big company. Click **More info**, then **Run anyway**. A Mac may say it's from an unidentified developer: right-click the app, pick **Open**, then **Open** again.
 
 Play with a keyboard and mouse, a touch screen, or a controller. **Everyone can play online together on any device** with a join code, as long as you all have the same version.
+
+## New: Blockfire VR
+
+Fight the Mossheads in virtual reality! Hold the Ember Blaster and the Boom Shotgun in your hands, build walls with your other hand, and survive wave after wave until the Moss King turns up. It's made in Unity, for Meta Quest (on its own or with Quest Link) and PC VR headsets. Get **BlockfireVR.unitypackage** above and follow the [step-by-step guide](https://github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/blob/HEAD/unity/README.md).
 
 ## What's in Blockfire
 
