@@ -6,17 +6,24 @@ Everything is drawn by code: the block textures, the characters, the sounds. The
 
 ## Get it
 
-**Download page:** [github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest](https://github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest). No GitHub account needed. Under *Assets*:
+Blockfire runs on **Windows, Mac, Linux, Android, iPhone, iPad and Chromebooks**, with a keyboard and mouse, a touch screen, or a controller. Everyone can play online together, whatever they're on.
 
-- `Blockfire-Setup-<version>.exe` installs the game on Windows with a desktop shortcut.
-- `Blockfire-<version>-portable.exe` runs without installing.
-- `Blockfire.html` is the whole game in one file. Double-click it to play in a browser.
+**Download page:** [github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest](https://github.com/sigmasigmaboysigmaboy1234f51-rgb/aNova/releases/latest). No GitHub account needed. Under *Assets*, pick the one for your device:
 
-Windows may warn that the app is from an unknown publisher, because it isn't code-signed. Click **More info → Run anyway**.
+| Device | File | How |
+| --- | --- | --- |
+| Windows | `Blockfire-Setup-<version>.exe` | Installs it with a desktop shortcut. `Blockfire-<version>-portable.exe` runs without installing. |
+| Mac (Intel or Apple Silicon) | `Blockfire-<version>-mac.dmg` | Open it and drag Blockfire to Applications. The first time, right-click the app and pick **Open** (or **System Settings → Privacy & Security → Open Anyway**). |
+| Linux | `Blockfire-<version>-linux-x86_64.AppImage` | Make it executable and double-click it. On Ubuntu, Debian and Mint you can install the `.deb` instead. Works on the Steam Deck too. |
+| Android phone or tablet | `Blockfire-<version>-android.apk` | Open it on the phone and allow **Install unknown apps** when asked. |
+| iPhone, iPad, Chromebook, or any computer | The web version | Open **[sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova](https://sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova/)** in Safari or Chrome. To keep it like an app: **Share → Add to Home Screen** on iPhone and iPad, or **Install** in Chrome's menu. It works offline after the first visit. |
+| Anything with a browser | `Blockfire.html` | The whole game in one file. Double-click it. |
 
-The newest test build (before it gets a release) is on the **Actions** tab: click the latest **Build Windows app** run and download **Blockfire-Windows** under *Artifacts* (you need to be logged in to GitHub). You can also put the game online with GitHub Pages (see below).
+Windows may warn that the app is from an unknown publisher, and Mac that it's from an unidentified developer, because the apps aren't code-signed. On Windows click **More info → Run anyway**.
 
-You need a keyboard and mouse to play. The skin editor also works on phones and tablets.
+Apple only lets apps onto an iPhone or iPad through the App Store, so there the web version is the way to play: added to the Home Screen it opens full screen like any other app. Games consoles don't allow homemade games, but a controller works everywhere else, including the Steam Deck and the Edge browser on Xbox.
+
+The newest test builds (before they get a release) are on the **Actions** tab: click the latest **Build apps** run and download the one you want under *Artifacts* (you need to be logged in to GitHub).
 
 ## Controls
 
@@ -48,6 +55,36 @@ You need a keyboard and mouse to play. The skin editor also works on phones and 
 | Tab (hold) | Player list and scores (multiplayer) |
 | F11 | Full screen (app) |
 | Esc | Pause |
+
+### Touch screens (phones and tablets)
+
+Touch controls turn on by themselves on phones and tablets (change it in **Settings → Controls**).
+
+- **Left thumb:** a joystick appears wherever you touch. Push it all the way forward to sprint.
+- **Right thumb:** drag to look round. Hold **FIRE** and drag to aim while you shoot.
+- **Buttons** change with what you're doing: FIRE, AIM, JUMP, RELOAD, NADE and DUCK on foot; BREAK and PLACE with blocks; WEB, SWING, ZIP and SUIT with web shooters; BRAKE, HORN, SIREN and EXIT in a car; and GUN, ROCKET, NITRO, JETS, SHIELD, OIL, SMOKE and GLOW in the Hyper Car.
+- A green **USE** button pops up when there's something to press E for (a car, a shop, a job).
+- **Top row:** pause, map, camera, emotes, and chat and players online. Tap the hotbar to change what you hold.
+
+### Controllers
+
+Plug in (or connect) an Xbox, PlayStation, Switch Pro or other controller, or play on a Steam Deck.
+
+| Button | On foot | In a car |
+| --- | --- | --- |
+| Left stick | Move (push all the way to sprint) | Steer |
+| Right stick | Look | Look round |
+| RT / LT | Shoot / aim | Gas / brake and reverse |
+| A | Jump | Handbrake |
+| B | Crouch | Horn (Hyper Car: nitro) |
+| X | Reload | Siren |
+| Y | Use (talk, get in) | Get out |
+| LB / RB | Previous / next gun | Hyper Car rockets / turret |
+| D-pad | Grenade, dance, last gun, camera | Hyper Car jets, oil, smoke, shield |
+| View | Map (Adventure), players (online) | Map |
+| Start | Pause | Pause |
+
+In menus, move with the D-pad or stick, press **A** to pick and **B** to go back.
 
 ## Story mode
 
@@ -275,6 +312,8 @@ Play online with up to 8 friends, from anywhere. You don't need the same Wi-Fi, 
 
 **Join a friend:** click **Multiplayer**, type their code under **Join a friend**, and click **Join**.
 
+**Any device with any device:** the Windows, Mac, Linux and Android apps, the web version on iPhone, iPad and Chromebook, and `Blockfire.html` all play together with the same join codes. Everyone needs the same version of Blockfire (the game tells you if someone's is too old).
+
 **Games you can host:**
 
 - **Co-op waves:** fight the mobs and bosses together. Waves get bigger with more players. When you die you come back after 5 seconds.
@@ -318,7 +357,7 @@ Skins use the same layout as Minecraft, so the saved file works there:
 3. Choose the branch that has `index.html` and the `/ (root)` folder, then **Save**.
 4. After a minute the page shows your game's link.
 
-GitHub Pages serves the game over `https`, and browsers only let those pages join `wss://` servers. For multiplayer with friends, the app or the downloaded `index.html` is simpler.
+Join codes work from GitHub Pages like everywhere else. Only **Join a server by address** is limited there: pages served over `https` can only reach `wss://` servers.
 
 ## Changing the game
 
@@ -330,9 +369,14 @@ npm run build      # rebuild index.html
 npm run app        # run the desktop app
 npm run server     # run a dedicated multiplayer server
 npm run dist:win   # build the Windows .exe (on Windows)
+npm run dist:mac   # build the Mac .dmg (on a Mac)
+npm run dist:linux # build the Linux .AppImage and .deb
+npm run android    # make the Android project (then build it with Android Studio or ./gradlew)
 ```
 
-GitHub builds the Windows app automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, change the version in `package.json` (for example `npm version 2.1.0 --no-git-tag-version`) and push. When a version has no release yet, the build makes a GitHub Release for it with the installer, the portable .exe and `Blockfire.html`, using the text in `.github/release-notes.md`. Pushing a tag like `v2.1.0` does the same.
+GitHub builds the Windows, Mac, Linux and Android apps automatically on every push (`.github/workflows/desktop.yml`). To make a new download page, change the version in `package.json` (for example `npm version 2.4.0 --no-git-tag-version`) and push. When a version has no release yet, the build makes a GitHub Release for it with all of them and `Blockfire.html`, using the text in `.github/release-notes.md`. Pushing a tag like `v2.4.0` does the same.
+
+The Android app is signed with a new test key on every build, so to update it, uninstall the old one first. Saved progress lives inside the app, so uninstalling starts you fresh (your coins and unlocks on other devices aren't affected).
 
 | File | What it does |
 | --- | --- |
@@ -359,6 +403,9 @@ GitHub builds the Windows app automatically on every push (`.github/workflows/de
 | `src/flow.js` | Pathfinding, so mobs find their way around walls |
 | `src/multiplayer.js`, `src/remote.js` | Multiplayer: other players, chat, syncing |
 | `src/room.js`, `src/p2p.js`, `src/net.js` | The game room, join codes and peer-to-peer connections, dedicated-server connections |
+| `src/touch.js`, `src/gamepad.js` | Touch controls for phones and tablets, and controllers |
+| `src/webapp.js`, `manifest.webmanifest`, `sw.js` | Installing the web version as an app, and playing it offline |
+| `capacitor.config.json`, `tools/android-setup.mjs` | The Android app (built by the workflow with Capacitor) |
 | `src/duel.js`, `src/maps.js` | 1v1 duels and the duel maps |
 | `src/bots.js`, `src/modes.js` | Duel bots and the More modes screen |
 | `src/cosmetics.js`, `src/pets.js`, `src/wardrobe.js` | Hats, capes, kill effects, pets and the Style shop |

@@ -1,16 +1,19 @@
 ## Download
 
-Pick **one** of these from the **Assets** list below:
+Pick the one for your device from the **Assets** list below:
 
-| File | What it is |
-| --- | --- |
-| **Blockfire-Setup-….exe** | Installs Blockfire on Windows with a desktop shortcut. Best for most people. |
-| **Blockfire-…-portable.exe** | Runs straight away without installing. Good for a USB stick. |
-| **Blockfire.html** | The whole game in one file. Double-click it to play in Chrome or Edge, on any computer. |
+| Device | File | How |
+| --- | --- | --- |
+| **Windows** | **Blockfire-Setup-….exe** | Installs Blockfire with a desktop shortcut. **Blockfire-…-portable.exe** runs without installing. |
+| **Mac** (Intel or Apple Silicon) | **Blockfire-…-mac.dmg** | Open it and drag Blockfire to Applications. The first time, right-click the app and pick **Open**. |
+| **Linux** and **Steam Deck** | **Blockfire-…-linux-x86_64.AppImage** | Make it executable and run it. Or install the **.deb** on Ubuntu, Debian or Mint. |
+| **Android** phone or tablet | **Blockfire-…-android.apk** | Open it on your phone and allow **Install unknown apps**. |
+| **iPhone, iPad, Chromebook** | The web version | Open **https://sigmasigmaboysigmaboy1234f51-rgb.github.io/aNova/** and choose **Share → Add to Home Screen** (or **Install** in Chrome). |
+| Anything else with a browser | **Blockfire.html** | The whole game in one file. Double-click it. |
 
-Windows may say *"Windows protected your PC"* because the app isn't from a big company. Click **More info**, then **Run anyway**.
+Windows may say *"Windows protected your PC"* because the app isn't from a big company. Click **More info**, then **Run anyway**. A Mac may say it's from an unidentified developer: right-click the app, pick **Open**, then **Open** again.
 
-You need a keyboard and mouse to play.
+Play with a keyboard and mouse, a touch screen, or a controller. **Everyone can play online together on any device** with a join code, as long as you all have the same version.
 
 ## What's in Blockfire
 
@@ -24,7 +27,8 @@ You need a keyboard and mouse to play.
 - **Voice Studio:** record your own voice (or a voice changer) for 24 moments in the game, with Deep, Robot, Monster and more effects.
 - **12 guns and 44 parts** to build your loadout in the Armory.
 - **100 mobs and 10 bosses**, Endless Waves, Boss Rush, Horde, Hardcore and Bot Duels.
-- **Online multiplayer** with up to 8 friends using a join code, plus 1v1 duels.
+- **Online multiplayer** with up to 8 friends using a join code, plus 1v1 duels, across every device.
+- **Touch controls** on phones and tablets, and **controllers** (Xbox, PlayStation, Switch Pro, Steam Deck) everywhere.
 - **Style shop:** hats, capes, kill effects and 6 pets that fight for you.
 - **Skin editor** that makes real Minecraft skins.
 
