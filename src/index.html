@@ -188,7 +188,7 @@
         </div>
       </div>
       <p id="best" class="best"></p>
-      <p id="touch-note" class="note" hidden>Playing needs a keyboard and mouse. The skin editor works with touch.</p>
+      <p id="touch-note" class="note" hidden>Touch controls are on: move with your left thumb, look and shoot with your right. You can plug in a controller too.</p>
       <details class="controls-wrap">
         <summary>Controls</summary>
       <dl class="controls">
@@ -517,9 +517,10 @@
   <div class="panel overlay-panel settings-panel">
     <h2 class="overlay-title">Settings</h2>
     <div class="set-grid">
-      <label class="slider" for="set-sens"><span>Mouse speed</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05"><output></output></label>
+      <label class="slider" for="set-sens"><span>Look speed</span><input id="set-sens" type="range" min="0.3" max="2.5" step="0.05"><output></output></label>
       <label class="slider" for="set-fov"><span>Field of view</span><input id="set-fov" type="range" min="60" max="100" step="1"><output></output></label>
       <label class="slider" for="set-volume"><span>Volume</span><input id="set-volume" type="range" min="0" max="100" step="5"><output></output></label>
+      <label class="field set-row" for="set-controls"><span>Controls</span><select id="set-controls"><option value="auto">Automatic</option><option value="on">Touch screen buttons</option><option value="off">Keyboard and mouse</option></select></label>
       <label class="field set-row" for="set-quality"><span>Graphics</span><select id="set-quality"><option value="high">High (sharpest)</option><option value="medium">Medium</option><option value="low">Low (fastest)</option></select></label>
       <label class="check" for="set-invert"><input id="set-invert" type="checkbox"><span>Invert mouse up and down</span></label>
       <label class="check" for="set-dmg"><input id="set-dmg" type="checkbox"><span>Show damage numbers</span></label>

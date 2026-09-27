@@ -1,4 +1,5 @@
 import { $, store } from './util.js';
+import { isTouchDevice } from './touch.js';
 
 // The Settings screen. Everything saves as soon as you change it.
 
@@ -22,6 +23,8 @@ export function loadSettings() {
     saved = {};
   }
   const s = { ...DEFAULTS, ...saved };
+  // Phones and tablets start on medium graphics (smoother, less battery).
+  if (saved.quality === undefined && isTouchDevice()) s.quality = 'medium';
   // Older versions kept mouse speed on its own.
   if (saved.sens === undefined) s.sens = parseFloat(store.get('sens', '1')) || 1;
   s.muted = store.get('muted', '0') === '1';
@@ -55,6 +58,14 @@ export class SettingsScreen {
     bind('#set-fov', 'fov', (v) => parseInt(v, 10), (v) => `${v}°`);
     bind('#set-volume', 'volume', (v) => parseInt(v, 10), (v) => `${v}%`);
     bind('#set-quality', 'quality');
+    // Touch buttons: automatic (on for phones and tablets), always or never.
+    const ctl = $('#set-controls');
+    ctl.value = store.get('touch', 'auto');
+    ctl.addEventListener('change', () => {
+      store.set('touch', ctl.value);
+      game.touch.setEnabled(ctl.value === 'on' || (ctl.value === 'auto' && isTouchDevice()));
+      if (!game.touch.enabled) game.noLock = false;
+    });
     bind('#set-dmg', 'dmgNums');
     bind('#set-fps', 'showFps');
     bind('#set-daynight', 'dayNight');

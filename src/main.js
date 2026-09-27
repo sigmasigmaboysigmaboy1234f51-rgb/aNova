@@ -42,6 +42,7 @@ import { cleanCode } from './p2p.js';
 import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
 import { setupWebApp } from './webapp.js';
+import { TouchControls } from './touch.js';
 
 const COMBO_TIME = 3;
 const STREAKS = [
@@ -398,8 +399,9 @@ class Game {
     this.syncSoundButton();
     document.body.classList.toggle('desktop', this.desktop);
 
-    const coarse = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
-    $('#touch-note').hidden = !coarse;
+    // Phones and tablets get touch controls.
+    this.touch = new TouchControls(this);
+    $('#touch-note').hidden = !this.touch.enabled;
 
     this.input.onLockChange = (locked) => {
       if (locked) {
@@ -771,6 +773,12 @@ class Game {
   }
 
   lockMouse() {
+    if (this.touch && this.touch.enabled) {
+      // Touch screens: no mouse, but full screen if the browser allows it.
+      this.touch.fullScreen();
+      this.input.free = true;
+      return;
+    }
     if (!this.noLock) this.input.requestLock();
     else this.input.free = true;
   }
@@ -1400,6 +1408,7 @@ class Game {
     }
     this.hud.tick(dt);
     this.dialogue.tick(dt);
+    if (this.touch) this.touch.sync();
     this.input.endFrame();
   }
 

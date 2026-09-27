@@ -1178,8 +1178,14 @@ export class Adventure {
         if (inp.pressed.has('KeyE')) this.exitCar();
         else {
           const k = inp.keys;
-          const th = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-          const st = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
+          let th = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+          let st = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
+          // A touch joystick or gamepad: as much gas and steering as it's pushed.
+          if (inp.stickOn) {
+            th = Math.abs(inp.stickY) > 0.2 ? inp.stickY : 0;
+            st = Math.abs(inp.stickX) > 0.12 ? -inp.stickX : 0;
+          }
+          if (inp.throttle) th = inp.throttle;
           if (car.hyper) car.hyper.control(dt, inp);
           car.drive(dt, th, st, k.has('Space'));
           if (inp.pressed.has('KeyH')) g.sound.horn(1);

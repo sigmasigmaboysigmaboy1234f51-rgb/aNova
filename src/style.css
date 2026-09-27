@@ -992,3 +992,63 @@ body.web-ok #crosshair b { width: 14px; height: 14px; left: -7px; top: -7px; bac
   .vs-row { grid-template-columns: 1fr auto; }
   .vs-info { grid-column: 1 / -1; }
 }
+
+/* ---- Touch controls (phones and tablets, see touch.js) ---- */
+.touch { position: fixed; inset: 0; z-index: 20; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; --tu: clamp(46px, 13vmin, 78px); }
+.touch[hidden] { display: none; }
+.tc-btn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(20, 18, 16, 0.42);
+  color: #fff;
+  font: 700 calc(var(--tu) * 0.2) / 1 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 #000;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tc-btns .tc-btn {
+  right: calc(var(--r) * var(--tu) + env(safe-area-inset-right, 0px) + 12px);
+  bottom: calc(var(--b) * var(--tu) + env(safe-area-inset-bottom, 0px) + 12px);
+  width: calc(var(--s) * var(--tu));
+  height: calc(var(--s) * var(--tu));
+}
+.tc-btn.down, .tc-btn.on { background: rgba(255, 210, 63, 0.55); border-color: #ffd23f; color: #1a1714; text-shadow: none; }
+.tc-fire { background: rgba(224, 64, 47, 0.45); border-color: rgba(255, 170, 150, 0.8); font-size: calc(var(--tu) * 0.26); }
+.tc-nitro { background: rgba(57, 184, 255, 0.4); }
+.tc-btn[hidden] { display: none; }
+.tc-top { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.tc-small { position: static; width: auto; min-width: 48px; height: 40px; padding: 0 12px; border-radius: 10px; font-size: 14px; }
+.tc-emotes { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.tc-emotes[hidden] { display: none; }
+.tc-use { right: calc(var(--tu) * 3.2 + env(safe-area-inset-right, 0px)); bottom: calc(var(--tu) * 2.35 + env(safe-area-inset-bottom, 0px)); width: auto; min-width: var(--tu); height: calc(var(--tu) * 0.8); padding: 0 16px; border-radius: 12px; background: rgba(79, 207, 106, 0.55); border-color: #b8ffc4; font-size: 15px; animation: tcpulse 1s ease-in-out infinite alternate; }
+@keyframes tcpulse { to { transform: scale(1.06); } }
+.tc-stick { position: absolute; left: calc(var(--tu) * 1.9); bottom: calc(var(--tu) * 0.4); width: 120px; height: 120px; margin: -60px 0 0 -60px; border: 3px solid rgba(255, 255, 255, 0.35); border-radius: 50%; background: rgba(20, 18, 16, 0.25); opacity: 0.55; pointer-events: none; }
+.tc-stick:not(.live) { top: auto; }
+.tc-stick.live { opacity: 1; bottom: auto; }
+.tc-stick i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); border: 3px solid rgba(255, 255, 255, 0.8); transform: translate(-50%, -50%); }
+.tc-turn { display: none; position: absolute; inset: 0; place-content: center; gap: 8px; text-align: center; background: rgba(8, 8, 10, 0.92); color: #fff; font-size: 16px; padding: 24px; }
+.tc-turn b { font: 400 34px/1 var(--font-display); }
+@media (orientation: portrait) { .tc-turn { display: grid; } }
+
+/* The HUD moves round to make room for your thumbs. */
+body.touch #hud .hud-bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
+body.touch #hud .hud-stack { transform: scale(0.78); transform-origin: bottom center; }
+body.touch #hud .hud-bottom .ammo { position: fixed; right: calc(env(safe-area-inset-right, 0px) + 14px); top: calc(env(safe-area-inset-top, 0px) + 124px); transform: scale(0.62); transform-origin: top right; }
+body.touch #hud .slot .key, body.touch #hud .nade-row kbd, body.touch .dh-keys, body.touch .hy-keys { display: none; }
+body.touch #hud .drive-hud { transform: translateX(-50%) scale(0.8); transform-origin: bottom center; }
+body.touch #hud .hyper-hud { right: auto; left: calc(env(safe-area-inset-left, 0px) + 10px); bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 176px); transform: scale(0.62); transform-origin: top left; }
+body.touch #hud .minimap { width: 96px; height: 96px; top: calc(env(safe-area-inset-top, 0px) + 72px); }
+
+/* Short screens (phones on their side): a tighter title screen. */
+@media (max-height: 520px) {
+  .menu { gap: 12px 32px; }
+  .menu-col { gap: 10px; }
+  .logo { font-size: 54px; }
+  .menu-buttons { gap: 8px; }
+  .menu-buttons .btn { padding-block: 8px; }
+}

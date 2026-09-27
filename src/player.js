@@ -694,8 +694,17 @@ export class Player {
     this.h = (this.crouch ? H_CROUCH : H_STAND) * this.size;
 
     const fwdHeld = k.has('KeyW') || k.has('ArrowUp');
-    const fwd = (fwdHeld ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    const side = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    let fwd = (fwdHeld ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    let side = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    // A touch joystick or gamepad stick: walk as fast as it's pushed, and
+    // pushed right to the edge (forwards) you sprint.
+    let push = 1;
+    if (inp.stickOn) {
+      fwd = inp.stickY;
+      side = inp.stickX;
+      push = Math.min(1, Math.hypot(fwd, side));
+    }
+    const stickSprint = inp.stickOn && inp.stickY > 0.8 && push > 0.93;
     if (inp.pressed.has('KeyW') || inp.pressed.has('ArrowUp')) {
       if (this.time - this.lastW < 0.3) this.sprintLatch = true;
       this.lastW = this.time;
@@ -703,15 +712,15 @@ export class Player {
     if (!fwdHeld) this.sprintLatch = false;
     const ctrl = g.desktop && (k.has('ControlLeft') || k.has('ControlRight'));
     const aiming = !!weapon && inp.right && weapon.reloadT <= 0;
-    this.sprint = fwd > 0 && (this.sprintLatch || ctrl) && !this.crouch && !this.inWater && !aiming;
+    this.sprint = fwd > 0 && (this.sprintLatch || ctrl || stickSprint) && !this.crouch && !this.inWater && !aiming;
     this.ads = damp(this.ads, aiming ? 1 : 0, 14, dt);
 
     let wx = -Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * side;
     let wz = -Math.cos(this.yaw) * fwd - Math.sin(this.yaw) * side;
     const len = Math.hypot(wx, wz);
     if (len > 0) {
-      wx /= len;
-      wz /= len;
+      wx *= push / len;
+      wz *= push / len;
     }
     this.inWater = this.pos.y < SEA - 0.35;
     let speed = this.sprint ? 7 : this.crouch ? 2.1 : 4.7;

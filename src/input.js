@@ -19,6 +19,13 @@ export class Input {
     this.onLockChange = null;
     this.onLockError = null;
     this.onEscape = null;
+    // Analog movement from a touch joystick or a gamepad stick: x right,
+    // y forward, both -1..1. stickOn says whether it's in use.
+    this.stickX = 0;
+    this.stickY = 0;
+    this.stickOn = false;
+    // Analog gas pedal from a gamepad trigger (-1..1), or 0.
+    this.throttle = 0;
 
     window.addEventListener('keydown', (e) => {
       if (!this.active) return;
@@ -92,6 +99,37 @@ export class Input {
   releaseAll() {
     this.keys.clear();
     this.left = this.right = false;
+    this.stickX = this.stickY = 0;
+    this.stickOn = false;
+  }
+
+  // --- Virtual controls (touch buttons and gamepads) press the same keys
+  // and mouse buttons as a keyboard and mouse would. ---
+
+  hold(code, on) {
+    if (on) {
+      if (!this.keys.has(code)) this.pressed.add(code);
+      this.keys.add(code);
+    } else this.keys.delete(code);
+  }
+
+  tap(code) {
+    this.pressed.add(code);
+  }
+
+  mouse(button, on) {
+    if (button === 'left') {
+      if (on && !this.left) this.leftPressed = true;
+      this.left = on;
+    } else {
+      if (on && !this.right) this.rightPressed = true;
+      this.right = on;
+    }
+  }
+
+  look(dx, dy) {
+    this.mx += dx;
+    this.my += dy;
   }
 
   takeMouse() {
