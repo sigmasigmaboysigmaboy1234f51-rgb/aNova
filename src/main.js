@@ -43,6 +43,7 @@ import { $, store, inArtifactViewer } from './util.js';
 import { mulberry32 } from './rng.js';
 import { setupWebApp } from './webapp.js';
 import { TouchControls } from './touch.js';
+import { Gamepads } from './gamepad.js';
 
 const COMBO_TIME = 3;
 const STREAKS = [
@@ -401,6 +402,8 @@ class Game {
 
     // Phones and tablets get touch controls.
     this.touch = new TouchControls(this);
+    // And controllers.
+    this.pads = new Gamepads(this);
     $('#touch-note').hidden = !this.touch.enabled;
 
     this.input.onLockChange = (locked) => {
@@ -1368,6 +1371,8 @@ class Game {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
+    // Controllers press their buttons before anything reads them.
+    if (this.pads) this.pads.update(dt);
     const s = this.state;
 
     // Multiplayer never pauses: the world keeps going for everyone else.

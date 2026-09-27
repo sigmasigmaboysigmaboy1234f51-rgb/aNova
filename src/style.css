@@ -1052,3 +1052,6 @@ body.touch #hud .minimap { width: 96px; height: 96px; top: calc(env(safe-area-in
   .menu-buttons { gap: 8px; }
   .menu-buttons .btn { padding-block: 8px; }
 }
+
+/* Moving round menus with a controller. */
+body.pad :focus { outline: 3px solid var(--gold) !important; outline-offset: 2px; }

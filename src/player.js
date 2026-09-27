@@ -324,7 +324,7 @@ export class Player {
   cycle(dir) {
     const slots = this.game.adventure ? 8 : 7;
     for (let n = 1; n <= slots; n++) {
-      const s = (this.held + dir * n + 80) % slots;
+      const s = (((this.held + dir * n) % slots) + slots) % slots;
       if (s >= 3 || this.weapons[s]) {
         this.select(s);
         return;
